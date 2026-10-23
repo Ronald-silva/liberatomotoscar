@@ -1,24 +1,14 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { MapPin } from 'lucide-react';
+import { Brand } from '@/components/layout/Brand';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
+import { STORE } from '@/data/store';
 
 export function Header() {
   return (
     <header className="site-header">
-      <div className="container header-inner">
-        <Link className="brand" href="/" aria-label="Liberato Motos Car, página inicial">
-          <span className="brand-art" aria-hidden="true">
-            <Image
-              src="/logosf.png"
-              alt=""
-              width={2000}
-              height={2000}
-              priority
-              sizes="180px"
-            />
-          </span>
-        </Link>
+      <div className="header-inner">
+        <Brand priority />
 
         <nav className="desktop-nav" aria-label="Navegação principal">
           <Link href="/#vitrine">Seleção</Link>
@@ -28,7 +18,7 @@ export function Header() {
 
         <div className="header-actions">
           <span className="header-location">
-            <MapPin size={14} aria-hidden="true" /> Itaoca, Fortaleza
+            <MapPin size={14} aria-hidden="true" /> {STORE.district}, {STORE.city}
           </span>
           <WhatsAppLink
             className="button button--small button--red"
