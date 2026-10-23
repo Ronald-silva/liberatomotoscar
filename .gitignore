@@ -57,7 +57,7 @@ next-env.d.ts
 !/public/images/yamaha-fazer-2014.png
 !/public/images/honda-pop.png
 !/public/images/yamaha-crosser.png
-!/public/images/fachada.jpeg
+!/public/images/fachada.png
 
 # Mockups de brainstorming (não versionados)
 .superpowers/

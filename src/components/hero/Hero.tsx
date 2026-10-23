@@ -8,8 +8,8 @@ export function Hero() {
     <section className="hero" aria-labelledby="hero-title">
       <div className="hero-media">
         <Image
-          src="/images/fachada.jpeg"
-          alt="Fachada da Liberato Motos Car"
+          src="/images/fachada.png"
+          alt="Fachada da Liberato Motos Car na R. Elcias Lopes, com motos expostas na vitrine"
           fill
           priority
           sizes="100vw"
