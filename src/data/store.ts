@@ -50,7 +50,17 @@ export const GOOGLE_PROFILE = {
 } as const;
 
 /**
- * URL pública do site. Enquanto não houver domínio aprovado pela loja, o valor
- * local mantém os metadados válidos no build e na prévia.
+ * URL pública do site, base de `og:image`, canonical e dados estruturados.
+ *
+ * Em produção, defina `NEXT_PUBLIC_SITE_URL` com o domínio aprovado pela loja.
+ * Sem ela, cada deploy de pré-visualização na Vercel se resolve pela própria
+ * URL gerada — o que mantém a imagem do WhatsApp funcionando sem configuração.
+ * O valor local é o último recurso, para desenvolvimento.
  */
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+function resolverSiteUrl(): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.NEXT_PUBLIC_VERCEL_URL) return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
+  return 'http://localhost:3000';
+}
+
+export const SITE_URL = resolverSiteUrl();
