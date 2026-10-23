@@ -319,7 +319,7 @@ img { max-width: 100%; }
 .step p { margin: 0; color: var(--ink-muted); font-size: .82rem; line-height: 1.65; }
 
 .trade { position: relative; min-height: 410px; display: flex; align-items: center; overflow: hidden; background: #15191f; }
-.trade::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.95) 47%, rgba(17,21,27,.18) 100%), url('/images/Yamaha Crosser Vermelha em Estúdio.png') right center / cover no-repeat; opacity: .9; }
+.trade::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.95) 47%, rgba(17,21,27,.18) 100%), url('/images/yamaha-crosser.png') right center / cover no-repeat; opacity: .9; }
 .trade-content { position: relative; z-index: 1; padding-block: var(--space-8); }
 .trade-title { max-width: 760px; margin: var(--space-4) 0; font-size: clamp(2.7rem, 5.1vw, 5.1rem); }
 .trade-title span { color: var(--red); }
@@ -500,7 +500,7 @@ img { max-width: 100%; }
   .steps { grid-template-columns: 1fr; margin-top: var(--space-7); }
   .step { min-height: 175px; }
   .trade { min-height: 420px; }
-  .trade::before { background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.91) 60%, rgba(17,21,27,.56) 100%), url('/images/Yamaha Crosser Vermelha em Estúdio.png') right center / cover no-repeat; }
+  .trade::before { background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.91) 60%, rgba(17,21,27,.56) 100%), url('/images/yamaha-crosser.png') right center / cover no-repeat; }
   .contact-grid { gap: var(--space-7); }
   .footer-main, .footer-bottom { flex-direction: column; }
   .footer-links { gap: var(--space-4); }
