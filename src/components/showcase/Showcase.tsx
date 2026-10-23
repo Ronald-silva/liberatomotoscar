@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import type { CSSProperties } from 'react';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowUpRight, MoveRight } from 'lucide-react';
-import { DEMO_VEHICLES, type VehicleCategory } from '@/data/mock-vehicles';
+import type { VehicleCategory } from '@/data/mock-vehicles';
+import { INVENTORY_VEHICLES, formatKilometers, formatPrice } from '@/data/inventory-vehicles';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 
 type Filter = VehicleCategory | 'todos';
@@ -30,7 +32,7 @@ export function Showcase() {
     router.push(`${pathname}${query ? `?${query}` : ''}#vitrine`, { scroll: false });
   }
 
-  const vehicles = DEMO_VEHICLES.filter(
+  const vehicles = INVENTORY_VEHICLES.filter(
     (vehicle) => activeFilter === 'todos' || vehicle.category === activeFilter,
   );
 
@@ -38,7 +40,7 @@ export function Showcase() {
     <section className="showcase section-pad" id="vitrine" aria-labelledby="showcase-title">
       <div className="container">
         <div className="section-topline">
-          <span className="eyebrow"><span className="eyebrow-line" /> VITRINE LIBERATO</span>
+          <span className="eyebrow"><span className="eyebrow-line" /> VEÍCULOS LIBERATO</span>
           <span className="section-index">01 / 03</span>
         </div>
         <div className="showcase-heading">
@@ -47,11 +49,11 @@ export function Showcase() {
               ESCOLHA O SEU<br /><span>PRÓXIMO CAMINHO.</span>
             </h2>
             <p className="section-intro">
-              Uma prévia de como cada veículo pode ganhar seu próprio espaço,
-              com imagem forte, informação clara e contato imediato.
+              Conheça os veículos anunciados, compare os dados informados e
+              fale com a loja sobre a opção que faz sentido para você.
             </p>
           </div>
-          <div className="filter-list" aria-label="Filtrar demonstração por categoria">
+          <div className="filter-list" aria-label="Filtrar veículos por categoria">
             {FILTERS.map((filter) => (
               <button
                 key={filter.value}
@@ -63,8 +65,8 @@ export function Showcase() {
                 {filter.label}
                 <sup>
                   {filter.value === 'todos'
-                    ? DEMO_VEHICLES.length
-                    : DEMO_VEHICLES.filter((v) => v.category === filter.value).length}
+                    ? INVENTORY_VEHICLES.length
+                    : INVENTORY_VEHICLES.filter((v) => v.category === filter.value).length}
                 </sup>
               </button>
             ))}
@@ -72,7 +74,7 @@ export function Showcase() {
         </div>
 
         <p className="demo-note" role="note">
-          IMAGENS E CATEGORIAS ILUSTRATIVAS. ESTOQUE, PREÇOS E CONDIÇÕES DEVEM SER CONFIRMADOS COM A LOJA.
+          DADOS FORNECIDOS PARA OS ANÚNCIOS. CONFIRME PREÇO, DISPONIBILIDADE E CONDIÇÕES COM A LOJA.
         </p>
         <p className="sr-only" aria-live="polite">
           {vehicles.length} {vehicles.length === 1 ? 'opção exibida' : 'opções exibidas'}.
@@ -82,36 +84,46 @@ export function Showcase() {
           <div className="vehicle-grid">
             {vehicles.map((vehicle, index) => (
               <article
-                className={`vehicle-card ${vehicle.featured && activeFilter === 'todos' ? 'vehicle-card--feature' : ''}`}
+                className="vehicle-card"
                 key={vehicle.slug}
               >
-                <div className="vehicle-image-wrap">
+                <div
+                  className="vehicle-image-wrap"
+                  style={{ '--foto': `url("${vehicle.image}")` } as CSSProperties}
+                >
                   <Image
                     src={vehicle.image}
                     alt={vehicle.imageAlt}
                     fill
-                    sizes="(max-width: 700px) 100vw, (max-width: 1100px) 50vw, 65vw"
+                    sizes="(max-width: 700px) 100vw, 45vw"
                     className="vehicle-image"
                   />
+                  <span className="vehicle-reflection" aria-hidden="true" />
                   <span className="vehicle-number">0{index + 1}</span>
                   <span className="vehicle-type">{vehicle.categoryLabel}</span>
                 </div>
                 <div className="vehicle-content">
                   <div>
-                    <p className="vehicle-kicker">CONCEITO DE VITRINE</p>
+                    <p className="vehicle-kicker">{vehicle.categoryLabel.toUpperCase()} • {vehicle.condition.toUpperCase()}</p>
                     <h3>{vehicle.title}</h3>
-                    <p>{vehicle.subtitle}</p>
+                    <p>{vehicle.shortDescription}</p>
+                    <dl className="vehicle-facts">
+                      {vehicle.year !== undefined && <div><dt>Ano</dt><dd>{vehicle.year}</dd></div>}
+                      {vehicle.kilometers !== undefined && <div><dt>Km</dt><dd>{formatKilometers(vehicle.kilometers)}</dd></div>}
+                      <div><dt>Cor</dt><dd>{vehicle.color}</dd></div>
+                    </dl>
                   </div>
+                  <strong className="vehicle-price">{formatPrice(vehicle.priceBRL)}</strong>
                   <div className="vehicle-links">
                     <Link href={`/veiculos/${vehicle.slug}`} className="text-link">
-                      Ver apresentação <ArrowUpRight size={17} aria-hidden="true" />
+                      Ver detalhes de {vehicle.model} <ArrowUpRight size={17} aria-hidden="true" />
                     </Link>
                     <WhatsAppLink
                       className="vehicle-contact"
-                      subject={`as opções de ${vehicle.categoryLabel.toLowerCase()}`}
+                      subject={`${vehicle.title} — referência ${vehicle.slug}`}
                       placement={`card_${vehicle.slug}`}
                     >
-                      Consultar opções <MoveRight size={17} aria-hidden="true" />
+                      Consultar veículo <MoveRight size={17} aria-hidden="true" />
                     </WhatsAppLink>
                   </div>
                 </div>
@@ -120,7 +132,7 @@ export function Showcase() {
           </div>
         ) : (
           <div className="empty-state">
-            <p>Nenhum conceito nesta categoria.</p>
+            <p>Nenhum veículo anunciado nesta categoria.</p>
             <button type="button" onClick={() => selectFilter('todos')}>
               Ver todas as opções
             </button>
