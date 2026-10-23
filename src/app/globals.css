@@ -382,6 +382,10 @@ img { max-width: 100%; }
 .footer-links { display: flex; gap: var(--space-6); flex-wrap: wrap; align-items: start; color: #e6e6e6; font-size: .8rem; }
 .footer-links a:hover { color: var(--red); }
 .footer-bottom { display: flex; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-4); border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .68rem; }
+/* Assinatura de quem fez. Fica na monoespaçada dos rótulos, mais apagada que
+   o aviso ao lado: presente para quem procurar, discreta para quem não. */
+.footer-signature { flex: none; color: var(--ink-soft); font-family: var(--font-mono), monospace; font-size: .62rem; letter-spacing: .16em; white-space: nowrap; }
+.footer-signature strong { font-weight: 700; color: var(--ink-muted); }
 
 .detail-page { min-height: 100dvh; background: var(--bg); }
 .detail-hero { padding-block: 132px var(--space-9); }

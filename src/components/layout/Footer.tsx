@@ -23,6 +23,9 @@ export function Footer() {
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} {STORE.name}.</span>
         <span>Prévia comercial • confirme disponibilidade e condições com a loja</span>
+        <span className="footer-signature">
+          By <strong>RonalDigital Tech</strong>
+        </span>
       </div>
     </footer>
   );
