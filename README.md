@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Liberato Motos Car — prévia comercial
 
-## Getting Started
+Site demonstrativo para prospecção da Liberato Motos Car da Itaoca, Fortaleza. A vitrine apresenta **conceitos ilustrativos**, não veículos em estoque. O telefone, a marca e o endereço vieram dos materiais enviados para este projeto; dados comerciais devem ser validados com a loja antes da publicação oficial.
 
-First, run the development server:
+## Rodar localmente
+
+Requer Node.js compatível com Next.js 16.4.2. No ambiente de desenvolvimento, foi usado Node 22.
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra `http://localhost:3000`. Para conferir a versão de produção:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+npx tsc --noEmit -p tsconfig.json
+npm run build
+npm run start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Fluxo da demonstração
 
-## Learn More
+1. Abra a página inicial. A marca aparece no topo e o botão principal leva à vitrine.
+2. Filtre por motos ou carros. O filtro permanece na URL.
+3. Abra um conceito em `/veiculos/[slug]`. A página apresenta uma imagem e informa que o veículo é ilustrativo.
+4. Use “Consultar opções”. A mensagem de WhatsApp inclui o assunto e, quando presentes, as UTMs da visita.
 
-To learn more about Next.js, take a look at the following resources:
+Exemplo de URL de campanha: `/?utm_source=meta&utm_medium=cpc&utm_campaign=prospeccao`. A aplicação aceita `utm_source`, `utm_medium`, `utm_campaign` e `utm_content`, sanitiza os valores e os mantém durante a sessão.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Medição opcional
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Copie `.env.example` para `.env.local` e configure os IDs fornecidos pela loja. As tags Meta e Google são carregadas somente após aceitação no aviso de medição. A visita ao detalhe é registrada como `ViewContent`/`view_item`; o clique para WhatsApp como `Contact`/`whatsapp_click`. **Clique não é lead confirmado**. O evento `Lead`/`generate_lead` fica reservado para uma futura confirmação operacional.
 
-## Deploy on Vercel
+Os IDs públicos entram no build. Se forem alterados, execute novo build. Teste os eventos nas ferramentas de diagnóstico das contas antes de publicar. A prévia está com `noindex` para evitar indexação de conteúdo ilustrativo.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Para transformar em site oficial
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Confirmar com a loja os dados de contato, horário, domínio, redes sociais e autorização de uso da marca.
+- Trocar os conceitos por fotos, disponibilidade, preços e fichas reais aprovadas.
+- Conectar o catálogo a uma fonte de estoque e definir quem atualiza os dados.
+- Configurar tags, privacidade, domínio e SEO conforme a operação real.
+- Integrar o número comercial à WhatsApp Business Platform ou a um provedor compatível caso o atendimento por IA seja contratado. O link `wa.me` sozinho não dá acesso às conversas nem permite automação.
+- Fornecer uma sequência de fotos do mesmo veículo para habilitar o visualizador 360° real. Com uma só imagem, a página mostra a foto estática e explica essa limitação.
+
+O roteiro e as etapas estão em [docs/PLANO_EXECUCAO.md](docs/PLANO_EXECUCAO.md).

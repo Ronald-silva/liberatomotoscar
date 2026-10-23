@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local visual references and agent settings
+/Captura de tela de *.png
+/.codex/
+
+# image explorations not used by the preview
+/public/images/*
+!/public/images/hero-moto-campanha.png
+!/public/images/moto-street.png
+!/public/images/moto-adventure.png
+!/public/images/carro-sedan.png
