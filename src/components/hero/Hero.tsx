@@ -6,18 +6,6 @@ import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 export function Hero() {
   return (
     <section className="hero" aria-labelledby="hero-title">
-      <div className="hero-media">
-        <Image
-          src="/images/fachada.png"
-          alt="Fachada da Liberato Motos Car na R. Elcias Lopes, com motos expostas na vitrine"
-          fill
-          priority
-          sizes="100vw"
-          className="hero-image"
-        />
-        <div className="hero-shade" aria-hidden="true" />
-      </div>
-
       <div className="container hero-content">
         <div className="hero-copy">
           <p className="eyebrow eyebrow--light">
@@ -46,6 +34,18 @@ export function Hero() {
             </WhatsAppLink>
           </div>
         </div>
+      </div>
+
+      <div className="hero-media">
+        <Image
+          src="/images/fachada.png"
+          alt="Fachada da Liberato Motos Car na R. Elcias Lopes, com motos expostas na vitrine"
+          fill
+          priority
+          sizes="100vw"
+          className="hero-image"
+        />
+        <div className="hero-shade" aria-hidden="true" />
       </div>
 
       <div className="hero-bottom">

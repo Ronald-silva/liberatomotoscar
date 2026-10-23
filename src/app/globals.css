@@ -528,13 +528,13 @@ img { max-width: 100%; }
   .brand-art--positiva { width: 136px; padding: 9px 11px; }
   .header-actions .button { min-height: 42px; padding-inline: var(--space-3); font-size: .7rem; }
   .header-actions .button svg { display: none; }
-  /* A foto passa a ocupar uma faixa própria no rodapé do hero. Sobreposta ao
-     texto, ela deixava o botão de WhatsApp em cima do letreiro da loja. */
-  .hero { --hero-photo: 230px; min-height: 0; align-items: start; }
-  .hero-media { top: auto; height: var(--hero-photo); }
-  .hero-image { object-position: center 52%; }
-  .hero-shade { background: linear-gradient(180deg, rgba(7,9,14,.98) 0%, rgba(7,9,14,.42) 26%, rgba(7,9,14,.24) 62%, rgba(7,9,14,.84) 100%); }
-  .hero-content { padding-block: 138px calc(var(--hero-photo) + var(--space-6)); }
+  /* No celular, texto, foto inteira e faixa inferior ocupam linhas próprias. */
+  .hero { min-height: 0; flex-direction: column; align-items: stretch; }
+  .hero-media { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 1672 / 941; }
+  .hero-image { object-fit: contain; }
+  .hero-shade { display: none; }
+  .hero-content { padding-block: 138px var(--space-6); }
+  .hero-bottom { position: relative; inset: auto; }
   .hero h1 { font-size: clamp(2.5rem, 10vw, 3.9rem); margin-block: var(--space-4); }
   .hero-description { max-width: 440px; font-size: .88rem; }
   .hero-actions { margin-top: var(--space-5); }
