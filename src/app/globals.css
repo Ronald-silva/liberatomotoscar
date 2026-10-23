@@ -10,6 +10,10 @@
   --line: rgba(255, 255, 255, 0.14);
   --red: #e0252f;
   --red-dark: #ac1420;
+  /* O vermelho da marca sobre o fundo dá 4,24:1 — abaixo dos 4,5:1 que a norma
+     pede para texto pequeno. Este é o mesmo vermelho clareado o suficiente
+     (4,78:1), usado só nos rótulos miúdos; preenchimentos seguem com --red. */
+  --red-text: #ea3340;
   --white: #fff;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -213,7 +217,7 @@ img { max-width: 100%; }
   align-items: center;
   gap: var(--space-3);
   margin: 0;
-  color: var(--red);
+  color: var(--red-text);
   font-family: var(--font-mono), monospace;
   font-size: .68rem;
   font-weight: 700;
@@ -242,7 +246,7 @@ img { max-width: 100%; }
 .hero-bottom { position: absolute; z-index: 20; inset: auto 0 0; border-top: 1px solid rgba(255,255,255,.22); background: rgba(6,8,11,.58); -webkit-backdrop-filter: blur(12px);
  backdrop-filter: blur(12px); }
 .hero-bottom-inner { min-height: 62px; display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); color: #d1d3d6; font-size: .63rem; font-weight: 800; letter-spacing: .18em; }
-.hero-bottom-inner b { color: var(--red); }
+.hero-bottom-inner b { color: var(--red-text); }
 .hero-bottom-inner a { display: inline-flex; align-items: center; gap: var(--space-3); }
 .hero-bottom-inner a:hover { color: var(--white); }
 
@@ -269,7 +273,7 @@ img { max-width: 100%; }
 .proof-value--list { font-size: 1.55rem; letter-spacing: -.01em; }
 .proof-stars { display: inline-flex; gap: 2px; color: var(--red); }
 .proof-note { margin-top: auto; color: var(--ink-muted); font-size: .74rem; line-height: 1.45; }
-.proof-note--link { display: inline-flex; align-items: center; gap: var(--space-1); width: fit-content; min-height: 26px; }
+.proof-note--link { display: inline-flex; align-items: center; gap: var(--space-1); width: fit-content; min-height: 44px; }
 .proof-note--link:hover { color: var(--white); }
 
 .section-pad { padding-block: var(--space-9); }
@@ -286,7 +290,14 @@ img { max-width: 100%; }
 .filter-button.is-active { color: var(--white); background: var(--red); }
 .filter-button sup { margin-left: .25em; font-size: .62rem; opacity: .8; }
 .demo-note { margin: var(--space-7) 0 var(--space-4); color: #aab0b8; font-size: .64rem; font-weight: 700; letter-spacing: .12em; line-height: 1.6; }
-.vehicle-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: var(--space-4); }
+/* A filtragem é CSS. O componente cliente só escreve `data-filtro` na seção,
+   então os sete cards continuam no HTML servido mesmo sem JavaScript. */
+.vehicle-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: var(--space-4); counter-reset: veiculo; }
+.showcase[data-filtro='moto'] .vehicle-card:not([data-categoria='moto']),
+.showcase[data-filtro='carro'] .vehicle-card:not([data-categoria='carro']) { display: none; }
+/* `display: none` não incrementa contador, então a numeração se refaz sozinha. */
+.vehicle-card { counter-increment: veiculo; }
+.vehicle-number::before { content: counter(veiculo, decimal-leading-zero); }
 .vehicle-card { display: grid; grid-template-columns: minmax(0, 45%) minmax(0, 55%); min-width: 0; background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--radius-card); -webkit-backdrop-filter: blur(16px);
  backdrop-filter: blur(16px); overflow: hidden; transition: transform var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
 /* Palco: o veículo deixa o painel branco e passa a pousar sobre o escuro, com
@@ -322,7 +333,7 @@ img { max-width: 100%; }
 .vehicle-type { right: var(--space-4); padding: .4rem .75rem; border-radius: var(--radius-pill); background: rgba(5,7,10,.7); border: 1px solid var(--glass-line); -webkit-backdrop-filter: blur(10px);
  backdrop-filter: blur(10px); text-transform: uppercase; }
 .vehicle-content { display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: var(--space-6); padding: var(--space-5); }
-.vehicle-kicker { margin: 0 0 var(--space-2); color: var(--red); font-family: var(--font-mono), monospace; font-size: .65rem; font-weight: 700; letter-spacing: .24em; }
+.vehicle-kicker { margin: 0 0 var(--space-2); color: var(--red-text); font-family: var(--font-mono), monospace; font-size: .65rem; font-weight: 700; letter-spacing: .24em; }
 .vehicle-content h3 { margin: 0; font-family: var(--font-display), sans-serif; font-size: clamp(1.8rem, 2.4vw, 2.9rem); line-height: .95; letter-spacing: -.035em; text-transform: uppercase; }
 .vehicle-content p:not(.vehicle-kicker) { margin: var(--space-3) 0 0; color: var(--ink-muted); font-size: .88rem; }
 .vehicle-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-5) 0 0; }
@@ -332,18 +343,20 @@ img { max-width: 100%; }
 .vehicle-facts dd { margin: 0; color: #e8eaed; font-size: .76rem; }
 .vehicle-price { display: block; color: var(--white); font-family: var(--font-display), sans-serif; font-size: 2rem; line-height: 1; }
 .vehicle-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
-.text-link, .vehicle-contact { min-height: 32px; display: inline-flex; align-items: center; gap: var(--space-2); font-size: .76rem; font-weight: 800; }
+.text-link, .vehicle-contact { min-height: 44px; display: inline-flex; align-items: center; gap: var(--space-2); font-size: .76rem; font-weight: 800; }
 .text-link:hover, .vehicle-contact:hover { color: var(--red); }
 .vehicle-contact { color: #e8e8e8; }
-.empty-state { padding: var(--space-8); text-align: center; border: 1px solid var(--card-line); border-radius: var(--radius-box); background: var(--card-bg); }
-.empty-state button { min-height: 44px; padding-inline: var(--space-5); color: var(--white); background: var(--red); border: 0; border-radius: var(--radius-pill); box-shadow: var(--glow-red); cursor: pointer; }
+.empty-state { display: none; padding: var(--space-8); text-align: center; border: 1px solid var(--card-line); border-radius: var(--radius-box); background: var(--card-bg); }
+.showcase[data-filtro='moto']:not(:has(.vehicle-card[data-categoria='moto'])) .empty-state,
+.showcase[data-filtro='carro']:not(:has(.vehicle-card[data-categoria='carro'])) .empty-state,
+.showcase:not(:has(.vehicle-card)) .empty-state { display: block; }
 
 .experience { background: #11151b; }
 .experience-heading { display: grid; grid-template-columns: 1.15fr .85fr; gap: var(--space-8); align-items: end; padding-top: var(--space-7); }
 .experience-heading .section-intro { margin: 0 0 .35rem; }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-top: var(--space-8); }
 .step { min-height: 230px; display: flex; flex-direction: column; padding: var(--space-5); border: 1px solid var(--card-line); border-radius: var(--radius-box); background: var(--card-bg); }
-.step-number { color: var(--red); font-family: var(--font-display), sans-serif; font-size: 2.4rem; line-height: 1; }
+.step-number { color: var(--red-text); font-family: var(--font-display), sans-serif; font-size: 2.4rem; line-height: 1; }
 .step h3 { margin: auto 0 var(--space-3); font-family: var(--font-display), sans-serif; font-size: 2.15rem; text-transform: uppercase; line-height: 1; }
 .step p { margin: 0; color: var(--ink-muted); font-size: .82rem; line-height: 1.65; }
 
@@ -370,7 +383,7 @@ img { max-width: 100%; }
 .map-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; filter: grayscale(.55) contrast(1.08) brightness(.68); }
 .map-label { position: absolute; left: var(--space-5); right: var(--space-5); bottom: var(--space-5); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); padding: var(--space-5); background: rgba(8,11,16,.78); border: 1px solid var(--glass-line); border-radius: var(--radius-box); -webkit-backdrop-filter: blur(12px);
  backdrop-filter: blur(12px); }
-.map-label span { display: block; margin-bottom: var(--space-2); color: var(--red); font-size: .66rem; letter-spacing: .16em; font-weight: 800; }
+.map-label span { display: block; margin-bottom: var(--space-2); color: var(--red-text); font-size: .66rem; letter-spacing: .16em; font-weight: 800; }
 .map-label strong { display: block; font-size: 1rem; line-height: 1.4; }
 .map-label a { flex: none; min-height: 44px; display: inline-flex; align-items: center; gap: var(--space-2); font-size: .72rem; font-weight: 800; }
 .map-label a:hover { color: var(--red); }
@@ -384,7 +397,7 @@ img { max-width: 100%; }
 .footer-bottom { display: flex; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-4); border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .68rem; }
 /* Assinatura de quem fez. Fica na monoespaçada dos rótulos, mais apagada que
    o aviso ao lado: presente para quem procurar, discreta para quem não. */
-.footer-signature { flex: none; color: var(--ink-soft); font-family: var(--font-mono), monospace; font-size: .62rem; letter-spacing: .16em; white-space: nowrap; }
+.footer-signature { flex: none; color: var(--ink-soft); white-space: nowrap; }
 .footer-signature strong { font-weight: 700; color: var(--ink-muted); }
 
 .detail-page { min-height: 100dvh; background: var(--bg); }
