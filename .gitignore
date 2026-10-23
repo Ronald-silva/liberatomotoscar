@@ -51,3 +51,17 @@ next-env.d.ts
 !/public/images/moto-street.png
 !/public/images/moto-adventure.png
 !/public/images/carro-sedan.png
+!/public/images/Volkswagen Saveiro Branca em Destaque.png
+!/public/images/fiat_strada_2016_padrao_1600x1200.png
+!/public/images/Honda Fan preta em estúdio minimalista.png
+!/public/images/Motocicleta Honda Titan Vermelha em Estúdio.png
+!/public/images/Yamaha Fazer Branca em Estúdio.png
+!/public/images/Honda Pop Branca e Vermelha em Estúdio.png
+!/public/images/Yamaha Crosser Vermelha em Estúdio.png
+!/public/images/fachada.jpeg
+
+# Mockups de brainstorming (não versionados)
+.superpowers/
+
+# harness de aferição responsiva, nunca versionado
+public/__resp.html
