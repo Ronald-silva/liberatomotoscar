@@ -47,7 +47,6 @@ next-env.d.ts
 
 # image explorations not used by the preview
 /public/images/*
-!/public/images/hero-moto-campanha.png
 !/public/images/moto-street.png
 !/public/images/moto-adventure.png
 !/public/images/carro-sedan.png
