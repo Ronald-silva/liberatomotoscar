@@ -1,5 +1,9 @@
 # Plano de execução — Liberato Motos Car
 
+## Atualização do catálogo em 23/10/2026
+
+A vitrine passou a apresentar sete anúncios com fotos, preços, anos e quilometragens fornecidos pelo usuário. A [matriz de validação](./VALIDACAO_CATALOGO.md) distingue os dados do anúncio, a referência de fábrica da Saveiro e o que ainda precisa de confirmação com a loja. Os três conceitos anteriores seguem acessíveis apenas pelos links antigos. A prévia continua com `noindex` e não foi publicada nesta etapa.
+
 ## Estado da prévia em 22/10/2026
 
 O conceito navegável foi implementado. A página inicial usa a marca recebida, imagens locais ilustrativas, vitrine com filtros de motos e carros, seção de experiência, endereço da Itaoca e contato por WhatsApp. Há três páginas de detalhe com URL própria e aviso explícito de que os veículos não representam estoque real. A prévia está com `noindex`.

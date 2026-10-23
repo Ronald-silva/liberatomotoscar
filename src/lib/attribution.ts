@@ -1,3 +1,5 @@
+import { STORE } from '@/data/store';
+
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content'] as const;
 const STORAGE_KEY = 'liberato_campaign_attribution';
 
@@ -76,5 +78,5 @@ export function buildWhatsAppUrl(
 
   if (campaign.length > 0) lines.push(`Origem da campanha: ${campaign.join('; ')}`);
 
-  return `https://wa.me/5585996365664?text=${encodeURIComponent(lines.join('\n'))}`;
+  return `https://wa.me/${STORE.whatsappNumber}?text=${encodeURIComponent(lines.join('\n'))}`;
 }

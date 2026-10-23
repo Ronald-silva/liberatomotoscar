@@ -121,7 +121,8 @@ img { max-width: 100%; }
 .button:active { transform: translateY(0); }
 .button--red { color: var(--white); background: var(--red); box-shadow: var(--glow-red); }
 .button--red:hover { background: var(--red-dark); }
-.button--outline { color: var(--white); border-color: var(--glass-line); background: var(--glass-bg); backdrop-filter: blur(12px); }
+.button--outline { color: var(--white); border-color: var(--glass-line); background: var(--glass-bg); -webkit-backdrop-filter: blur(12px);
+ backdrop-filter: blur(12px); }
 .button--outline:hover { border-color: rgba(255,255,255,.34); background: rgba(255,255,255,.1); }
 .button--small { min-height: 42px; padding-inline: var(--space-4); }
 
@@ -143,6 +144,7 @@ img { max-width: 100%; }
   padding: 9px 9px 9px 22px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-line);
+  -webkit-backdrop-filter: blur(22px);
   backdrop-filter: blur(22px);
   border-radius: var(--radius-pill);
 }
@@ -237,7 +239,8 @@ img { max-width: 100%; }
 .hero-description { width: min(100%, 500px); margin: 0; color: #f0f1f2; font-size: clamp(.96rem, 1.25vw, 1.08rem); line-height: 1.7; text-shadow: 0 1px 8px rgba(0,0,0,.3); }
 .hero-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-6); }
 .hero-actions .button--outline { border-color: rgba(255,255,255,.22); }
-.hero-bottom { position: absolute; z-index: 20; inset: auto 0 0; border-top: 1px solid rgba(255,255,255,.22); background: rgba(6,8,11,.58); backdrop-filter: blur(12px); }
+.hero-bottom { position: absolute; z-index: 20; inset: auto 0 0; border-top: 1px solid rgba(255,255,255,.22); background: rgba(6,8,11,.58); -webkit-backdrop-filter: blur(12px);
+ backdrop-filter: blur(12px); }
 .hero-bottom-inner { min-height: 62px; display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); color: #d1d3d6; font-size: .63rem; font-weight: 800; letter-spacing: .18em; }
 .hero-bottom-inner b { color: var(--red); }
 .hero-bottom-inner a { display: inline-flex; align-items: center; gap: var(--space-3); }
@@ -253,7 +256,7 @@ img { max-width: 100%; }
   position: absolute;
   inset: 0 0 auto;
   height: 2px;
-  background: linear-gradient(90deg, var(--red) 0%, rgba(215,37,49,.28) 20%, transparent 56%);
+  background: linear-gradient(90deg, var(--red) 0%, rgba(224,37,47,.28) 20%, transparent 56%);
 }
 .credibility-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .proof { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-6) var(--space-5); border-right: 1px solid var(--line); }
@@ -284,7 +287,8 @@ img { max-width: 100%; }
 .filter-button sup { margin-left: .25em; font-size: .62rem; opacity: .8; }
 .demo-note { margin: var(--space-7) 0 var(--space-4); color: #aab0b8; font-size: .64rem; font-weight: 700; letter-spacing: .12em; line-height: 1.6; }
 .vehicle-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: var(--space-4); }
-.vehicle-card { display: grid; grid-template-columns: minmax(0, 45%) minmax(0, 55%); min-width: 0; background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--radius-card); backdrop-filter: blur(16px); overflow: hidden; transition: transform var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
+.vehicle-card { display: grid; grid-template-columns: minmax(0, 45%) minmax(0, 55%); min-width: 0; background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--radius-card); -webkit-backdrop-filter: blur(16px);
+ backdrop-filter: blur(16px); overflow: hidden; transition: transform var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
 /* Palco: o veículo deixa o painel branco e passa a pousar sobre o escuro, com
    um brilho vermelho na base e o próprio reflexo embaixo. */
 .vehicle-image-wrap { --chao: 13%; position: relative; height: 100%; min-height: 380px; overflow: hidden; }
@@ -302,17 +306,21 @@ img { max-width: 100%; }
   z-index: 0;
   inset: var(--space-4) var(--space-4) var(--chao);
   pointer-events: none;
-  background: var(--foto) center bottom / contain no-repeat;
   transform: translateY(100%) scaleY(-1);
   opacity: .24;
   -webkit-mask-image: linear-gradient(to bottom, transparent 46%, rgba(0, 0, 0, 0.95));
   mask-image: linear-gradient(to bottom, transparent 46%, rgba(0, 0, 0, 0.95));
 }
+/* A arte do reflexo é a mesma foto, servida pelo otimizador. Como background de
+   CSS ela saía crua: 11,3 MB de PNG por visita, sem carregamento adiado, só
+   para um enfeite a 24% de opacidade atrás do veículo. */
+.vehicle-reflection-art { object-fit: contain; object-position: center bottom; }
 .vehicle-image { z-index: 1; object-fit: contain; padding: var(--space-4) var(--space-4) var(--chao); filter: drop-shadow(0 28px 34px rgba(0,0,0,.72)); transition: transform 480ms var(--ease); }
 .vehicle-card:hover .vehicle-image { transform: scale(1.035); }
 .vehicle-number, .vehicle-type { position: absolute; top: var(--space-4); z-index: 2; color: var(--white); font-size: .62rem; font-weight: 800; letter-spacing: .12em; }
 .vehicle-number { left: var(--space-4); color: var(--ink-soft); }
-.vehicle-type { right: var(--space-4); padding: .4rem .75rem; border-radius: var(--radius-pill); background: rgba(5,7,10,.7); border: 1px solid var(--glass-line); backdrop-filter: blur(10px); text-transform: uppercase; }
+.vehicle-type { right: var(--space-4); padding: .4rem .75rem; border-radius: var(--radius-pill); background: rgba(5,7,10,.7); border: 1px solid var(--glass-line); -webkit-backdrop-filter: blur(10px);
+ backdrop-filter: blur(10px); text-transform: uppercase; }
 .vehicle-content { display: flex; flex: 1; flex-direction: column; justify-content: space-between; gap: var(--space-6); padding: var(--space-5); }
 .vehicle-kicker { margin: 0 0 var(--space-2); color: var(--red); font-family: var(--font-mono), monospace; font-size: .65rem; font-weight: 700; letter-spacing: .24em; }
 .vehicle-content h3 { margin: 0; font-family: var(--font-display), sans-serif; font-size: clamp(1.8rem, 2.4vw, 2.9rem); line-height: .95; letter-spacing: -.035em; text-transform: uppercase; }
@@ -340,8 +348,10 @@ img { max-width: 100%; }
 .step p { margin: 0; color: var(--ink-muted); font-size: .82rem; line-height: 1.65; }
 
 .trade { position: relative; min-height: 410px; display: flex; align-items: center; overflow: hidden; background: #15191f; }
-.trade::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.95) 47%, rgba(17,21,27,.18) 100%), url('/images/yamaha-crosser.png') right center / cover no-repeat; opacity: .9; }
-.trade-content { position: relative; z-index: 1; padding-block: var(--space-8); }
+.trade-media { position: absolute; inset: 0; z-index: 0; }
+.trade-art { object-fit: cover; object-position: right center; opacity: .9; }
+.trade::before { content: ''; position: absolute; z-index: 1; inset: 0; background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.95) 47%, rgba(17,21,27,.18) 100%); }
+.trade-content { position: relative; z-index: 2; padding-block: var(--space-8); }
 .trade-title { max-width: 760px; margin: var(--space-4) 0; font-size: clamp(2.7rem, 5.1vw, 5.1rem); }
 .trade-title span { color: var(--red); }
 .trade-content > p:not(.eyebrow) { max-width: 460px; color: var(--ink-muted); line-height: 1.7; }
@@ -357,8 +367,9 @@ img { max-width: 100%; }
 .contact-details svg { flex: none; color: var(--red); }
 .contact-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .map-card { position: relative; min-height: 470px; overflow: hidden; border: 1px solid var(--card-line); border-radius: var(--radius-card); background: var(--surface); }
-.map-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; filter: grayscale(.22) contrast(1.04) brightness(.96); }
-.map-label { position: absolute; left: var(--space-5); right: var(--space-5); bottom: var(--space-5); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); padding: var(--space-5); background: rgba(8,11,16,.78); border: 1px solid var(--glass-line); border-radius: var(--radius-box); backdrop-filter: blur(12px); }
+.map-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; filter: grayscale(.55) contrast(1.08) brightness(.68); }
+.map-label { position: absolute; left: var(--space-5); right: var(--space-5); bottom: var(--space-5); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); padding: var(--space-5); background: rgba(8,11,16,.78); border: 1px solid var(--glass-line); border-radius: var(--radius-box); -webkit-backdrop-filter: blur(12px);
+ backdrop-filter: blur(12px); }
 .map-label span { display: block; margin-bottom: var(--space-2); color: var(--red); font-size: .66rem; letter-spacing: .16em; font-weight: 800; }
 .map-label strong { display: block; font-size: 1rem; line-height: 1.4; }
 .map-label a { flex: none; min-height: 44px; display: inline-flex; align-items: center; gap: var(--space-2); font-size: .72rem; font-weight: 800; }
@@ -433,14 +444,15 @@ img { max-width: 100%; }
 .related-link span { display: block; margin-bottom: var(--space-1); color: var(--ink-soft); font-size: .65rem; text-transform: uppercase; }
 .related-link strong { font-family: var(--font-display), sans-serif; font-size: 1.5rem; text-transform: uppercase; }
 
-.consent-banner { position: fixed; z-index: 90; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); max-width: 680px; margin-inline: auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-5); color: var(--ink); background: rgba(22,26,33,.92); border: 1px solid var(--glass-line); border-radius: var(--radius-box); backdrop-filter: blur(16px); box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+.consent-banner { position: fixed; z-index: 90; left: var(--space-4); right: var(--space-4); bottom: var(--space-4); max-width: 680px; margin-inline: auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-5); color: var(--ink); background: rgba(22,26,33,.92); border: 1px solid var(--glass-line); border-radius: var(--radius-box); -webkit-backdrop-filter: blur(16px);
+ backdrop-filter: blur(16px); box-shadow: 0 16px 40px rgba(0,0,0,.4); }
 .consent-banner p { margin: 0; color: var(--ink-muted); font-size: .78rem; line-height: 1.5; }
 .consent-actions { display: flex; gap: var(--space-2); flex: none; }
 .consent-actions button { min-height: 44px; padding: var(--space-2) var(--space-4); cursor: pointer; border: 1px solid var(--glass-line); border-radius: var(--radius-pill); background: transparent; color: var(--white); font-size: .75rem; font-weight: 700; }
 .consent-actions button:last-child { background: var(--red); border-color: var(--red); }
 
 /* Sem desfoque de fundo, o vidro vira texto claro sobre foto clara. */
-@supports not (backdrop-filter: blur(1px)) {
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .header-inner,
   .button--outline,
   .vehicle-card,
@@ -521,7 +533,7 @@ img { max-width: 100%; }
   .steps { grid-template-columns: 1fr; margin-top: var(--space-7); }
   .step { min-height: 175px; }
   .trade { min-height: 420px; }
-  .trade::before { background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.91) 60%, rgba(17,21,27,.56) 100%), url('/images/yamaha-crosser.png') right center / cover no-repeat; }
+  .trade::before { background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.91) 60%, rgba(17,21,27,.56) 100%); }
   .contact-grid { gap: var(--space-7); }
   .footer-main, .footer-bottom { flex-direction: column; }
   .footer-links { gap: var(--space-4); }
@@ -581,8 +593,16 @@ img { max-width: 100%; }
   box-shadow: 0 26px 60px -28px rgba(0, 0, 0, 0.9);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+/* Impresso ou salvo em PDF não há rolagem, então nada revelaria. */
+@media print {
   .revelar[data-revelar='esperando'] { opacity: 1; transform: none; }
+  .hero-copy > * { animation: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+  .revelar[data-revelar='esperando'] { opacity: 1; transform: none; }
+  .hero-copy > * { animation: none; }
   .vehicle-card:hover { transform: none; }
+  .vehicle-card:hover .vehicle-image { transform: none; }
 }

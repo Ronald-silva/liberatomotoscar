@@ -64,3 +64,6 @@ next-env.d.ts
 
 # harness de aferição responsiva, nunca versionado
 public/__resp.html
+
+# cache do Python
+__pycache__/

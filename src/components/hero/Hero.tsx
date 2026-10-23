@@ -6,15 +6,17 @@ import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 export function Hero() {
   return (
     <section className="hero" aria-labelledby="hero-title">
-      <Image
-        src="/images/hero-moto-campanha.png"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="hero-image"
-      />
-      <div className="hero-shade" aria-hidden="true" />
+      <div className="hero-media">
+        <Image
+          src="/images/fachada.jpeg"
+          alt="Fachada da Liberato Motos Car"
+          fill
+          priority
+          sizes="100vw"
+          className="hero-image"
+        />
+        <div className="hero-shade" aria-hidden="true" />
+      </div>
 
       <div className="container hero-content">
         <div className="hero-copy">
@@ -27,8 +29,8 @@ export function Hero() {
             <em>COMEÇA AQUI.</em>
           </h1>
           <p className="hero-description">
-            Compra, venda e troca com conversa direta. Descubra uma nova forma
-            de encontrar o veículo que combina com você.
+            Explore os veículos anunciados pela Liberato Motos Car, confira os
+            dados disponíveis e fale diretamente com a loja.
           </p>
           <div className="hero-actions">
             <Link className="button button--red" href="#vitrine">

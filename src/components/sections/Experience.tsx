@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { ArrowUpRight } from 'lucide-react';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 
@@ -50,6 +51,15 @@ export function Experience() {
       </section>
 
       <section className="trade" aria-labelledby="trade-title">
+        <div className="trade-media" aria-hidden="true">
+          <Image
+            src="/images/yamaha-crosser.png"
+            alt=""
+            fill
+            sizes="(max-width: 700px) 100vw, 60vw"
+            className="trade-art"
+          />
+        </div>
         <div className="container trade-content">
           <p className="eyebrow"><span className="eyebrow-line" /> COMPRA • VENDA • TROCA</p>
           <h2 id="trade-title" className="trade-title">

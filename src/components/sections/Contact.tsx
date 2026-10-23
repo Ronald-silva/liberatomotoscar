@@ -1,8 +1,6 @@
 import { ArrowUpRight, MapPin, Phone } from 'lucide-react';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
-
-const MAP_URL =
-  'https://www.google.com/maps/search/?api=1&query=R.%20Elcias%20Lopes%2C%20334%2C%20loja%20A%2C%20Itaoca%2C%20Fortaleza%20CE';
+import { MAP_EMBED_URL, MAP_URL, STORE, STORE_ADDRESS_LINE, STORE_STREET_ADDRESS } from '@/data/store';
 
 export function Contact() {
   return (
@@ -15,15 +13,15 @@ export function Contact() {
         <div className="contact-grid">
           <div>
             <h2 id="contact-title" className="contact-title">
-              A GENTE SE<br />ENCONTRA<br /><span>NA ITAOCA.</span>
+              A GENTE SE<br />ENCONTRA<br /><span>NA PARANGABA.</span>
             </h2>
             <p className="contact-copy">
               Conheça a Liberato Motos Car em Fortaleza ou chame a equipe pelo
               WhatsApp para conversar sobre o seu próximo veículo.
             </p>
             <ul className="contact-details">
-              <li><MapPin size={19} aria-hidden="true" /> R. Elcias Lopes, 334, loja A — Itaoca, Fortaleza/CE</li>
-              <li><Phone size={19} aria-hidden="true" /> (85) 99636-5664</li>
+              <li><MapPin size={19} aria-hidden="true" /> {STORE_ADDRESS_LINE}</li>
+              <li><Phone size={19} aria-hidden="true" /> {STORE.phoneDisplay}</li>
             </ul>
             <div className="contact-actions">
               <WhatsAppLink
@@ -39,12 +37,18 @@ export function Contact() {
               </a>
             </div>
           </div>
-          <div className="map-card" aria-label="Representação ilustrativa da localização da loja na Itaoca">
-            <div className="map-pin"><MapPin size={23} aria-hidden="true" /></div>
+          <div className="map-card">
+            <iframe
+              className="map-frame"
+              title={`Mapa da ${STORE.name} em ${STORE_ADDRESS_LINE}`}
+              src={MAP_EMBED_URL}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
             <div className="map-label">
               <div>
                 <span>LIBERATO MOTOS CAR</span>
-                <strong>R. Elcias Lopes, 334<br />Itaoca • Fortaleza/CE</strong>
+                <strong>{STORE_STREET_ADDRESS}<br />{STORE.district} • {STORE.city}/{STORE.state}</strong>
               </div>
               <a href={MAP_URL} target="_blank" rel="noopener noreferrer">
                 ABRIR MAPA <ArrowUpRight size={17} aria-hidden="true" />

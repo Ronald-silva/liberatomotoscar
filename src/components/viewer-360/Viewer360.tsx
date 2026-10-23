@@ -8,9 +8,17 @@ interface Viewer360Props {
   images: string[];
   alt: string;
   title: string;
+  badge?: string;
+  singleImageCaption?: string;
 }
 
-export function Viewer360({ images, alt, title }: Viewer360Props) {
+export function Viewer360({
+  images,
+  alt,
+  title,
+  badge = 'IMAGEM ILUSTRATIVA',
+  singleImageCaption = 'Visualização 360° disponível quando houver fotos do mesmo veículo em todos os ângulos.',
+}: Viewer360Props) {
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
   const pointerX = useRef<number | null>(null);
@@ -61,7 +69,7 @@ export function Viewer360({ images, alt, title }: Viewer360Props) {
           className="viewer-image"
           priority
         />
-        <span className="viewer-badge">IMAGEM ILUSTRATIVA</span>
+        <span className="viewer-badge">{badge}</span>
       </div>
       {isRotatable ? (
         <div className="viewer-controls">
@@ -83,7 +91,7 @@ export function Viewer360({ images, alt, title }: Viewer360Props) {
           </div>
         </div>
       ) : (
-        <p className="viewer-caption">Visualização 360° disponível quando houver fotos reais do veículo em todos os ângulos.</p>
+        <p className="viewer-caption">{singleImageCaption}</p>
       )}
     </div>
   );

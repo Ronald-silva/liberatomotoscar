@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import type { CSSProperties } from 'react';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowUpRight, MoveRight } from 'lucide-react';
@@ -87,18 +86,23 @@ export function Showcase() {
                 className="vehicle-card"
                 key={vehicle.slug}
               >
-                <div
-                  className="vehicle-image-wrap"
-                  style={{ '--foto': `url("${vehicle.image}")` } as CSSProperties}
-                >
+                <div className="vehicle-image-wrap">
                   <Image
                     src={vehicle.image}
                     alt={vehicle.imageAlt}
                     fill
-                    sizes="(max-width: 700px) 100vw, 45vw"
+                    sizes="(max-width: 800px) 100vw, 45vw"
                     className="vehicle-image"
                   />
-                  <span className="vehicle-reflection" aria-hidden="true" />
+                  <span className="vehicle-reflection" aria-hidden="true">
+                    <Image
+                      src={vehicle.image}
+                      alt=""
+                      fill
+                      sizes="(max-width: 800px) 100vw, 45vw"
+                      className="vehicle-reflection-art"
+                    />
+                  </span>
                   <span className="vehicle-number">0{index + 1}</span>
                   <span className="vehicle-type">{vehicle.categoryLabel}</span>
                 </div>

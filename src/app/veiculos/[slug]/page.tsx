@@ -8,28 +8,60 @@ import { Footer } from '@/components/layout/Footer';
 import { Viewer360 } from '@/components/viewer-360/Viewer360';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 import { VehicleViewEvent } from '@/components/marketing/VehicleViewEvent';
+import { InventoryDetail } from '@/components/vehicles/InventoryDetail';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { INVENTORY_VEHICLES, getInventoryVehicle } from '@/data/inventory-vehicles';
 import { DEMO_VEHICLES, getDemoVehicle } from '@/data/mock-vehicles';
+import { buildBreadcrumbSchema, buildVehicleSchema } from '@/lib/structured-data';
 
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return DEMO_VEHICLES.map((vehicle) => ({ slug: vehicle.slug }));
+  return [...INVENTORY_VEHICLES, ...DEMO_VEHICLES].map((vehicle) => ({ slug: vehicle.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
+  const stockVehicle = getInventoryVehicle(slug);
+  if (stockVehicle) {
+    const title = `${stockVehicle.title} ${stockVehicle.color}`;
+    const description = `${stockVehicle.shortDescription} Confira os dados informados no anúncio e consulte a Liberato Motos Car.`;
+    return {
+      title,
+      description,
+      openGraph: { type: 'article', title, description, url: `/veiculos/${slug}` },
+      twitter: { card: 'summary_large_image', title, description },
+    };
+  }
   const vehicle = getDemoVehicle(slug);
   if (!vehicle) return { title: 'Conceito não encontrado' };
+  const title = `${vehicle.title} — conceito de vitrine`;
+  const description = `${vehicle.subtitle}. Apresentação ilustrativa da Liberato Motos Car em Fortaleza.`;
   return {
-    title: `${vehicle.title} — conceito de vitrine`,
-    description: `${vehicle.subtitle}. Apresentação ilustrativa da Liberato Motos Car em Fortaleza.`,
+    title,
+    description,
+    openGraph: { type: 'article', title, description, url: `/veiculos/${slug}` },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 
 export default async function VehiclePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const stockVehicle = getInventoryVehicle(slug);
+  if (stockVehicle) {
+    return (
+      <div className="detail-page">
+        <Header />
+        <main id="conteudo"><InventoryDetail vehicle={stockVehicle} /></main>
+        <Footer />
+        <VehicleViewEvent slug={stockVehicle.slug} category={stockVehicle.category} />
+        <JsonLd schema={buildVehicleSchema(stockVehicle)} />
+        <JsonLd schema={buildBreadcrumbSchema(stockVehicle)} />
+      </div>
+    );
+  }
   const vehicle = getDemoVehicle(slug);
   if (!vehicle) notFound();
   const related = DEMO_VEHICLES.filter((item) => item.slug !== slug).slice(0, 2);

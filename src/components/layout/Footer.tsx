@@ -1,13 +1,17 @@
 import Link from 'next/link';
+import { Brand } from '@/components/layout/Brand';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
+import { STORE } from '@/data/store';
 
 export function Footer() {
   return (
     <footer className="site-footer">
       <div className="container footer-main">
-        <div>
-          <div className="footer-mark">LIBERATO<br /><span>MOTOS CAR</span></div>
-          <p>Compra, venda e troca. Atendimento na Itaoca, Fortaleza/CE.</p>
+        <div className="footer-identity">
+          <Brand />
+          <p>
+            {STORE.tagline}. Atendimento na {STORE.district}, {STORE.city}/{STORE.state}.
+          </p>
         </div>
         <nav className="footer-links" aria-label="Navegação do rodapé">
           <Link href="/#vitrine">Seleção</Link>
@@ -17,8 +21,8 @@ export function Footer() {
         </nav>
       </div>
       <div className="container footer-bottom">
-        <span>© {new Date().getFullYear()} Liberato Motos Car.</span>
-        <span>Prévia comercial • imagens de veículos ilustrativas</span>
+        <span>© {new Date().getFullYear()} {STORE.name}.</span>
+        <span>Prévia comercial • confirme disponibilidade e condições com a loja</span>
       </div>
     </footer>
   );
