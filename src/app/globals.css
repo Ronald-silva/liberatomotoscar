@@ -547,6 +547,42 @@ img { max-width: 100%; }
   .vehicle-links a + a { border-top: 1px solid var(--line); }
 }
 
+/* Movimento. A entrada do hero é a única automática da página; o resto é
+   revelado por scroll. Tudo nasce visível: o estado escondido só existe
+   enquanto `data-revelar` estiver presente, e quem põe o atributo é o
+   JavaScript — sem ele a página inteira continua legível. */
+.revelar {
+  transition: opacity 620ms var(--ease), transform 620ms var(--ease);
+}
+.revelar[data-revelar='esperando'] {
+  opacity: 0;
+  transform: translateY(22px);
+}
+.revelar[data-revelar='pronto'] {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes entrada-hero {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+.hero-copy > * {
+  animation: entrada-hero 720ms var(--ease) backwards;
+}
+.hero-copy > *:nth-child(1) { animation-delay: 90ms; }
+.hero-copy > *:nth-child(2) { animation-delay: 170ms; }
+.hero-copy > *:nth-child(3) { animation-delay: 250ms; }
+.hero-copy > *:nth-child(4) { animation-delay: 330ms; }
+
+.vehicle-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 26px 60px -28px rgba(0, 0, 0, 0.9);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .revelar[data-revelar='esperando'] { opacity: 1; transform: none; }
+  .vehicle-card:hover { transform: none; }
 }
