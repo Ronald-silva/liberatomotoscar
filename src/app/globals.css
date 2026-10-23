@@ -549,8 +549,15 @@ img { max-width: 100%; }
   .trade { min-height: 420px; }
   .trade::before { background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.91) 60%, rgba(17,21,27,.56) 100%); }
   .contact-grid { gap: var(--space-7); }
-  .footer-main, .footer-bottom { flex-direction: column; }
-  .footer-links { gap: var(--space-4); }
+  /* Rodapé centralizado no celular: em coluna, o alinhamento à esquerda deixava
+     a marca, os links e a faixa inferior desencontrados. */
+  .footer-main, .footer-bottom { flex-direction: column; align-items: center; text-align: center; }
+  .footer-identity { align-items: center; }
+  .footer-main p { margin-inline: auto; }
+  .footer-links { gap: var(--space-4); justify-content: center; }
+  .footer-bottom { gap: var(--space-3); }
+  /* A mesma ressalva aparece acima dos cards da vitrine, em todas as larguras. */
+  .footer-note { display: none; }
   .detail-highlights { grid-template-columns: 1fr; gap: var(--space-2); }
   .related-grid { grid-template-columns: 1fr; }
   .consent-banner { flex-direction: column; align-items: stretch; }
