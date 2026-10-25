@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { listAdminVehiclesWithCover } from '@/server/vehicles/service';
 import { logoutAdmin } from '../actions';
 import styles from '../admin.module.css';
+import { badgeClassName, statusLabels } from './veiculos/status';
 
 export const metadata: Metadata = { title: 'Painel', robots: { index: false, follow: false } };
 
-const statusLabels = { draft: 'Rascunho', published: 'Publicado', reserved: 'Reservado', sold: 'Vendido', archived: 'Arquivado' } as const;
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default async function AdminPage() {
@@ -33,9 +33,9 @@ export default async function AdminPage() {
                 ? <Image className={styles.cover} src={vehicle.coverUrl} alt="" width={144} height={112} sizes="72px" unoptimized={!vehicle.coverUrl.startsWith('/')} />
                 : <span className={styles.coverEmpty} aria-hidden="true">Sem foto</span>}
               <span className={styles.vehicleTitle}>{[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'Sem título'}</span>
-              <span className={`${styles.badge} ${styles[`badge_${vehicle.status}`]}`}>{statusLabels[vehicle.status]}</span>
+              <span className={badgeClassName(styles, vehicle.status)}>{statusLabels[vehicle.status]}</span>
               <span className={styles.vehicleMeta}>{vehicle.year ?? 'Ano não informado'}</span>
-              <span className={styles.vehiclePrice}>{vehicle.priceCents ? brl.format(vehicle.priceCents / 100) : 'Sem preço'}</span>
+              <span className={styles.vehiclePrice}>{vehicle.priceCents !== null ? brl.format(vehicle.priceCents / 100) : 'Sem preço'}</span>
             </Link>
           </li>)}
         </ul>

@@ -5,6 +5,10 @@
   --admin-muted: #c7cbd2;
   --admin-line: #4d535d;
   --admin-accent: #ba1d28;
+  --admin-ok: #8fe0a8;
+  --admin-warn: #f2c46d;
+  --admin-danger: #ff9aa2;
+  --admin-info: #9cc7ff;
   --admin-space-1: 0.5rem;
   --admin-space-2: 1rem;
   --admin-space-3: 1.5rem;
@@ -78,9 +82,12 @@
 .vehicleMeta { color: var(--admin-muted); font-size: 0.875rem; }
 .vehiclePrice { font-weight: 700; text-align: right; }
 .badge { align-self: start; padding: 0.15rem 0.6rem; border: 1px solid var(--admin-line); border-radius: 999px; color: var(--admin-muted); font-size: 0.8125rem; white-space: nowrap; }
-.badge_published { color: #8fe0a8; border-color: #8fe0a8; }
-.badge_reserved { color: #f2c46d; border-color: #f2c46d; }
-.badge_sold { color: #ff9aa2; border-color: #ff9aa2; }
+.badge_draft { color: var(--admin-info); border-color: var(--admin-info); }
+.badge_published { color: var(--admin-ok); border-color: var(--admin-ok); }
+.badge_reserved { color: var(--admin-warn); border-color: var(--admin-warn); }
+.badge_sold { color: var(--admin-danger); border-color: var(--admin-danger); }
+.badge_archived { color: var(--admin-muted); border-color: var(--admin-line); border-style: dashed; }
+.statusActions { display: grid; gap: var(--admin-space-1); margin-top: var(--admin-space-2); }
 .stickyAction {
   position: sticky;
   bottom: 0;
