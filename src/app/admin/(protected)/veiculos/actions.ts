@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { updateDetails, updatePrice } from '@/server/vehicles/service';
+import { addPhoto, removePhoto, updateDetails, updatePrice } from '@/server/vehicles/service';
 import { toFormMessage } from './feedback';
 
 export type FormState = { message: string | null };
@@ -51,4 +51,15 @@ export async function savePrice(_state: FormState, formData: FormData): Promise<
   const cents = parsePriceCents(text(formData, 'price'));
   if (cents === null) return { message: toFormMessage(new Error('Informe o preço em reais, por exemplo 18.500,00.')) };
   return run(formData, 'Preço salvo.', (id, version) => updatePrice(id, version, cents));
+}
+
+export async function addVehiclePhoto(_state: FormState, formData: FormData): Promise<FormState> {
+  const file = formData.get('photo');
+  if (!(file instanceof File) || file.size === 0) return { message: toFormMessage(new Error('Escolha uma foto para enviar.')) };
+  // O serviço confere a assinatura real dos bytes; o tipo aqui só diz qual assinatura esperar.
+  return run(formData, 'Foto adicionada.', async (id, version) => addPhoto(id, version, new Uint8Array(await file.arrayBuffer()), file.type));
+}
+
+export async function removeVehiclePhoto(_state: FormState, formData: FormData): Promise<FormState> {
+  return run(formData, 'Foto removida.', (id, version) => removePhoto(id, text(formData, 'imageId'), version));
 }

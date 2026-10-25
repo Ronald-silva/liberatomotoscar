@@ -15,6 +15,10 @@ describe('mensagem de formulário', () => {
     const message = 'Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.';
     expect(toFormMessage(new Error(message))).toBe(message);
   });
+  it.each(['Formato de foto inválido.', 'O anúncio precisa manter uma foto.', 'Foto vazia ou maior que 10 MB.', 'Escolha uma foto para enviar.'])(
+    'repassa a mensagem de foto "%s"', (message) => {
+      expect(toFormMessage(new Error(message))).toBe(message);
+    });
   it.each(['Informe o preço em reais, por exemplo 18.500,00.', 'Ano e quilometragem devem ser números inteiros.'])(
     'repassa a mensagem de validação "%s"', (message) => {
       expect(toFormMessage(new Error(message))).toBe(message);

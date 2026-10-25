@@ -8,13 +8,15 @@ const stub = vi.hoisted(() => ({
   updateDetails: vi.fn(async (id: string, version: number, input: unknown): Promise<object> => ({ id, version, input })),
   updatePrice: vi.fn(async (id: string, version: number, cents: number): Promise<object> => ({ id, version, cents })),
   revalidatePath: vi.fn(),
+  addPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
+  removePhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
 }));
 
-vi.mock('@/server/vehicles/service', () => ({ updateDetails: stub.updateDetails, updatePrice: stub.updatePrice }));
+vi.mock('@/server/vehicles/service', () => ({ updateDetails: stub.updateDetails, updatePrice: stub.updatePrice, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto }));
 vi.mock('next/cache', () => ({ revalidatePath: stub.revalidatePath }));
 vi.mock('next/navigation', () => ({ redirect: vi.fn(), notFound: vi.fn() }));
 
-import { saveDetails, savePrice } from './actions';
+import { addVehiclePhoto, removeVehiclePhoto, saveDetails, savePrice } from './actions';
 
 const id = '6f1c1c1e-7c1e-4b59-9a53-2d2f0c1d3a11';
 const formDataOf = (fields: Record<string, string>) => {
@@ -24,7 +26,7 @@ const formDataOf = (fields: Record<string, string>) => {
 };
 const empty = { message: null };
 
-beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({}); stub.removePhoto.mockResolvedValue({}); });
 
 describe('salvar dados', () => {
   it('pede recarga quando a versão enviada está velha', async () => {
@@ -85,5 +87,70 @@ describe('salvar preço', () => {
     stub.updatePrice.mockRejectedValueOnce(new stub.StaleVehicleError());
     const state = await savePrice(empty, formDataOf({ id, version: '1', price: '1000' }));
     expect(state.message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
+  });
+});
+
+const imageId = '0a5b7c1e-1111-4b59-9a53-2d2f0c1d3a22';
+const photoForm = (file: File | string | null, version = '4') => {
+  const data = formDataOf({ id, version });
+  if (file !== null) data.set('photo', file);
+  return data;
+};
+const jpeg = () => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'foto.jpg', { type: 'image/jpeg' });
+
+describe('adicionar foto', () => {
+  it('converte o arquivo em bytes e repassa versão e tipo ao serviço', async () => {
+    const state = await addVehiclePhoto(empty, photoForm(jpeg()));
+    expect(state.message).toBe('Foto adicionada.');
+    const [calledId, version, body, mime] = stub.addPhoto.mock.calls[0];
+    expect([calledId, version, mime]).toEqual([id, 4, 'image/jpeg']);
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect(Array.from(body as Uint8Array)).toEqual([0xff, 0xd8, 0xff, 0xe0]);
+  });
+
+  it('revalida a lista e a página, porque a foto incrementa a versão', async () => {
+    await addVehiclePhoto(empty, photoForm(jpeg()));
+    expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
+    expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('traduz arquivo que não é imagem de verdade', async () => {
+    stub.addPhoto.mockRejectedValueOnce(new Error('Formato de foto inválido.'));
+    const state = await addVehiclePhoto(empty, photoForm(jpeg()));
+    expect(state.message).toBe('Formato de foto inválido.');
+    expect(stub.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 'texto', new File([], 'vazio.jpg', { type: 'image/jpeg' })])('recusa envio sem arquivo utilizável', async (file) => {
+    const state = await addVehiclePhoto(empty, photoForm(file));
+    expect(state.message).toBe('Escolha uma foto para enviar.');
+    expect(stub.addPhoto).not.toHaveBeenCalled();
+  });
+
+  it('pede recarga quando a versão está velha', async () => {
+    stub.addPhoto.mockRejectedValueOnce(new stub.StaleVehicleError());
+    expect((await addVehiclePhoto(empty, photoForm(jpeg()))).message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
+  });
+
+  it('não vaza erro inesperado', async () => {
+    stub.addPhoto.mockRejectedValueOnce(new Error('R2 secret abc'));
+    expect((await addVehiclePhoto(empty, photoForm(jpeg()))).message).toBe('Não foi possível salvar agora. Tente de novo.');
+  });
+});
+
+describe('remover foto', () => {
+  const removeForm = () => formDataOf({ id, version: '5', imageId });
+
+  it('repassa veículo, foto e versão e revalida', async () => {
+    const state = await removeVehiclePhoto(empty, removeForm());
+    expect(state.message).toBe('Foto removida.');
+    expect(stub.removePhoto).toHaveBeenCalledWith(id, imageId, 5);
+    expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('impede remover a última foto de anúncio publicado', async () => {
+    stub.removePhoto.mockRejectedValueOnce(new Error('O anúncio precisa manter uma foto.'));
+    expect((await removeVehiclePhoto(empty, removeForm())).message).toBe('O anúncio precisa manter uma foto.');
+    expect(stub.revalidatePath).not.toHaveBeenCalled();
   });
 });

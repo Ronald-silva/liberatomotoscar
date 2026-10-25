@@ -13,6 +13,7 @@ const KNOWN = new Map<string, string>([
   ['Nenhum dado para atualizar.', 'Nenhum dado para atualizar.'],
   ['Formato de foto inválido.', 'Formato de foto inválido.'],
   ['Foto vazia ou maior que 10 MB.', 'Foto vazia ou maior que 10 MB.'],
+  ['Escolha uma foto para enviar.', 'Escolha uma foto para enviar.'],
   ['Informe o preço em reais, por exemplo 18.500,00.', 'Informe o preço em reais, por exemplo 18.500,00.'],
   ['Ano e quilometragem devem ser números inteiros.', 'Ano e quilometragem devem ser números inteiros.'],
 ]);

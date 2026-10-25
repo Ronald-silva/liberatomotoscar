@@ -63,7 +63,7 @@
 .vehicleList { display: grid; gap: var(--admin-space-2); margin: var(--admin-space-3) 0 0; padding: 0 0 6rem; list-style: none; }
 .vehicleCard {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 0.25rem var(--admin-space-2);
   min-height: 44px;
   padding: var(--admin-space-2);
@@ -112,3 +112,15 @@
   .panel { padding: var(--admin-space-3); }
   .listScreen { padding-top: var(--admin-space-2); }
 }
+
+.visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.uploadLabel { position: relative; }
+.uploadLabel:focus-within { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
+.buttonDisabled { opacity: 0.6; pointer-events: none; }
+.gallery { display: grid; gap: var(--admin-space-2); margin: var(--admin-space-2) 0; padding: 0; list-style: none; }
+.galleryItem { display: grid; gap: var(--admin-space-1); padding: var(--admin-space-1); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
+.galleryItem .badge { justify-self: start; }
+.galleryImage { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--admin-radius); }
+.cover { width: 72px; height: 56px; object-fit: cover; border-radius: 6px; grid-row: span 3; }
+.coverEmpty { display: grid; place-items: center; width: 72px; height: 56px; border-radius: 6px; border: 1px dashed var(--admin-line); color: var(--admin-muted); font-size: 0.75rem; grid-row: span 3; }
+.subheading { margin: var(--admin-space-4) 0 0; font-size: 1.25rem; }
