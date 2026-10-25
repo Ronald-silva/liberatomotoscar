@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { addPhoto, changeVehicleStatus, removePhoto, updateDetails, updatePrice } from '@/server/vehicles/service';
+import { redirect } from 'next/navigation';
+import { addPhoto, createDraft, changeVehicleStatus, removePhoto, updateDetails, updatePrice } from '@/server/vehicles/service';
 import { toFormMessage } from './feedback';
 
 export type FormState = { message: string | null };
@@ -83,4 +84,19 @@ export async function changeStatus(_state: FormState, formData: FormData): Promi
   // O serviço valida a transição e exige confirmAvailability === true para publicar.
   const confirmAvailability = text(formData, 'confirmAvailability') === 'true';
   return run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
+}
+
+const VEHICLE_TYPES = ['motorcycle', 'car'] as const;
+
+export async function createVehicle(_state: FormState, formData: FormData): Promise<FormState> {
+  const type = VEHICLE_TYPES.find((known) => known === text(formData, 'type'));
+  if (!type) return { message: toFormMessage(new Error('Escolha moto ou carro.')) };
+  let id: string;
+  try {
+    id = (await createDraft({ type })).id;
+    revalidatePath('/admin');
+  } catch (error) {
+    return { message: toFormMessage(error) };
+  }
+  redirect(`/admin/veiculos/${id}`); // fora do try: redirect lança e o catch o engoliria
 }

@@ -23,7 +23,7 @@ describe('mensagem de formulário', () => {
     'Informe o preço em reais, por exemplo 18.500,00.', 'Ano e quilometragem devem ser números inteiros.',
     'O ano deve estar entre 1900 e 2100.', 'A quilometragem informada é grande demais.',
     'Marca, modelo, versão e cor aceitam até 160 caracteres.', 'A descrição aceita até 5000 caracteres.',
-    'O preço máximo é R$ 21.474.836,47.',
+    'O preço máximo é R$ 21.474.836,47.', 'Escolha moto ou carro.',
   ])(
     'repassa a mensagem de validação "%s"', (message) => {
       expect(toFormMessage(new Error(message))).toBe(message);

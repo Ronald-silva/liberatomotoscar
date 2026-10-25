@@ -8,16 +8,18 @@ const stub = vi.hoisted(() => ({
   updateDetails: vi.fn(async (id: string, version: number, input: unknown): Promise<object> => ({ id, version, input })),
   updatePrice: vi.fn(async (id: string, version: number, cents: number): Promise<object> => ({ id, version, cents })),
   revalidatePath: vi.fn(),
+  createDraft: vi.fn<(...args: unknown[]) => Promise<{ id: string }>>(async () => ({ id: '' })),
+  redirect: vi.fn((url: string): never => { throw Object.assign(new Error('NEXT_REDIRECT'), { redirectUrl: url }); }),
   addPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   removePhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   changeVehicleStatus: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
 }));
 
-vi.mock('@/server/vehicles/service', () => ({ updateDetails: stub.updateDetails, updatePrice: stub.updatePrice, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus }));
+vi.mock('@/server/vehicles/service', () => ({ createDraft: stub.createDraft, updateDetails: stub.updateDetails, updatePrice: stub.updatePrice, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus }));
 vi.mock('next/cache', () => ({ revalidatePath: stub.revalidatePath }));
-vi.mock('next/navigation', () => ({ redirect: vi.fn(), notFound: vi.fn() }));
+vi.mock('next/navigation', () => ({ redirect: stub.redirect, notFound: vi.fn() }));
 
-import { addVehiclePhoto, changeStatus, removeVehiclePhoto, saveDetails, savePrice } from './actions';
+import { addVehiclePhoto, changeStatus, createVehicle, removeVehiclePhoto, saveDetails, savePrice } from './actions';
 
 const id = '6f1c1c1e-7c1e-4b59-9a53-2d2f0c1d3a11';
 const formDataOf = (fields: Record<string, string>) => {
@@ -27,7 +29,7 @@ const formDataOf = (fields: Record<string, string>) => {
 };
 const empty = { message: null };
 
-beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({}); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({}); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); stub.createDraft.mockResolvedValue({ id }); });
 
 describe('salvar dados', () => {
   it('pede recarga quando a versão enviada está velha', async () => {
@@ -226,5 +228,37 @@ describe('mudar estado', () => {
   it('não vaza erro inesperado', async () => {
     stub.changeVehicleStatus.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
     expect((await changeStatus(empty, statusForm('archived'))).message).toBe('Não foi possível salvar agora. Tente de novo.');
+  });
+});
+
+describe('cadastrar veículo', () => {
+  it('cria rascunho de moto e leva para a edição', async () => {
+    await expect(createVehicle(empty, formDataOf({ type: 'motorcycle' }))).rejects.toMatchObject({ redirectUrl: `/admin/veiculos/${id}` });
+    expect(stub.createDraft).toHaveBeenCalledWith({ type: 'motorcycle' });
+    expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
+  });
+
+  it('cria rascunho de carro', async () => {
+    await expect(createVehicle(empty, formDataOf({ type: 'car' }))).rejects.toMatchObject({ redirectUrl: `/admin/veiculos/${id}` });
+    expect(stub.createDraft).toHaveBeenCalledWith({ type: 'car' });
+  });
+
+  it('recusa tipo de veículo desconhecido sem chamar o serviço', async () => {
+    const state = await createVehicle(empty, formDataOf({ type: 'caminhao' }));
+    expect(state.message).toBe('Escolha moto ou carro.');
+    expect(stub.createDraft).not.toHaveBeenCalled();
+    expect(stub.redirect).not.toHaveBeenCalled();
+  });
+
+  it('recusa envio sem tipo', async () => {
+    expect((await createVehicle(empty, new FormData())).message).toBe('Escolha moto ou carro.');
+    expect(stub.createDraft).not.toHaveBeenCalled();
+  });
+
+  it('não vaza falha do serviço e não redireciona', async () => {
+    stub.createDraft.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    const state = await createVehicle(empty, formDataOf({ type: 'car' }));
+    expect(state.message).toBe('Não foi possível salvar agora. Tente de novo.');
+    expect(stub.redirect).not.toHaveBeenCalled();
   });
 });

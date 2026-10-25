@@ -21,6 +21,7 @@ const KNOWN = new Map<string, string>([
   ['Marca, modelo, versão e cor aceitam até 160 caracteres.', 'Marca, modelo, versão e cor aceitam até 160 caracteres.'],
   ['A descrição aceita até 5000 caracteres.', 'A descrição aceita até 5000 caracteres.'],
   ['O preço máximo é R$ 21.474.836,47.', 'O preço máximo é R$ 21.474.836,47.'],
+  ['Escolha moto ou carro.', 'Escolha moto ou carro.'],
 ]);
 
 export function toFormMessage(error: unknown): string {
