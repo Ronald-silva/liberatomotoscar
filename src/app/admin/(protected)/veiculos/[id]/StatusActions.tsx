@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import styles from '../../../admin.module.css';
 import { changeStatus, type FormState } from '../actions';
+import { FormNotice } from '../FormNotice';
 import { SubmitButton } from '../SubmitButton';
 import { actionLabels, statusLabels, type VehicleStatus } from '../status';
 
@@ -14,13 +15,17 @@ export function StatusActions({ vehicleId, version, status, targets }: {
 }) {
   const [state, action] = useActionState(changeStatus, initial);
   const [confirming, setConfirming] = useState(false);
+  const [seen, setSeen] = useState(state);
+  // O formulário de confirmação fica montado durante o envio (para o botão mostrar "Publicando...")
+  // e só fecha quando chega o resultado da action.
+  if (seen !== state) { setSeen(state); setConfirming(false); }
   const hidden = <>
     <input type="hidden" name="id" value={vehicleId} />
     <input type="hidden" name="version" value={version} />
   </>;
   return <section aria-labelledby="estado-title">
     <h2 id="estado-title" className={styles.subheading}>Situação: {statusLabels[status]}</h2>
-    {confirming ? <form className={styles.form} action={(data) => { setConfirming(false); action(data); }}>
+    {confirming ? <form className={styles.form} action={action}>
       {hidden}
       <input type="hidden" name="status" value="published" />
       <input type="hidden" name="confirmAvailability" value="true" />
@@ -31,8 +36,8 @@ export function StatusActions({ vehicleId, version, status, targets }: {
       {hidden}
       {targets.map((target) => target === 'published'
         ? <button key={target} className={styles.button} type="button" onClick={() => setConfirming(true)}>{actionLabels[target]}</button>
-        : <button key={target} className={`${styles.button} ${styles.buttonSecondary}`} type="submit" name="status" value={target}>{actionLabels[target]}</button>)}
+        : <SubmitButton key={target} secondary name="status" value={target} label={actionLabels[target]} pendingLabel="Atualizando..." />)}
     </form>}
-    {state.message ? <p className={styles.notice} role="status">{state.message}</p> : null}
+    <FormNotice message={state.message} vehicleId={vehicleId} />
   </section>;
 }

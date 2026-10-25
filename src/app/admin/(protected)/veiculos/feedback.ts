@@ -24,6 +24,9 @@ const KNOWN = new Map<string, string>([
   ['Escolha moto ou carro.', 'Escolha moto ou carro.'],
 ]);
 
+export const STALE_MESSAGE = 'Este anúncio foi alterado. Recarregue antes de salvar.';
+export const isStaleMessage = (message: string) => message === STALE_MESSAGE;
+
 export function toFormMessage(error: unknown): string {
   return KNOWN.get(error instanceof Error ? error.message : '') ?? GENERIC;
 }

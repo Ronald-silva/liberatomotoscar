@@ -3,11 +3,13 @@
 import { startTransition, useActionState, useRef, useState } from 'react';
 import styles from '../../admin.module.css';
 import { addVehiclePhoto, type FormState } from './actions';
+import { FormNotice } from './FormNotice';
 
 const MAX_SIDE = 1920;
 const QUALITY = 0.82;
-// Limite de corpo da Vercel é 4,5 MB; a margem cobre o restante do formulário.
-const MAX_BYTES = 4 * 1024 * 1024;
+// O corpo leva a foto MAIS os campos do formulário e o limite do servidor é 4 MB (next.config.ts).
+// 3,5 MB deixa folga para esses bytes extras: a checagem do cliente sempre dispara antes do servidor.
+const MAX_BYTES = 3.5 * 1024 * 1024;
 const TOO_BIG = 'A foto ficou grande demais para enviar. Tente uma foto menor ou com menos detalhes.';
 const initial: FormState = { message: null };
 
@@ -77,6 +79,6 @@ export function PhotoUpload({ vehicleId, version }: { vehicleId: string; version
       {preparing ? 'Preparando a foto...' : sending ? 'Enviando a foto...' : 'Tirar ou escolher foto'}
       <input ref={input} className={styles.visuallyHidden} type="file" accept="image/*" capture="environment" disabled={busy} onChange={onChange} />
     </label>
-    {message ? <p className={styles.notice} role="status">{message}</p> : null}
+    <FormNotice message={message} vehicleId={vehicleId} />
   </div>;
 }

@@ -4,9 +4,10 @@ import Image from 'next/image';
 import { useActionState, useState } from 'react';
 import styles from '../../admin.module.css';
 import { removeVehiclePhoto, type FormState } from './actions';
+import { FormNotice } from './FormNotice';
 import { SubmitButton } from './SubmitButton';
 
-export type GalleryPhoto = { id: string; url: string; isCover: boolean };
+export type GalleryPhoto = { id: string; url: string | null; isCover: boolean };
 const initial: FormState = { message: null };
 
 function RemoveForm({ vehicleId, version, imageId }: { vehicleId: string; version: number; imageId: string }) {
@@ -21,7 +22,7 @@ function RemoveForm({ vehicleId, version, imageId }: { vehicleId: string; versio
       <SubmitButton label="Sim, remover" pendingLabel="Removendo..." />
       <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" onClick={() => setConfirming(false)}>Cancelar</button>
     </form> : <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" onClick={() => setConfirming(true)}>Remover</button>}
-    {state.message ? <p className={styles.notice} role="status">{state.message}</p> : null}
+    <FormNotice message={state.message} vehicleId={vehicleId} />
   </div>;
 }
 
@@ -30,7 +31,9 @@ export function PhotoGallery({ vehicleId, version, photos }: { vehicleId: string
   return <ul className={styles.gallery}>
     {photos.map((photo, index) => <li key={photo.id} className={styles.galleryItem}>
       {/* Fotos privadas usam URL assinada: sem otimizador, que exigiria host configurado. */}
-      <Image className={styles.galleryImage} src={photo.url} alt={`Foto ${index + 1} do veículo`} width={640} height={480} sizes="(max-width: 640px) 100vw, 640px" unoptimized />
+      {photo.url
+        ? <Image className={styles.galleryImage} src={photo.url} alt={`Foto ${index + 1} do veículo`} width={640} height={480} sizes="(max-width: 640px) 100vw, 640px" unoptimized />
+        : <span className={styles.galleryEmpty} role="img" aria-label={`Foto ${index + 1} indisponível no momento`}>Foto indisponível</span>}
       {photo.isCover ? <span className={styles.badge}>Capa</span> : null}
       <RemoveForm vehicleId={vehicleId} version={version} imageId={photo.id} />
     </li>)}

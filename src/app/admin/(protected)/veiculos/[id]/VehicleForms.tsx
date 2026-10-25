@@ -3,6 +3,7 @@
 import { useActionState, useState, type ChangeEvent } from 'react';
 import styles from '../../../admin.module.css';
 import { saveDetails, savePrice, type FormState } from '../actions';
+import { FormNotice } from '../FormNotice';
 import { SubmitButton } from '../SubmitButton';
 
 type Vehicle = {
@@ -13,8 +14,8 @@ type Vehicle = {
 const initial: FormState = { message: null };
 const priceText = (cents: number | null) => cents ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(cents / 100) : '';
 
-function Message({ state }: { state: FormState }) {
-  return state.message ? <p className={styles.notice} role="status">{state.message}</p> : null;
+function Message({ state, vehicleId }: { state: FormState; vehicleId: string }) {
+  return <FormNotice message={state.message} vehicleId={vehicleId} />;
 }
 
 // Campos controlados: o React 19 limpa campos não controlados depois de toda action, até com erro.
@@ -46,13 +47,13 @@ export function VehicleForms({ vehicle }: { vehicle: Vehicle }) {
       <label className={styles.field}>Cor<input {...bind('color')} maxLength={160} /></label>
       <label className={styles.field}>Descrição<textarea {...bind('description')} maxLength={5000} rows={5} /></label>
       <SubmitButton label="Salvar dados" />
-      <Message state={details} />
+      <Message state={details} vehicleId={vehicle.id} />
     </form>
     <form className={styles.form} action={priceAction}>
       {hidden}
       <label className={styles.field}>Preço (R$)<input className={styles.input} name="price" value={priceValue} onChange={(event) => setPriceValue(event.target.value)} inputMode="decimal" placeholder="18.500,00" autoComplete="off" /></label>
       <SubmitButton label="Salvar preço" />
-      <Message state={price} />
+      <Message state={price} vehicleId={vehicle.id} />
     </form>
   </>;
 }

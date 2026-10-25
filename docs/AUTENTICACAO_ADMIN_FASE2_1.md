@@ -11,6 +11,10 @@ O login do painel usa **Google OAuth pelo Auth.js 5** e o adapter Drizzle já li
 5. Depois de conferir no banco e com o proprietário que essa conta é a correta, obter autorização explícita para conceder o acesso. Definir `NEON_DEVELOPMENT_BRANCH_ID=br-dry-star-b6ma37vq` no ambiente e executar `npm run auth:grant-development -- --execute-development br-dry-star-b6ma37vq`. O script usa `DATABASE_URL_DIRECT`, verifica o ID da branch no PostgreSQL, exige um único usuário Auth.js com a conta Google e o e-mail permitido e só então atualiza `admin_grants`. **Este comando não foi executado nesta fase.**
 6. Sair e entrar novamente. Confirmar `/admin`, `/api/admin/health`, logout e negação de um usuário sem concessão. Esta prova com uma conta real ainda está pendente.
 
+## Aviso: `npm run db:migrate`
+
+**Antes de rodar `npm run db:migrate`, confira que `DATABASE_URL_DIRECT` aponta para a branch `development` do Neon (ID `br-dry-star-b6ma37vq`).** A branch `production` não pode ser alterada. Este é o único comando que escreve no banco sem verificar a branch: o `drizzle.config.ts` entrega `DATABASE_URL_DIRECT` direto ao drizzle-kit, enquanto os três scripts de escrita conferem o `neon.branch_id` da própria conexão. Na dúvida, não rode o comando. Não cole valores de conexão em documentação, terminal compartilhado ou mensagens.
+
 ## Limites de acesso
 
 - `callbacks.signIn` aceita apenas o provedor Google com `email_verified=true` e e-mail igual a `ADMIN_GOOGLE_EMAIL`. Uma conta diferente é rejeitada antes de receber acesso ao painel.

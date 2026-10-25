@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { listAdminVehiclesWithCover } from '@/server/vehicles/service';
+import { listAdminVehicles, listAdminVehiclesWithCover } from '@/server/vehicles/service';
 import { logoutAdmin } from '../actions';
 import styles from '../admin.module.css';
 import { badgeClassName, statusLabels } from './veiculos/status';
@@ -11,7 +11,9 @@ export const metadata: Metadata = { title: 'Painel', robots: { index: false, fol
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default async function AdminPage() {
-  const vehicles = await listAdminVehiclesWithCover();
+  // Se o armazenamento de fotos falhar (R2 ausente ou errado), o estoque aparece sem capas em vez de derrubar o painel.
+  const vehicles = await listAdminVehiclesWithCover()
+    .catch(() => listAdminVehicles().then((rows) => rows.map((row) => ({ ...row, coverUrl: null as string | null }))));
   const create = <Link className={styles.button} href="/admin/veiculos/novo">Cadastrar veículo</Link>;
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="admin-title">

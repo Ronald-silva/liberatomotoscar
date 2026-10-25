@@ -20,8 +20,9 @@ export default async function EditVehiclePage({ params }: { params: Promise<{ id
   });
   if (!found) notFound();
   const { vehicle, images } = found;
+  // Assinatura com erro (ou R2 mal configurado) não derruba a tela: a foto vira espaço vazio, como no estoque.
   const photos = await Promise.all(images.map(async (image) => ({
-    id: image.id, isCover: image.isCover, url: await getAdminPhotoReadUrl(vehicle.id, image.id),
+    id: image.id, isCover: image.isCover, url: await getAdminPhotoReadUrl(vehicle.id, image.id).catch(() => null),
   })));
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="editar-title">
