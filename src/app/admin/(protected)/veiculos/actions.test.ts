@@ -63,6 +63,33 @@ describe('salvar dados', () => {
   });
 });
 
+describe('limites validados antes do serviço', () => {
+  it.each([
+    [{ year: '1899' }, 'O ano deve estar entre 1900 e 2100.'],
+    [{ year: '2101' }, 'O ano deve estar entre 1900 e 2100.'],
+    [{ mileageKm: '2.147.483.648' }, 'A quilometragem informada é grande demais.'],
+    [{ brand: 'x'.repeat(161) }, 'Marca, modelo, versão e cor aceitam até 160 caracteres.'],
+    [{ description: 'x'.repeat(5001) }, 'A descrição aceita até 5000 caracteres.'],
+  ])('recusa %j com mensagem própria', async (fields, message) => {
+    const state = await saveDetails(empty, formDataOf({ id, version: '1', ...fields }));
+    expect(state.message).toBe(message);
+    expect(stub.updateDetails).not.toHaveBeenCalled();
+  });
+
+  it('aceita quilometragem com ponto de milhar', async () => {
+    await saveDetails(empty, formDataOf({ id, version: '1', mileageKm: '15.000' }));
+    expect(stub.updateDetails).toHaveBeenCalledWith(id, 1, expect.objectContaining({ mileageKm: 15000 }));
+  });
+
+  it('recusa preço acima do máximo e aceita o máximo', async () => {
+    const over = await savePrice(empty, formDataOf({ id, version: '1', price: '21.474.836,48' }));
+    expect(over.message).toBe('O preço máximo é R$ 21.474.836,47.');
+    expect(stub.updatePrice).not.toHaveBeenCalled();
+    await savePrice(empty, formDataOf({ id, version: '1', price: '21.474.836,47' }));
+    expect(stub.updatePrice).toHaveBeenCalledWith(id, 1, 2147483647);
+  });
+});
+
 describe('salvar preço', () => {
   it.each([['18500', 1850000], ['18.500', 1850000], ['18500,00', 1850000], ['18.500,00', 1850000], ['R$ 18.500,5', 1850050], ['0', 0]])(
     'converte "%s" em reais para centavos', async (typed, cents) => {

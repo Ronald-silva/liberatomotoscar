@@ -19,7 +19,12 @@ describe('mensagem de formulário', () => {
     'repassa a mensagem de foto "%s"', (message) => {
       expect(toFormMessage(new Error(message))).toBe(message);
     });
-  it.each(['Informe o preço em reais, por exemplo 18.500,00.', 'Ano e quilometragem devem ser números inteiros.'])(
+  it.each([
+    'Informe o preço em reais, por exemplo 18.500,00.', 'Ano e quilometragem devem ser números inteiros.',
+    'O ano deve estar entre 1900 e 2100.', 'A quilometragem informada é grande demais.',
+    'Marca, modelo, versão e cor aceitam até 160 caracteres.', 'A descrição aceita até 5000 caracteres.',
+    'O preço máximo é R$ 21.474.836,47.',
+  ])(
     'repassa a mensagem de validação "%s"', (message) => {
       expect(toFormMessage(new Error(message))).toBe(message);
     });

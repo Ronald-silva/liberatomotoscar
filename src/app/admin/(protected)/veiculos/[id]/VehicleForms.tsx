@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState, type ChangeEvent } from 'react';
 import styles from '../../../admin.module.css';
 import { saveDetails, savePrice, type FormState } from '../actions';
 import { SubmitButton } from '../SubmitButton';
@@ -17,29 +17,40 @@ function Message({ state }: { state: FormState }) {
   return state.message ? <p className={styles.notice} role="status">{state.message}</p> : null;
 }
 
+// Campos controlados: o React 19 limpa campos não controlados depois de toda action, até com erro.
+// Sem `key` por versão, salvar um formulário não apaga o que foi digitado no outro.
 export function VehicleForms({ vehicle }: { vehicle: Vehicle }) {
   const [details, detailsAction] = useActionState(saveDetails, initial);
   const [price, priceAction] = useActionState(savePrice, initial);
+  const [fields, setFields] = useState({
+    brand: vehicle.brand ?? '', model: vehicle.model ?? '', versionName: vehicle.version ?? '', year: String(vehicle.year ?? ''),
+    mileageKm: String(vehicle.mileageKm ?? ''), color: vehicle.color ?? '', description: vehicle.description ?? '',
+  });
+  const [priceValue, setPriceValue] = useState(priceText(vehicle.priceCents));
+  const bind = (name: keyof typeof fields) => ({
+    name, value: fields[name], autoComplete: 'off', className: styles.input,
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFields((current) => ({ ...current, [name]: event.target.value })),
+  });
   const hidden = <>
     <input type="hidden" name="id" value={vehicle.id} />
     <input type="hidden" name="version" value={vehicle.versionNumber} />
   </>;
   return <>
-    <form className={styles.form} action={detailsAction} key={`d${vehicle.versionNumber}`}>
+    <form className={styles.form} action={detailsAction}>
       {hidden}
-      <label className={styles.field}>Marca<input className={styles.input} name="brand" defaultValue={vehicle.brand ?? ''} maxLength={160} autoComplete="off" /></label>
-      <label className={styles.field}>Modelo<input className={styles.input} name="model" defaultValue={vehicle.model ?? ''} maxLength={160} autoComplete="off" /></label>
-      <label className={styles.field}>Versão<input className={styles.input} name="versionName" defaultValue={vehicle.version ?? ''} maxLength={160} autoComplete="off" /></label>
-      <label className={styles.field}>Ano<input className={styles.input} name="year" defaultValue={vehicle.year ?? ''} inputMode="numeric" maxLength={4} autoComplete="off" /></label>
-      <label className={styles.field}>Quilometragem (km)<input className={styles.input} name="mileageKm" defaultValue={vehicle.mileageKm ?? ''} inputMode="numeric" autoComplete="off" /></label>
-      <label className={styles.field}>Cor<input className={styles.input} name="color" defaultValue={vehicle.color ?? ''} maxLength={160} autoComplete="off" /></label>
-      <label className={styles.field}>Descrição<textarea className={styles.input} name="description" defaultValue={vehicle.description ?? ''} maxLength={5000} rows={5} /></label>
+      <label className={styles.field}>Marca<input {...bind('brand')} maxLength={160} /></label>
+      <label className={styles.field}>Modelo<input {...bind('model')} maxLength={160} /></label>
+      <label className={styles.field}>Versão<input {...bind('versionName')} maxLength={160} /></label>
+      <label className={styles.field}>Ano<input {...bind('year')} inputMode="numeric" maxLength={4} /></label>
+      <label className={styles.field}>Quilometragem (km)<input {...bind('mileageKm')} inputMode="decimal" /></label>
+      <label className={styles.field}>Cor<input {...bind('color')} maxLength={160} /></label>
+      <label className={styles.field}>Descrição<textarea {...bind('description')} maxLength={5000} rows={5} /></label>
       <SubmitButton label="Salvar dados" />
       <Message state={details} />
     </form>
-    <form className={styles.form} action={priceAction} key={`p${vehicle.versionNumber}`}>
+    <form className={styles.form} action={priceAction}>
       {hidden}
-      <label className={styles.field}>Preço (R$)<input className={styles.input} name="price" defaultValue={priceText(vehicle.priceCents)} inputMode="numeric" placeholder="18.500,00" autoComplete="off" /></label>
+      <label className={styles.field}>Preço (R$)<input className={styles.input} name="price" value={priceValue} onChange={(event) => setPriceValue(event.target.value)} inputMode="decimal" placeholder="18.500,00" autoComplete="off" /></label>
       <SubmitButton label="Salvar preço" />
       <Message state={price} />
     </form>
