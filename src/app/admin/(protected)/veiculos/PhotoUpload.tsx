@@ -6,6 +6,9 @@ import { addVehiclePhoto, type FormState } from './actions';
 
 const MAX_SIDE = 1920;
 const QUALITY = 0.82;
+// Limite de corpo da Vercel é 4,5 MB; a margem cobre o restante do formulário.
+const MAX_BYTES = 4 * 1024 * 1024;
+const TOO_BIG = 'A foto ficou grande demais para enviar. Tente uma foto menor ou com menos detalhes.';
 const initial: FormState = { message: null };
 
 async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
@@ -34,6 +37,7 @@ async function shrink(file: File): Promise<File> {
     context.drawImage(image.source, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', QUALITY));
     if (!blob) throw new Error('toBlob');
+    if (blob.size > MAX_BYTES) throw new Error('grande');
     return new File([blob], 'foto.jpg', { type: 'image/jpeg' });
   } finally {
     image.release();
@@ -59,8 +63,8 @@ export function PhotoUpload({ vehicleId, version }: { vehicleId: string; version
       data.set('version', String(version));
       data.set('photo', photo);
       startTransition(() => action(data));
-    } catch {
-      setLocalError('Não foi possível preparar esta foto. Tente outra.');
+    } catch (error) {
+      setLocalError(error instanceof Error && error.message === 'grande' ? TOO_BIG : 'Não foi possível preparar esta foto. Tente outra.');
     } finally {
       setPreparing(false);
       if (input.current) input.current.value = '';

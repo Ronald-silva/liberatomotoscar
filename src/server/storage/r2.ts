@@ -5,6 +5,8 @@ import { getR2Config } from '@/server/env';
 
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 export type PhotoMime = 'image/jpeg' | 'image/png' | 'image/webp';
+// 15 min: a página fica aberta numa conversa e as fotos carregam sob demanda; 60 s quebrava a galeria. A URL é credencial ao portador.
+export const SIGNED_READ_SECONDS = 900;
 export type StoredPhoto = { key: string; mimeType: PhotoMime; sizeBytes: number };
 export interface PhotoStorage {
   put(vehicleId: string, body: Uint8Array, mimeType: string): Promise<StoredPhoto>;
@@ -42,7 +44,7 @@ export function createR2Storage(): PhotoStorage {
     },
     async signedReadUrl(key) {
       if (!/^drafts\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(key)) throw new Error('Chave de foto inválida.');
-      return getSignedUrl(client, new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { expiresIn: 60 });
+      return getSignedUrl(client, new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { expiresIn: SIGNED_READ_SECONDS });
     },
   };
 }

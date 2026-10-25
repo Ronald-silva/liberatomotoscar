@@ -69,7 +69,7 @@ export async function listAdminVehicles() {
   return getDb().select().from(vehicles).orderBy(desc(vehicles.updatedAt));
 }
 
-// Estoque com a foto de capa, em uma única consulta (sem N+1). R2 vira URL assinada de 60 s; legacy_public já é caminho público.
+// Estoque com a foto de capa, em uma única consulta (sem N+1). R2 vira URL assinada de curta duração; legacy_public já é caminho público.
 export async function listAdminVehiclesWithCover(storage?: PhotoStorage) {
   await requireAdmin();
   const rows = await getDb().select({ vehicle: vehicles, cover: { storageKey: vehicleImages.storageKey, storageProvider: vehicleImages.storageProvider } })
