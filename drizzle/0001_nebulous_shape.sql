@@ -1,0 +1,1 @@
+ALTER TABLE "vehicles" ADD COLUMN "source_data" jsonb;

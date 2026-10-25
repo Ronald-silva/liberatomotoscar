@@ -1,5 +1,11 @@
 # Liberato Motos Car — prévia comercial
 
+> Fundação técnica do futuro painel: [arquitetura, configuração e operação](docs/FUNDACAO_TECNICA_FASE1.md). O site público ainda usa o catálogo estático; não há login habilitado nem migração remota.
+
+> Conexão inicial com Neon: [verificações e pendências](docs/INTEGRACAO_NEON_INICIAL.md). Use `npm run db:check` para repetir as consultas de leitura de conexão e branch.
+
+> Painel administrativo: [configuração do login e provisionamento do proprietário](docs/AUTENTICACAO_ADMIN_FASE2_1.md). O acesso permanece fechado até configurar Google OAuth e conceder a permissão explicitamente.
+
 Prévia comercial para a Liberato Motos Car da Itaoca, Fortaleza. A vitrine apresenta sete veículos com fotos e dados de anúncio fornecidos para este projeto. Preço, quilometragem, disponibilidade, configuração e condições devem ser conferidos com a loja antes de uma publicação oficial ou negociação. A prévia permanece com `noindex`.
 
 ## Rodar localmente

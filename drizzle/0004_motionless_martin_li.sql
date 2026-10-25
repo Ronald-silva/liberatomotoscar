@@ -1,0 +1,3 @@
+ALTER TABLE "vehicle_audit" ADD CONSTRAINT "audit_actor_valid" CHECK (("vehicle_audit"."operation" = 'legacy_imported' AND "vehicle_audit"."actor_user_id" IS NULL) OR ("vehicle_audit"."operation" <> 'legacy_imported' AND "vehicle_audit"."actor_user_id" IS NOT NULL));--> statement-breakpoint
+ALTER TABLE "vehicle_images" ADD CONSTRAINT "image_storage_key_valid" CHECK (length(trim("vehicle_images"."storage_key")) > 0);--> statement-breakpoint
+ALTER TABLE "vehicle_images" ADD CONSTRAINT "image_mime_valid" CHECK ("vehicle_images"."mime_type" IN ('image/jpeg', 'image/png', 'image/webp'));

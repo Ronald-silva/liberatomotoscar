@@ -1,0 +1,4 @@
+ALTER TABLE "vehicle_images" DROP CONSTRAINT "image_dimensions_valid";--> statement-breakpoint
+ALTER TABLE "vehicles" DROP CONSTRAINT "vehicle_public_fields";--> statement-breakpoint
+ALTER TABLE "vehicle_images" ADD CONSTRAINT "image_dimensions_valid" CHECK (("vehicle_images"."width" IS NULL AND "vehicle_images"."height" IS NULL) OR ("vehicle_images"."width" IS NOT NULL AND "vehicle_images"."height" IS NOT NULL AND "vehicle_images"."width" > 0 AND "vehicle_images"."height" > 0));--> statement-breakpoint
+ALTER TABLE "vehicles" ADD CONSTRAINT "vehicle_public_fields" CHECK ("vehicles"."status" NOT IN ('published', 'reserved', 'sold') OR (coalesce(length(trim("vehicles"."brand")), 0) > 0 AND coalesce(length(trim("vehicles"."model")), 0) > 0 AND coalesce("vehicles"."price_cents", 0) > 0 AND "vehicles"."availability_confirmed_at" IS NOT NULL AND "vehicles"."published_at" IS NOT NULL));
