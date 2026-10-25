@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { listAdminVehicles } from '@/server/vehicles/service';
+import { listAdminVehiclesWithCover } from '@/server/vehicles/service';
 import { logoutAdmin } from '../actions';
 import styles from '../admin.module.css';
 
@@ -11,7 +11,7 @@ const statusLabels = { draft: 'Rascunho', published: 'Publicado', reserved: 'Res
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default async function AdminPage() {
-  const vehicles = await listAdminVehicles();
+  const vehicles = await listAdminVehiclesWithCover();
   const create = <Link className={styles.button} href="/admin/veiculos/novo">Cadastrar veículo</Link>;
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="admin-title">
@@ -29,6 +29,9 @@ export default async function AdminPage() {
         <ul className={styles.vehicleList}>
           {vehicles.map((vehicle) => <li key={vehicle.id}>
             <Link className={styles.vehicleCard} href={`/admin/veiculos/${vehicle.id}`}>
+              {vehicle.coverUrl
+                ? <Image className={styles.cover} src={vehicle.coverUrl} alt="" width={144} height={112} sizes="72px" unoptimized={!vehicle.coverUrl.startsWith('/')} />
+                : <span className={styles.coverEmpty} aria-hidden="true">Sem foto</span>}
               <span className={styles.vehicleTitle}>{[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'Sem título'}</span>
               <span className={`${styles.badge} ${styles[`badge_${vehicle.status}`]}`}>{statusLabels[vehicle.status]}</span>
               <span className={styles.vehicleMeta}>{vehicle.year ?? 'Ano não informado'}</span>

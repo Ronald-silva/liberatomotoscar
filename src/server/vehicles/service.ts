@@ -69,6 +69,23 @@ export async function listAdminVehicles() {
   return getDb().select().from(vehicles).orderBy(desc(vehicles.updatedAt));
 }
 
+// Estoque com a foto de capa, em uma única consulta (sem N+1). R2 vira URL assinada de 60 s; legacy_public já é caminho público.
+export async function listAdminVehiclesWithCover(storage?: PhotoStorage) {
+  await requireAdmin();
+  const rows = await getDb().select({ vehicle: vehicles, cover: { storageKey: vehicleImages.storageKey, storageProvider: vehicleImages.storageProvider } })
+    .from(vehicles)
+    .leftJoin(vehicleImages, and(eq(vehicleImages.vehicleId, vehicles.id), eq(vehicleImages.isCover, true)))
+    .orderBy(desc(vehicles.updatedAt));
+  const needsSigning = rows.some(({ cover }) => cover?.storageProvider === 'r2');
+  const readUrl = needsSigning ? (storage ?? createR2Storage()).signedReadUrl : undefined;
+  return Promise.all(rows.map(async ({ vehicle, cover }) => {
+    let coverUrl: string | null = null;
+    if (cover?.storageProvider === 'legacy_public') coverUrl = cover.storageKey;
+    else if (cover && readUrl) coverUrl = await readUrl(cover.storageKey).catch(() => null);
+    return { ...vehicle, coverUrl };
+  }));
+}
+
 const publicStatuses: Status[] = ['published', 'reserved'];
 function publicVehicle(vehicle: Vehicle) {
   const { id, slug, type, brand, model, version, year, mileageKm, color, priceCents, description, status, publishedAt } = vehicle;
