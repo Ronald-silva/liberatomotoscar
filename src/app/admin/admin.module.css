@@ -1,0 +1,60 @@
+.screen {
+  --admin-bg: #0a0d12;
+  --admin-surface: #171c24;
+  --admin-ink: #f7f7f4;
+  --admin-muted: #c7cbd2;
+  --admin-line: #4d535d;
+  --admin-accent: #ba1d28;
+  --admin-space-1: 0.5rem;
+  --admin-space-2: 1rem;
+  --admin-space-3: 1.5rem;
+  --admin-space-4: 2rem;
+  --admin-space-5: 3rem;
+  --admin-radius: 16px;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--admin-space-3);
+  color: var(--admin-ink);
+  background: var(--admin-bg);
+}
+
+.panel {
+  width: min(100%, 440px);
+  padding: var(--admin-space-4);
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+
+.logo { display: block; width: 160px; height: auto; margin-bottom: var(--admin-space-4); }
+.eyebrow { margin: 0 0 var(--admin-space-1); color: var(--admin-muted); font-size: 0.875rem; }
+.heading { margin: 0; font-size: clamp(1.8rem, 7vw, 2.3rem); line-height: 1.12; }
+.description { margin: var(--admin-space-2) 0 0; color: var(--admin-muted); line-height: 1.5; }
+.notice { margin: var(--admin-space-3) 0 0; padding: var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); line-height: 1.45; }
+.form { margin-top: var(--admin-space-4); }
+.button {
+  width: 100%;
+  min-height: 52px;
+  padding: var(--admin-space-2) var(--admin-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--admin-radius);
+  color: #fff;
+  background: var(--admin-accent);
+  font: inherit;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.button:hover { filter: brightness(1.1); }
+.button:active { filter: brightness(0.95); }
+.button:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
+.button:disabled { opacity: 0.65; cursor: wait; }
+.buttonSecondary { background: transparent; border-color: var(--admin-line); }
+.small { margin: var(--admin-space-3) 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.5; }
+
+@media (max-width: 480px) {
+  .screen { align-items: flex-start; padding-top: var(--admin-space-5); }
+  .panel { padding: var(--admin-space-3); }
+}

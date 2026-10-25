@@ -1,0 +1,26 @@
+# Fase 2.1 — autenticação administrativa
+
+O login do painel usa **Google OAuth pelo Auth.js 5** e o adapter Drizzle já ligado às tabelas PostgreSQL existentes. Foi escolhido para o proprietário entrar no celular com a conta Google que já usa, sem criar senha nova nem depender de leitura frequente de e-mail. O Google é o único provedor habilitado; a aplicação não oferece cadastro público. O código não cria administradores automaticamente.
+
+## Configuração local
+
+1. No Google Cloud, criar um cliente OAuth para aplicação web e cadastrar exatamente `http://localhost:3000/api/auth/callback/google` como URI de redirecionamento para testar **no próprio computador**. O proprietário precisa usar uma conta Google com e-mail verificado. [Guia do provedor Google no Auth.js](https://authjs.dev/getting-started/providers/google). O telefone não consegue usar `localhost` do computador: para testar o OAuth no celular, será necessário um endereço HTTPS alcançável pelo aparelho e cadastrado no Google. Essa configuração não foi feita nesta etapa.
+2. Preencher **somente no servidor** o `.env` ignorado pelo Git: `AUTH_SECRET` (valor aleatório de pelo menos 32 caracteres), `AUTH_URL=http://localhost:3000`, `AUTH_TRUST_HOST=true` para o host local controlado, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` e `ADMIN_GOOGLE_EMAIL` com o endereço exato do proprietário. Nunca usar prefixo `NEXT_PUBLIC_` ou colocar valores reais em documentação.
+3. Reiniciar o servidor Next.js depois de alterar o `.env`. A página `/admin/login` informa que o acesso está em preparação enquanto a configuração estiver incompleta.
+4. Abrir `/admin/login` no celular conectado ao servidor local, entrar com a conta Google autorizada. O Auth.js pode criar o registro da conta Google no banco; **isso não concede acesso administrativo**. A página informará que a autorização ainda não foi liberada.
+5. Depois de conferir no banco e com o proprietário que essa conta é a correta, obter autorização explícita para conceder o acesso. Definir `NEON_DEVELOPMENT_BRANCH_ID=br-dry-star-b6ma37vq` no ambiente e executar `npm run auth:grant-development -- --execute-development br-dry-star-b6ma37vq`. O script usa `DATABASE_URL_DIRECT`, verifica o ID da branch no PostgreSQL, exige um único usuário Auth.js com a conta Google e o e-mail permitido e só então atualiza `admin_grants`. **Este comando não foi executado nesta fase.**
+6. Sair e entrar novamente. Confirmar `/admin`, `/api/admin/health`, logout e negação de um usuário sem concessão. Esta prova com uma conta real ainda está pendente.
+
+## Limites de acesso
+
+- `callbacks.signIn` aceita apenas o provedor Google com `email_verified=true` e e-mail igual a `ADMIN_GOOGLE_EMAIL`. Uma conta diferente é rejeitada antes de receber acesso ao painel.
+- A sessão fica em tabela PostgreSQL (`strategy: database`) por até 12 horas. O Auth.js define os cookies e a proteção CSRF; o logout remove a sessão do banco e invalida o cookie. `AUTH_SECRET` é obrigatório.
+- O layout protegido de `/admin` chama `requireAdmin()` no servidor. A função exige sessão e uma concessão ativa em `admin_grants`; a rota `/api/admin/health` e os serviços administrativos usam a mesma barreira. Futuras APIs precisam chamá-la em cada operação sensível, inclusive mutações.
+- A página e a API de autenticação ficam fora da navegação pública; a página usa `noindex`, e a rota administrativa técnica responde com `no-store`/`noindex`.
+- Inícios de login são limitados a 30 em cinco minutos por processo Next.js local, tanto na action quanto na rota Auth.js. O Google protege a verificação das credenciais da conta. Antes de usar vários processos ou publicar a aplicação, substitua o limite em memória por um limite compartilhado e revise o host/proxy confiável.
+
+## Testes e pendências
+
+Os testes unitários verificam a política de e-mail verificado e o limite de tentativas. `src/app/admin/actions.test.ts` cobre o início de login (provedor correto, recusa sem configuração, recusa após o limite) e o logout (encerramento da sessão no servidor e retorno ao login). `src/app/admin/access-denied.test.ts` cobre a negação: o layout protegido manda ao login quem não tem concessão, repassa falhas de infraestrutura em vez de escondê-las, e `/api/admin/health` responde 200, 403 e 503 conforme o caso, sempre com `no-store`/`noindex`. Esses dois arquivos rodam sem banco. Um teste de integração usa PostgreSQL isolado para confirmar negação anônima, negação sem concessão, liberação explícita e revogação, com a sessão simulada. Um teste HTTP adicional do Next.js local inseriu uma sessão descartável no mesmo PostgreSQL e confirmou: `/admin` e `/api/admin/health` negam anônimo e usuário sem concessão, permitem usuário concedido; o logout remove a sessão do banco e bloqueia novo acesso. **Esses testes não comprovam o login OAuth do Google**. Não foram criadas contas ou concessões no Neon.
+
+O fluxo completo depende das credenciais OAuth, do e-mail real do proprietário e de sua autorização para conceder o primeiro acesso. Não declarar autenticação funcional em produção antes de verificar login, sessão, expiração, logout e recuperação de acesso com essa conta real. A escolha do Google deve ser revista caso o proprietário não use uma conta Google no aparelho.
