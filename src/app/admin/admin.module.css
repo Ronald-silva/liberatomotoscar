@@ -91,6 +91,22 @@
 }
 .stickyAction > a, .empty a { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 
+.field { display: grid; gap: 0.35rem; margin-bottom: var(--admin-space-2); font-weight: 600; }
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--admin-space-1) var(--admin-space-2);
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+}
+.input:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
+.listPanel > .buttonCompact { display: inline-flex; align-items: center; margin-bottom: var(--admin-space-3); text-decoration: none; }
+
 @media (max-width: 480px) {
   .screen { align-items: flex-start; padding-top: var(--admin-space-5); }
   .panel { padding: var(--admin-space-3); }

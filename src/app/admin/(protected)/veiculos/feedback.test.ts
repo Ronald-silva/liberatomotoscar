@@ -15,6 +15,10 @@ describe('mensagem de formulário', () => {
     const message = 'Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.';
     expect(toFormMessage(new Error(message))).toBe(message);
   });
+  it.each(['Informe o preço em reais, por exemplo 18.500,00.', 'Ano e quilometragem devem ser números inteiros.'])(
+    'repassa a mensagem de validação "%s"', (message) => {
+      expect(toFormMessage(new Error(message))).toBe(message);
+    });
   it('não vaza detalhe interno de falha inesperada', () => {
     expect(toFormMessage(new Error('connect ECONNREFUSED 10.0.0.1:5432'))).toBe(generic);
   });
