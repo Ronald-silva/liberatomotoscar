@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { addPhoto, removePhoto, updateDetails, updatePrice } from '@/server/vehicles/service';
+import { addPhoto, changeVehicleStatus, removePhoto, updateDetails, updatePrice } from '@/server/vehicles/service';
 import { toFormMessage } from './feedback';
 
 export type FormState = { message: string | null };
@@ -77,4 +77,10 @@ export async function addVehiclePhoto(_state: FormState, formData: FormData): Pr
 
 export async function removeVehiclePhoto(_state: FormState, formData: FormData): Promise<FormState> {
   return run(formData, 'Foto removida.', (id, version) => removePhoto(id, text(formData, 'imageId'), version));
+}
+
+export async function changeStatus(_state: FormState, formData: FormData): Promise<FormState> {
+  // O serviço valida a transição e exige confirmAvailability === true para publicar.
+  const confirmAvailability = text(formData, 'confirmAvailability') === 'true';
+  return run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
 }

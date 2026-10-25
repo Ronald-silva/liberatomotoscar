@@ -10,13 +10,14 @@ const stub = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   addPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   removePhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
+  changeVehicleStatus: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
 }));
 
-vi.mock('@/server/vehicles/service', () => ({ updateDetails: stub.updateDetails, updatePrice: stub.updatePrice, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto }));
+vi.mock('@/server/vehicles/service', () => ({ updateDetails: stub.updateDetails, updatePrice: stub.updatePrice, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus }));
 vi.mock('next/cache', () => ({ revalidatePath: stub.revalidatePath }));
 vi.mock('next/navigation', () => ({ redirect: vi.fn(), notFound: vi.fn() }));
 
-import { addVehiclePhoto, removeVehiclePhoto, saveDetails, savePrice } from './actions';
+import { addVehiclePhoto, changeStatus, removeVehiclePhoto, saveDetails, savePrice } from './actions';
 
 const id = '6f1c1c1e-7c1e-4b59-9a53-2d2f0c1d3a11';
 const formDataOf = (fields: Record<string, string>) => {
@@ -26,7 +27,7 @@ const formDataOf = (fields: Record<string, string>) => {
 };
 const empty = { message: null };
 
-beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({}); stub.removePhoto.mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({}); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); });
 
 describe('salvar dados', () => {
   it('pede recarga quando a versão enviada está velha', async () => {
@@ -179,5 +180,51 @@ describe('remover foto', () => {
     stub.removePhoto.mockRejectedValueOnce(new Error('O anúncio precisa manter uma foto.'));
     expect((await removeVehiclePhoto(empty, removeForm())).message).toBe('O anúncio precisa manter uma foto.');
     expect(stub.revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe('mudar estado', () => {
+  const statusForm = (status: string, extra: Record<string, string> = {}) => formDataOf({ id, version: '6', status, ...extra });
+
+  it('repassa veículo, versão e novo estado, e revalida lista e página', async () => {
+    const state = await changeStatus(empty, statusForm('reserved'));
+    expect(state.message).toBe('Estado atualizado.');
+    expect(stub.changeVehicleStatus).toHaveBeenCalledWith(id, 6, 'reserved', { confirmAvailability: false });
+    expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
+    expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('só envia a confirmação quando o campo vale exatamente "true"', async () => {
+    await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' }));
+    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: true });
+    await changeStatus(empty, statusForm('published', { confirmAvailability: 'on' }));
+    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: false });
+  });
+
+  it('pede a confirmação quando o serviço a exige', async () => {
+    stub.changeVehicleStatus.mockRejectedValueOnce(new Error('Confirme a disponibilidade para publicar.'));
+    expect((await changeStatus(empty, statusForm('published'))).message).toBe('Confirme a disponibilidade para publicar.');
+  });
+
+  it('explica o que falta para publicar', async () => {
+    stub.changeVehicleStatus.mockRejectedValueOnce(new Error('Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.'));
+    const state = await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' }));
+    expect(state.message).toBe('Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.');
+    expect(stub.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('recusa transição não permitida que chegue por POST', async () => {
+    stub.changeVehicleStatus.mockRejectedValueOnce(new Error('Mudança de estado não permitida.'));
+    expect((await changeStatus(empty, statusForm('sold'))).message).toBe('Mudança de estado não permitida.');
+  });
+
+  it('pede recarga quando a versão está velha', async () => {
+    stub.changeVehicleStatus.mockRejectedValueOnce(new stub.StaleVehicleError());
+    expect((await changeStatus(empty, statusForm('archived'))).message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
+  });
+
+  it('não vaza erro inesperado', async () => {
+    stub.changeVehicleStatus.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    expect((await changeStatus(empty, statusForm('archived'))).message).toBe('Não foi possível salvar agora. Tente de novo.');
   });
 });
