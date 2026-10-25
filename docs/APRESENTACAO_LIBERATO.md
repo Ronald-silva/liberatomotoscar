@@ -83,7 +83,10 @@ npx tsx scripts/import-legacy.ts --execute-development br-dry-star-b6ma37vq
 | Erro de autenticação | URL do banco errada | Corrija no `.env` |
 | Mensagem genérica de erro | O script esconde a causa | Rode `npm run db:check` para separar "banco fora" de "outro problema" |
 
-Não foi verificado se rodar duas vezes duplica veículos. Rode uma vez só e confira o resultado na lista.
+Rodar duas vezes **não** duplica veículos: o script identifica cada um pela referência de origem e
+pula os que já existem, devolvendo `created: 0` e `skipped` igual ao total. Isso está no código e foi
+revisado, mas nunca foi executado contra o banco real — se precisar repetir, repita sem medo e confira
+o número que ele imprime.
 
 ### Passo 6. Dar acesso ao Liberato
 
