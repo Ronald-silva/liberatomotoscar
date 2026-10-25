@@ -54,7 +54,45 @@
 .buttonSecondary { background: transparent; border-color: var(--admin-line); }
 .small { margin: var(--admin-space-3) 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.5; }
 
+.listScreen { align-items: flex-start; justify-content: center; padding: var(--admin-space-2); }
+.listPanel { width: min(100%, 640px); }
+.listHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--admin-space-2); margin-bottom: var(--admin-space-3); }
+.listLogo { display: block; width: 120px; height: auto; }
+.buttonCompact { width: auto; min-height: 44px; padding: var(--admin-space-1) var(--admin-space-2); font-size: 0.9375rem; }
+.empty { padding: var(--admin-space-3) 0; }
+.vehicleList { display: grid; gap: var(--admin-space-2); margin: var(--admin-space-3) 0 0; padding: 0 0 6rem; list-style: none; }
+.vehicleCard {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem var(--admin-space-2);
+  min-height: 44px;
+  padding: var(--admin-space-2);
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  color: inherit;
+  background: var(--admin-surface);
+  text-decoration: none;
+}
+.vehicleCard:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
+.vehicleTitle { font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.vehicleMeta { color: var(--admin-muted); font-size: 0.875rem; }
+.vehiclePrice { font-weight: 700; text-align: right; }
+.badge { align-self: start; padding: 0.15rem 0.6rem; border: 1px solid var(--admin-line); border-radius: 999px; color: var(--admin-muted); font-size: 0.8125rem; white-space: nowrap; }
+.badge_published { color: #8fe0a8; border-color: #8fe0a8; }
+.badge_reserved { color: #f2c46d; border-color: #f2c46d; }
+.badge_sold { color: #ff9aa2; border-color: #ff9aa2; }
+.stickyAction {
+  position: sticky;
+  bottom: 0;
+  margin: 0 calc(var(--admin-space-2) * -1);
+  padding: var(--admin-space-2);
+  padding-bottom: max(var(--admin-space-2), env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--admin-bg) 70%, transparent);
+}
+.stickyAction > a, .empty a { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
 @media (max-width: 480px) {
   .screen { align-items: flex-start; padding-top: var(--admin-space-5); }
   .panel { padding: var(--admin-space-3); }
+  .listScreen { padding-top: var(--admin-space-2); }
 }

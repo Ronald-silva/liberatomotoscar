@@ -1,20 +1,43 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
+import Link from 'next/link';
+import { listAdminVehicles } from '@/server/vehicles/service';
 import { logoutAdmin } from '../actions';
 import styles from '../admin.module.css';
 
 export const metadata: Metadata = { title: 'Painel', robots: { index: false, follow: false } };
 
-export default function AdminPage() {
-  return <main id="conteudo" className={styles.screen}>
-    <section className={styles.panel} aria-labelledby="admin-title">
-      <Image className={styles.logo} src="/logo-liberato-negativo.png" alt="Liberato Motos Car" width={160} height={75} priority />
-      <p className={styles.eyebrow}>Área do proprietário</p>
-      <h1 id="admin-title" className={styles.heading}>Acesso confirmado</h1>
-      <p className={styles.description}>O painel está protegido. O cadastro de veículos será adicionado na próxima etapa.</p>
-      <form className={styles.form} action={logoutAdmin}>
-        <button className={`${styles.button} ${styles.buttonSecondary}`} type="submit">Sair do painel</button>
-      </form>
+const statusLabels = { draft: 'Rascunho', published: 'Publicado', reserved: 'Reservado', sold: 'Vendido', archived: 'Arquivado' } as const;
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+export default async function AdminPage() {
+  const vehicles = await listAdminVehicles();
+  const create = <Link className={styles.button} href="/admin/veiculos/novo">Cadastrar veículo</Link>;
+  return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
+    <section className={styles.listPanel} aria-labelledby="admin-title">
+      <header className={styles.listHeader}>
+        <Image className={styles.listLogo} src="/logo-liberato-negativo.png" alt="Liberato Motos Car" width={120} height={56} priority />
+        <form action={logoutAdmin}>
+          <button className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} type="submit">Sair do painel</button>
+        </form>
+      </header>
+      <h1 id="admin-title" className={styles.heading}>Estoque</h1>
+      {vehicles.length === 0 ? <div className={styles.empty}>
+        <p className={styles.description}>Nenhum veículo cadastrado ainda. Comece cadastrando o primeiro.</p>
+        <div className={styles.form}>{create}</div>
+      </div> : <>
+        <ul className={styles.vehicleList}>
+          {vehicles.map((vehicle) => <li key={vehicle.id}>
+            <Link className={styles.vehicleCard} href={`/admin/veiculos/${vehicle.id}`}>
+              <span className={styles.vehicleTitle}>{[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'Sem título'}</span>
+              <span className={`${styles.badge} ${styles[`badge_${vehicle.status}`]}`}>{statusLabels[vehicle.status]}</span>
+              <span className={styles.vehicleMeta}>{vehicle.year ?? 'Ano não informado'}</span>
+              <span className={styles.vehiclePrice}>{vehicle.priceCents ? brl.format(vehicle.priceCents / 100) : 'Sem preço'}</span>
+            </Link>
+          </li>)}
+        </ul>
+        <div className={styles.stickyAction}>{create}</div>
+      </>}
     </section>
   </main>;
 }
