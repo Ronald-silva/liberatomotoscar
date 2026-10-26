@@ -8,7 +8,7 @@ vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: 'phase12
 import { closeDb, getDb } from '@/server/db/client';
 import { usersTable, vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
 import { addPhoto, changeVehicleStatus, createDraft, getPublicVehicleBySlug, listPublicVehicles,
-  updateDetails, updatePrice } from './service';
+  updateVehicle } from './service';
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (autorização simulada)', () => {
   beforeAll(async () => {
@@ -24,9 +24,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
     expect(draft.status).toBe('draft');
     await expect(createDraft({ type: 'motorcycle', slug })).rejects.toThrow();
     await expect(changeVehicleStatus(draft.id, 1, 'published', { confirmAvailability: true })).rejects.toThrow();
-    const detailed = await updateDetails(draft.id, 1, { brand: 'Honda', model: 'Pop', year: null, mileageKm: null });
-    const priced = await updatePrice(draft.id, detailed.versionNumber, 100_00);
-    await expect(updatePrice(draft.id, detailed.versionNumber, 200_00)).rejects.toThrow();
+    const detailed = await updateVehicle(draft.id, 1, { details: { brand: 'Honda', model: 'Pop', year: null, mileageKm: null } });
+    const priced = await updateVehicle(draft.id, detailed.versionNumber, { details: {}, priceCents: 100_00 });
+    await expect(updateVehicle(draft.id, detailed.versionNumber, { details: {}, priceCents: 200_00 })).rejects.toThrow();
     const storage = { put: vi.fn(async () => ({ key: `drafts/${draft.id}/${randomUUID()}.png`, mimeType: 'image/png' as const, sizeBytes: 8 })), delete: vi.fn(async () => {}) };
     const photo = await addPhoto(draft.id, priced.versionNumber, Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]), 'image/png', storage);
     expect(photo.isCover).toBe(true);

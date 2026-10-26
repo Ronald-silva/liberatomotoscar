@@ -33,10 +33,22 @@ export function assertStatusTransition(current: z.infer<typeof vehicleStatus>, n
   }
 }
 
-export function assertPublishable(vehicle: {
-  brand: string | null; model: string | null; priceCents: number | null;
-}, imageCount: number): void {
-  if (!vehicle.brand?.trim() || !vehicle.model?.trim() || !vehicle.priceCents || vehicle.priceCents <= 0 || imageCount < 1) {
+type Publishable = { brand: string | null; model: string | null; priceCents: number | null };
+
+// Fonte única do que falta para publicar: o serviço recusa por aqui e a tela mostra a mesma
+// lista, item por item, antes de a pessoa tocar em Publicar. Sem isso a regra viveria em dois
+// lugares e a tela acabaria mentindo.
+export function publishRequirements(vehicle: Publishable, imageCount: number): readonly { label: string; done: boolean }[] {
+  return [
+    { label: 'Marca', done: Boolean(vehicle.brand?.trim()) },
+    { label: 'Modelo', done: Boolean(vehicle.model?.trim()) },
+    { label: 'Preço', done: Boolean(vehicle.priceCents && vehicle.priceCents > 0) },
+    { label: 'Pelo menos uma foto', done: imageCount >= 1 },
+  ];
+}
+
+export function assertPublishable(vehicle: Publishable, imageCount: number): void {
+  if (publishRequirements(vehicle, imageCount).some((item) => !item.done)) {
     throw new Error('Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.');
   }
 }

@@ -37,12 +37,42 @@ export async function createDraft(input: unknown) {
   });
 }
 
-export async function getAdminVehicle(id: string) {
+type StoredPhotoRef = { storageKey: string; storageProvider: 'r2' | 'legacy_public' };
+
+// Resolve URL de leitura sem tocar no banco: legacy_public já é caminho público e a assinatura
+// do R2 é cálculo local. Um cliente serve o lote inteiro; sem nenhuma foto em r2, nenhum é criado.
+// Falha ao assinar vira foto vazia em vez de derrubar a tela.
+function photoUrlResolver(refs: readonly (StoredPhotoRef | null | undefined)[], storage?: PhotoStorage) {
+  const readUrl = refs.some((ref) => ref?.storageProvider === 'r2')
+    ? (storage ?? createR2Storage()).signedReadUrl
+    : undefined;
+  return async (ref: StoredPhotoRef | null | undefined): Promise<string | null> => {
+    if (!ref) return null;
+    if (ref.storageProvider === 'legacy_public') return ref.storageKey;
+    if (!readUrl) return null;
+    return readUrl(ref.storageKey).catch(() => null);
+  };
+}
+
+// Veículo e fotos prontas para a tela: uma autorização e duas consultas em paralelo.
+// As URLs saem das imagens já carregadas — antes cada foto custava outra autorização e outro
+// select da mesma linha. No caso de veículo inexistente a consulta de imagens é desperdiçada,
+// troca barata por um round-trip a menos em toda abertura normal.
+export async function getAdminVehicle(id: string, storage?: PhotoStorage) {
   await requireAdmin();
-  const [vehicle] = await getDb().select().from(vehicles).where(eq(vehicles.id, idSchema.parse(id))).limit(1);
+  const vehicleId = idSchema.parse(id);
+  const db = getDb();
+  const [found, images] = await Promise.all([
+    db.select().from(vehicles).where(eq(vehicles.id, vehicleId)).limit(1),
+    db.select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId)).orderBy(asc(vehicleImages.position)),
+  ]);
+  const [vehicle] = found;
   if (!vehicle) throw new VehicleNotFoundError();
-  const images = await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicle.id)).orderBy(asc(vehicleImages.position));
-  return { vehicle, images };
+  const photoUrl = photoUrlResolver(images, storage);
+  const photos = await Promise.all(images.map(async (image) => ({
+    id: image.id, isCover: image.isCover, url: await photoUrl(image),
+  })));
+  return { vehicle, photos };
 }
 
 export async function getAdminVehicleBySlug(slug: string) {
@@ -50,18 +80,6 @@ export async function getAdminVehicleBySlug(slug: string) {
   const [vehicle] = await getDb().select().from(vehicles).where(eq(vehicles.slug, slugSchema.parse(slug))).limit(1);
   if (!vehicle) throw new VehicleNotFoundError();
   return vehicle;
-}
-
-export async function getAdminPhotoReadUrl(vehicleId: string, imageId: string,
-  storage?: PhotoStorage): Promise<string> {
-  await requireAdmin();
-  const [image] = await getDb().select().from(vehicleImages)
-    .where(and(eq(vehicleImages.vehicleId, idSchema.parse(vehicleId)), eq(vehicleImages.id, idSchema.parse(imageId)))).limit(1);
-  if (!image) throw new VehicleNotFoundError();
-  if (image.storageProvider === 'legacy_public') return image.storageKey;
-  const readUrl = (storage ?? createR2Storage()).signedReadUrl;
-  if (!readUrl) throw new Error('Leitura privada de fotos indisponível.');
-  return readUrl(image.storageKey);
 }
 
 export async function listAdminVehicles() {
@@ -76,14 +94,8 @@ export async function listAdminVehiclesWithCover(storage?: PhotoStorage) {
     .from(vehicles)
     .leftJoin(vehicleImages, and(eq(vehicleImages.vehicleId, vehicles.id), eq(vehicleImages.isCover, true)))
     .orderBy(desc(vehicles.updatedAt));
-  const needsSigning = rows.some(({ cover }) => cover?.storageProvider === 'r2');
-  const readUrl = needsSigning ? (storage ?? createR2Storage()).signedReadUrl : undefined;
-  return Promise.all(rows.map(async ({ vehicle, cover }) => {
-    let coverUrl: string | null = null;
-    if (cover?.storageProvider === 'legacy_public') coverUrl = cover.storageKey;
-    else if (cover && readUrl) coverUrl = await readUrl(cover.storageKey).catch(() => null);
-    return { ...vehicle, coverUrl };
-  }));
+  const photoUrl = photoUrlResolver(rows.map(({ cover }) => cover), storage);
+  return Promise.all(rows.map(async ({ vehicle, cover }) => ({ ...vehicle, coverUrl: await photoUrl(cover) })));
 }
 
 const publicStatuses: Status[] = ['published', 'reserved'];
@@ -104,34 +116,32 @@ export async function getPublicVehicleBySlug(slug: string) {
   return row ? publicVehicle(row) : null;
 }
 
-export async function updateDetails(id: string, expectedVersion: number, input: unknown) {
+// Dados e preço na mesma transação: um "Salvar" na tela, uma versão nova, e nunca o estado
+// intermediário de ter salvo um e não o outro. A auditoria continua separando o que mudou —
+// 'details_updated' e 'price_changed' —, porque histórico de preço vale por si.
+// priceCents indefinido deixa o preço como está; campo vazio na tela significa isso.
+export async function updateVehicle(id: string, expectedVersion: number,
+  input: { details: unknown; priceCents?: number }) {
   const actor = await requireAdmin();
-  const data = detailsInput.parse(input);
-  if (Object.keys(data).length === 0) throw new Error('Nenhum dado para atualizar.');
+  const data = detailsInput.parse(input.details);
+  const price = input.priceCents === undefined ? undefined : priceInput.parse(input.priceCents);
+  if (Object.keys(data).length === 0 && price === undefined) throw new Error('Nenhum dado para atualizar.');
   return getDb().transaction(async (tx) => {
     const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, idSchema.parse(id))).for('update');
     if (!before) throw new VehicleNotFoundError();
     if (before.versionNumber !== versionInput.parse(expectedVersion)) throw new StaleVehicleError();
-    const [after] = await tx.update(vehicles).set({ ...data, updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
-      .where(and(eq(vehicles.id, before.id), eq(vehicles.versionNumber, expectedVersion))).returning();
+    if (price === 0 && before.status !== 'draft' && before.status !== 'archived') {
+      throw new Error('Preço zero não é permitido em anúncio publicado.');
+    }
+    const [after] = await tx.update(vehicles).set({
+      ...data,
+      ...(price === undefined ? {} : { priceCents: price }),
+      updatedAt: new Date(),
+      versionNumber: sql`${vehicles.versionNumber} + 1`,
+    }).where(and(eq(vehicles.id, before.id), eq(vehicles.versionNumber, expectedVersion))).returning();
     if (!after) throw new StaleVehicleError();
-    await audit(tx, after, actor.userId, 'details_updated', before);
-    return after;
-  });
-}
-
-export async function updatePrice(id: string, expectedVersion: number, priceCents: unknown) {
-  const actor = await requireAdmin();
-  const price = priceInput.parse(priceCents);
-  return getDb().transaction(async (tx) => {
-    const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, idSchema.parse(id))).for('update');
-    if (!before) throw new VehicleNotFoundError();
-    if (before.versionNumber !== versionInput.parse(expectedVersion)) throw new StaleVehicleError();
-    if (before.status !== 'draft' && before.status !== 'archived' && price === 0) throw new Error('Preço zero não é permitido em anúncio publicado.');
-    const [after] = await tx.update(vehicles).set({ priceCents: price, updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
-      .where(and(eq(vehicles.id, before.id), eq(vehicles.versionNumber, expectedVersion))).returning();
-    if (!after) throw new StaleVehicleError();
-    await audit(tx, after, actor.userId, 'price_changed', before);
+    if (Object.keys(data).length > 0) await audit(tx, after, actor.userId, 'details_updated', before);
+    if (price !== undefined && price !== before.priceCents) await audit(tx, after, actor.userId, 'price_changed', before);
     return after;
   });
 }
@@ -184,7 +194,9 @@ export async function addPhoto(id: string, expectedVersion: number, body: Uint8A
       const [after] = await tx.update(vehicles).set({ updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
         .where(eq(vehicles.id, id)).returning();
       await audit(tx, after, actor.userId, 'photo_added', before, { imageId: image.id, storageKey: image.storageKey });
-      return image;
+      // vehicleVersion acompanha a imagem para a tela poder enviar a foto seguinte sem recarregar:
+      // cada foto incrementa a versão do veículo, e a próxima precisa da versão nova.
+      return { ...image, vehicleVersion: after.versionNumber };
     });
   } catch (error) {
     try { await photoStorage.delete(saved.key); } catch { /* orphan cleanup is documented */ }

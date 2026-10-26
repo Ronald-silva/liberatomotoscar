@@ -1,22 +1,22 @@
 'use client';
 
 import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
 import styles from '../../../admin.module.css';
 import { createVehicle, type FormState } from '../actions';
+import { FormNotice } from '../FormNotice';
+import { SubmitButton } from '../SubmitButton';
 
 const initial: FormState = { message: null };
 
-function TypeButton({ type, label }: { type: string; label: string }) {
-  const { pending } = useFormStatus();
-  return <button className={`${styles.button} ${styles.typeButton}`} type="submit" name="type" value={type} disabled={pending} aria-busy={pending}>{pending ? 'Criando...' : label}</button>;
-}
-
+// Os dois botões dividem um formulário só, então `useFormStatus().pending` é verdadeiro para
+// ambos durante o envio — era por isso que os dois mostravam "Criando..." juntos. O SubmitButton
+// já resolvia isso em todo o resto do painel, comparando `data.get(name)` com o próprio valor:
+// todos ficam desabilitados (evita toque duplo e criação duplicada), mas só o tocado troca o texto.
 export function VehicleTypeForm() {
   const [state, action] = useActionState(createVehicle, initial);
   return <form className={styles.typeChoice} action={action}>
-    <TypeButton type="motorcycle" label="Moto" />
-    <TypeButton type="car" label="Carro" />
-    {state.message ? <p className={styles.notice} role="alert">{state.message}</p> : null}
+    <SubmitButton name="type" value="motorcycle" label="Moto" pendingLabel="Criando..." className={styles.typeButton} />
+    <SubmitButton name="type" value="car" label="Carro" pendingLabel="Criando..." className={styles.typeButton} />
+    <FormNotice message={state.message} vehicleId="" role="alert" />
   </form>;
 }

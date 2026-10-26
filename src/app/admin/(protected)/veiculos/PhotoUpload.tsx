@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useActionState, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import styles from '../../admin.module.css';
 import { addVehiclePhoto, type FormState } from './actions';
 import { FormNotice } from './FormNotice';
@@ -11,6 +11,7 @@ const QUALITY = 0.82;
 // 3,5 MB deixa folga para esses bytes extras: a checagem do cliente sempre dispara antes do servidor.
 const MAX_BYTES = 3.5 * 1024 * 1024;
 const TOO_BIG = 'A foto ficou grande demais para enviar. Tente uma foto menor ou com menos detalhes.';
+const BAD_FILE = 'Não foi possível preparar esta foto. Tente outra.';
 const initial: FormState = { message: null };
 
 async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; release: () => void }> {
@@ -46,39 +47,68 @@ async function shrink(file: File): Promise<File> {
   }
 }
 
+/**
+ * Várias fotos num gesto só.
+ *
+ * Antes era uma por envio: seis fotos eram seis toques e seis esperas. Aqui a pessoa escolhe
+ * todas de uma vez e o envio segue em fila, mostrando em qual está. Cada foto incrementa a versão
+ * do veículo, então a action devolve a versão nova e a próxima foto já vai com ela — sem isso a
+ * segunda seria recusada por "anúncio alterado".
+ *
+ * Sem `capture`: forçar a câmera impedia escolher fotos já tiradas, que é o caso comum de quem
+ * fotografa o veículo antes de sentar para cadastrar.
+ */
 export function PhotoUpload({ vehicleId, version }: { vehicleId: string; version: number }) {
-  const [state, action, sending] = useActionState(addVehiclePhoto, initial);
-  const [preparing, setPreparing] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const busy = preparing || sending;
 
-  async function onChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setLocalError(null);
-    setPreparing(true);
-    try {
-      const photo = await shrink(file);
-      const data = new FormData();
-      data.set('id', vehicleId);
-      data.set('version', String(version));
-      data.set('photo', photo);
-      startTransition(() => action(data));
-    } catch (error) {
-      setLocalError(error instanceof Error && error.message === 'grande' ? TOO_BIG : 'Não foi possível preparar esta foto. Tente outra.');
-    } finally {
-      setPreparing(false);
-      if (input.current) input.current.value = '';
-    }
+  async function send(file: File, atVersion: number): Promise<FormState> {
+    const data = new FormData();
+    data.set('id', vehicleId);
+    data.set('version', String(atVersion));
+    data.set('photo', file);
+    // A action ignora o estado anterior; ele existe na assinatura por causa de useActionState.
+    return addVehiclePhoto(initial, data);
   }
 
-  const message = localError ?? state.message;
+  async function onChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    setMessage(null);
+    let current = version;
+    let sent = 0;
+    let failure: string | null = null;
+
+    for (const [index, file] of files.entries()) {
+      setBusy(files.length > 1 ? `Enviando foto ${index + 1} de ${files.length}...` : 'Enviando a foto...');
+      let photo: File;
+      try {
+        photo = await shrink(file);
+      } catch (error) {
+        failure = error instanceof Error && error.message === 'grande' ? TOO_BIG : BAD_FILE;
+        break;
+      }
+      const state = await send(photo, current);
+      // Sem versão nova, a foto não entrou: a mensagem da action diz por quê.
+      if (state.version === undefined) { failure = state.message; break; }
+      current = state.version;
+      sent += 1;
+    }
+
+    setBusy(null);
+    if (input.current) input.current.value = '';
+    const done = sent === 0 ? null : sent === 1 ? 'Foto adicionada.' : `${sent} fotos adicionadas.`;
+    setMessage(failure && done ? `${done} A seguinte não deu: ${failure}` : failure ?? done);
+  }
+
   return <div className={styles.form}>
-    <label className={`${styles.button} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy}>
-      {preparing ? 'Preparando a foto...' : sending ? 'Enviando a foto...' : 'Tirar ou escolher foto'}
-      <input ref={input} className={styles.visuallyHidden} type="file" accept="image/*" capture="environment" disabled={busy} onChange={onChange} />
+    <label className={`${styles.button} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy !== null}>
+      {busy ?? 'Adicionar fotos'}
+      <input ref={input} className={styles.visuallyHidden} type="file" accept="image/*" multiple
+        disabled={busy !== null} onChange={onChange} />
     </label>
+    <p className={styles.chipHint}>Pode escolher várias de uma vez. A primeira vira a capa do anúncio.</p>
     <FormNotice message={message} vehicleId={vehicleId} />
   </div>;
 }

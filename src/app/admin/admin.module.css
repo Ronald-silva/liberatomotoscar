@@ -15,6 +15,9 @@
   --admin-space-4: 2rem;
   --admin-space-5: 3rem;
   --admin-radius: 16px;
+  /* Altura real da barra fixa: botão de 52px + o padding de .stickyAction. Quem precisa
+     reservar espaço embaixo usa este token, em vez de um número solto que envelhece sozinho. */
+  --admin-sticky-action: calc(52px + var(--admin-space-2) * 2);
   min-height: 100dvh;
   display: flex;
   align-items: center;
@@ -38,7 +41,19 @@
 .description { margin: var(--admin-space-2) 0 0; color: var(--admin-muted); line-height: 1.5; }
 .notice { margin: var(--admin-space-3) 0 0; padding: var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); line-height: 1.45; }
 .form { margin-top: var(--admin-space-4); }
+/* Formulário com barra fixa: reserva a altura dela no fim, senão o último campo nunca sobe acima
+   da barra por mais que se role. */
+.formSticky { padding-bottom: var(--admin-sticky-action); }
 .button {
+  /* Sem display explícito, esta classe só funcionava em <button>: <label> e <a> são inline, e em
+     caixa inline min-height e padding vertical não entram no cálculo da linha — o padding
+     transborda e pinta por cima do texto seguinte. inline-flex dá caixa própria sem tornar os
+     botões compactos usados dentro de frases em blocos. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
   width: 100%;
   min-height: 52px;
   padding: var(--admin-space-2) var(--admin-space-3);
@@ -91,6 +106,8 @@
 .stickyAction {
   position: sticky;
   bottom: 0;
+  /* Abaixo da lista de sugestões (z-index 5), que precisa cobrir a barra quando abre perto do pé. */
+  z-index: 1;
   margin: 0 calc(var(--admin-space-2) * -1);
   padding: var(--admin-space-2);
   padding-bottom: max(var(--admin-space-2), env(safe-area-inset-bottom));
@@ -135,3 +152,90 @@
 
 .typeChoice { display: grid; gap: var(--admin-space-2); margin-top: var(--admin-space-4); }
 .typeButton { min-height: 96px; font-size: 1.5rem; }
+
+/* Cadastro guiado: escolha por toque, sugestões e o que falta para publicar. */
+.step {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7em;
+  height: 1.7em;
+  margin-right: 0.5rem;
+  border-radius: 999px;
+  background: var(--admin-accent);
+  color: #fff;
+  font-size: 0.8em;
+}
+
+.chipField { margin: var(--admin-space-3) 0 0; padding: 0; border: 0; }
+.chipLegend { padding: 0; font-weight: 600; }
+.chipHint { margin: 0.35rem 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.4; }
+.chipRow { display: flex; flex-wrap: wrap; gap: var(--admin-space-1); margin: 0.6rem 0; }
+.chip {
+  min-height: 44px;
+  padding: var(--admin-space-1) var(--admin-space-2);
+  border: 1px solid var(--admin-line);
+  border-radius: 999px;
+  color: var(--admin-ink);
+  background: transparent;
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--admin-ink); }
+.chip:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
+.chipOn { border-color: transparent; background: var(--admin-accent); color: #fff; font-weight: 700; }
+
+.comboLabel { font-weight: 600; }
+.comboWrap { position: relative; }
+.comboList {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  max-height: 15rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 45%);
+}
+.comboOption { display: block; }
+.comboButton {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--admin-space-1) var(--admin-space-2);
+  border: 0;
+  border-radius: calc(var(--admin-radius) - 6px);
+  color: var(--admin-ink);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.comboButton:hover { background: rgb(255 255 255 / 10%); }
+.comboOptionOn .comboButton { background: var(--admin-accent); color: #fff; }
+
+.optional { margin: var(--admin-space-3) 0 0; border-top: 1px solid var(--admin-line); }
+.optionalSummary {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  color: var(--admin-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+.optionalSummary:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
+
+.checklist { display: grid; gap: var(--admin-space-1); margin: var(--admin-space-2) 0 0; padding: 0; list-style: none; }
+.checkItem { display: flex; align-items: center; gap: var(--admin-space-1); color: var(--admin-muted); line-height: 1.4; }
+.checkItemOn { color: var(--admin-ok); }
+.checkMark { display: inline-grid; place-items: center; width: 1.5rem; font-weight: 700; }
+
+/* O container de rolagem é o documento, não um elemento deste módulo; sem isto o navegador
+   encosta o campo focado atrás da barra fixa ao rolá-lo para a tela. */
+:global(html) { scroll-padding-bottom: calc(var(--admin-sticky-action, 5.25rem) + var(--admin-space-2, 1rem)); }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedStatusTransitions, assertPublishable, assertStatusTransition, detailsInput, draftInput, priceInput, vehicleStatus } from './validation';
+import { allowedStatusTransitions, assertPublishable, publishRequirements, assertStatusTransition, detailsInput, draftInput, priceInput, vehicleStatus } from './validation';
 
 describe('validação comercial', () => {
   it('rejeita preço negativo, fracionário e acima do inteiro PostgreSQL', () => {
@@ -32,6 +32,45 @@ describe('validação comercial', () => {
           expect(() => assertStatusTransition(current, next)).toThrow('Mudança de estado não permitida.');
         }
       }
+    }
+  });
+});
+
+// A tela de edição mostra esta lista item por item. Se ela e assertPublishable discordassem, a
+// tela prometeria uma publicação que o serviço recusa.
+describe('requisitos de publicação', () => {
+  const complete = { brand: 'Honda', model: 'Pop', priceCents: 100 };
+
+  it('nomeia os quatro requisitos, na ordem da tela', () => {
+    expect(publishRequirements(complete, 1).map((item) => item.label))
+      .toEqual(['Marca', 'Modelo', 'Preço', 'Pelo menos uma foto']);
+  });
+
+  it('marca tudo pronto quando o anúncio está completo', () => {
+    expect(publishRequirements(complete, 2).every((item) => item.done)).toBe(true);
+  });
+
+  it.each([
+    [{ ...complete, brand: null }, 1, 'Marca'],
+    [{ ...complete, brand: '   ' }, 1, 'Marca'],
+    [{ ...complete, model: null }, 1, 'Modelo'],
+    [{ ...complete, priceCents: 0 }, 1, 'Preço'],
+    [{ ...complete, priceCents: null }, 1, 'Preço'],
+    [complete, 0, 'Pelo menos uma foto'],
+  ])('aponta %j com %i foto(s) como faltando "%s"', (vehicle, photos, label) => {
+    const missing = publishRequirements(vehicle, photos).filter((item) => !item.done).map((item) => item.label);
+    expect(missing).toEqual([label]);
+  });
+
+  it('concorda com assertPublishable em todo caso testado', () => {
+    const cases: [{ brand: string | null; model: string | null; priceCents: number | null }, number][] = [
+      [complete, 1], [complete, 0], [{ ...complete, brand: null }, 1],
+      [{ ...complete, model: '' }, 3], [{ ...complete, priceCents: 0 }, 1], [{ brand: null, model: null, priceCents: null }, 0],
+    ];
+    for (const [vehicle, photos] of cases) {
+      const faltando = publishRequirements(vehicle, photos).some((item) => !item.done);
+      const recusa = (() => { try { assertPublishable(vehicle, photos); return false; } catch { return true; } })();
+      expect(recusa).toBe(faltando);
     }
   });
 });

@@ -9,9 +9,11 @@ import { actionLabels, statusLabels, type VehicleStatus } from '../status';
 
 const initial: FormState = { message: null };
 
-// `targets` vem do servidor, derivado de allowedStatusTransitions: a tela só oferece o que o serviço aceita.
-export function StatusActions({ vehicleId, version, status, targets }: {
-  vehicleId: string; version: number; status: VehicleStatus; targets: VehicleStatus[];
+// `targets` vem do servidor, derivado de allowedStatusTransitions: a tela só oferece o que o
+// serviço aceita. `publishBlocked` traz o que falta para publicar, pela mesma regra que o
+// serviço usa — o botão fica desabilitado com o motivo à vista, em vez de recusar depois do toque.
+export function StatusActions({ vehicleId, version, status, targets, publishBlocked = [] }: {
+  vehicleId: string; version: number; status: VehicleStatus; targets: VehicleStatus[]; publishBlocked?: readonly string[];
 }) {
   const [state, action] = useActionState(changeStatus, initial);
   const [confirming, setConfirming] = useState(false);
@@ -35,8 +37,13 @@ export function StatusActions({ vehicleId, version, status, targets }: {
     </form> : <form className={styles.statusActions} action={action}>
       {hidden}
       {targets.map((target) => target === 'published'
-        ? <button key={target} className={styles.button} type="button" onClick={() => setConfirming(true)}>{actionLabels[target]}</button>
+        ? <button key={target} className={styles.button} type="button" disabled={publishBlocked.length > 0}
+          aria-describedby={publishBlocked.length > 0 ? 'publicar-bloqueado' : undefined}
+          onClick={() => setConfirming(true)}>{actionLabels[target]}</button>
         : <SubmitButton key={target} secondary name="status" value={target} label={actionLabels[target]} pendingLabel="Atualizando..." />)}
+      {publishBlocked.length > 0 ? <p id="publicar-bloqueado" className={styles.chipHint}>
+        Para publicar, complete: {publishBlocked.join(', ')}.
+      </p> : null}
     </form>}
     <FormNotice message={state.message} vehicleId={vehicleId} />
   </section>;
