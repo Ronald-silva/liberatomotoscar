@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
@@ -140,9 +140,16 @@ export async function updateVehicle(id: string, expectedVersion: number,
       ...(price === undefined ? {} : { priceCents: price }),
       updatedAt: new Date(),
       versionNumber: sql`${vehicles.versionNumber} + 1`,
-    }).where(and(eq(vehicles.id, before.id), eq(vehicles.versionNumber, expectedVersion))).returning();
+    }).where(and(eq(vehicles.id, before.id), eq(vehicles.versionNumber, expectedVersion)))
+      // A contagem vai no próprio UPDATE: sem consulta extra, e a tela recalcula o que falta para publicar.
+      .returning({ ...getTableColumns(vehicles),
+        imageCount: sql<number>`(select count(*)::int from ${vehicleImages} where ${vehicleImages.vehicleId} = ${before.id})` });
     if (!after) throw new StaleVehicleError();
-    if (Object.keys(data).length > 0) await audit(tx, after, actor.userId, 'details_updated', before);
+    // A tela grava sozinha enquanto ele digita e sempre manda todos os campos; auditar toda chamada
+    // lotaria uma tabela append-only (um gatilho impede apagar) de linhas idênticas. Só conta o que
+    // mudou de valor: chave ausente (undefined) é "não mencionado", e null explícito é um valor.
+    const detailsChanged = Object.entries(data).some(([key, value]) => value !== undefined && value !== before[key as keyof typeof data]);
+    if (detailsChanged) await audit(tx, after, actor.userId, 'details_updated', before);
     if (price !== undefined && price !== before.priceCents) await audit(tx, after, actor.userId, 'price_changed', before);
     return after;
   });

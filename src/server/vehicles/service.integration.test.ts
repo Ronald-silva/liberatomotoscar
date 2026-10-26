@@ -246,4 +246,66 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       expect(row.versionNumber).toBe(versionNumber);
     });
   });
+
+  describe('updateVehicle: auditoria e contagem de fotos', () => {
+    const detailAudits = async (vehicleId: string) =>
+      (await getDb().select().from(vehicleAudit).where(and(eq(vehicleAudit.vehicleId, vehicleId), eq(vehicleAudit.operation, 'details_updated')))).length;
+    const allDetails = { brand: 'Fiat', model: 'Uno', version: 'Way', year: 2012, mileageKm: 90_000, color: 'Prata', description: 'Único dono' };
+
+    it('não grava auditoria de detalhes quando nada mudou de valor', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const first = await updateVehicle(draft.id, draft.versionNumber, { details: allDetails });
+      expect(await detailAudits(draft.id)).toBe(1);
+      await updateVehicle(draft.id, first.versionNumber, { details: { ...allDetails } });
+      expect(await detailAudits(draft.id)).toBe(1);
+    });
+
+    it('grava auditoria de detalhes quando um campo muda', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const first = await updateVehicle(draft.id, draft.versionNumber, { details: allDetails });
+      await updateVehicle(draft.id, first.versionNumber, { details: { ...allDetails, color: 'Preto' } });
+      expect(await detailAudits(draft.id)).toBe(2);
+    });
+
+    it('trata null explícito como mudança e chave ausente como "não mencionado"', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const first = await updateVehicle(draft.id, draft.versionNumber, { details: allDetails });
+      const absent = await updateVehicle(draft.id, first.versionNumber, { details: { brand: 'Fiat' } });
+      expect(await detailAudits(draft.id)).toBe(1);
+      expect(absent.color).toBe('Prata');
+      const cleared = await updateVehicle(draft.id, absent.versionNumber, { details: { color: null } });
+      expect(cleared.color).toBeNull();
+      expect(await detailAudits(draft.id)).toBe(2);
+      // null sobre um campo que já era null não é mudança.
+      await updateVehicle(draft.id, cleared.versionNumber, { details: { color: null } });
+      expect(await detailAudits(draft.id)).toBe(2);
+    });
+
+    it('ainda incrementa a versão quando nada mudou', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const first = await updateVehicle(draft.id, draft.versionNumber, { details: allDetails });
+      const second = await updateVehicle(draft.id, first.versionNumber, { details: allDetails });
+      expect(second.versionNumber).toBe(first.versionNumber + 1);
+    });
+
+    it('continua gravando o histórico de preço só quando o preço muda', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const first = await updateVehicle(draft.id, draft.versionNumber, { details: allDetails, priceCents: 100_00 });
+      await updateVehicle(draft.id, first.versionNumber, { details: allDetails, priceCents: 100_00 });
+      const priceAudits = await getDb().select().from(vehicleAudit).where(and(eq(vehicleAudit.vehicleId, draft.id), eq(vehicleAudit.operation, 'price_changed')));
+      expect(priceAudits).toHaveLength(1);
+    });
+
+    it('devolve a quantidade de fotos do veículo, zero quando não há nenhuma', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const none = await updateVehicle(draft.id, draft.versionNumber, { details: allDetails });
+      expect(none.imageCount).toBe(0);
+      for (const position of [0, 1]) {
+        await getDb().insert(vehicleImages).values({ vehicleId: draft.id, storageKey: `drafts/${draft.id}/${randomUUID()}.png`,
+          storageProvider: 'r2', mimeType: 'image/png', sizeBytes: 8, position, isCover: position === 0 });
+      }
+      const two = await updateVehicle(draft.id, none.versionNumber, { details: allDetails });
+      expect(two.imageCount).toBe(2);
+    });
+  });
 });
