@@ -270,3 +270,30 @@ export async function discardDraft(vehicleId: string, expectedVersion: number, s
   }
   return { status: 'discarded' as const, versionNumber: result.versionNumber };
 }
+
+// O índice único parcial vehicle_images_one_cover_uidx admite uma capa por veículo, então a atual
+// é desmarcada ANTES de marcar a nova; inverter a ordem violaria o índice no meio da transação.
+export async function setCoverPhoto(vehicleId: string, imageId: string, expectedVersion: number) {
+  const actor = await requireAdmin();
+  idSchema.parse(vehicleId);
+  idSchema.parse(imageId);
+  versionInput.parse(expectedVersion);
+  return getDb().transaction(async (tx) => {
+    const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId)).for('update');
+    if (!before) throw new VehicleNotFoundError();
+    // Checado antes da versão: um excluído nunca volta a aceitar escrita, seja qual for a versão enviada.
+    if (before.status === 'discarded') throw new DiscardedVehicleError();
+    if (before.versionNumber !== expectedVersion) throw new StaleVehicleError();
+    const [image] = await tx.select().from(vehicleImages)
+      .where(and(eq(vehicleImages.id, imageId), eq(vehicleImages.vehicleId, vehicleId)));
+    if (!image) throw new VehicleNotFoundError();
+    await tx.update(vehicleImages).set({ isCover: false })
+      .where(and(eq(vehicleImages.vehicleId, vehicleId), eq(vehicleImages.isCover, true)));
+    await tx.update(vehicleImages).set({ isCover: true }).where(eq(vehicleImages.id, imageId));
+    const [after] = await tx.update(vehicles).set({ updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
+      .where(eq(vehicles.id, vehicleId)).returning();
+    await audit(tx, after, actor.userId, 'cover_changed', before, { imageId });
+    // Mesmo formato de addPhoto: o cliente encadeia a próxima operação com esta versão.
+    return { vehicleVersion: after.versionNumber };
+  });
+}

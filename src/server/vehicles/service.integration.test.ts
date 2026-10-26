@@ -7,8 +7,8 @@ vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: 'phase12
 
 import { closeDb, getDb } from '@/server/db/client';
 import { usersTable, vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
-import { addPhoto, changeVehicleStatus, createDraft, discardDraft, getPublicVehicleBySlug, listPublicVehicles,
-  removePhoto, StaleVehicleError, updateVehicle } from './service';
+import { addPhoto, changeVehicleStatus, createDraft, DiscardedVehicleError, discardDraft, getPublicVehicleBySlug, listPublicVehicles,
+  removePhoto, setCoverPhoto, StaleVehicleError, updateVehicle, VehicleNotFoundError } from './service';
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (autorização simulada)', () => {
   beforeAll(async () => {
@@ -180,6 +180,70 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
       expect(row.versionNumber).toBe(versionNumber);
       expect(row.brand).toBeNull();
+    });
+  });
+
+  describe('setCoverPhoto', () => {
+    // Chaves aleatórias: a suíte não limpa linhas entre testes, então nada aqui depende de banco vazio.
+    const addImage = (vehicleId: string, position: number) =>
+      getDb().insert(vehicleImages).values({ vehicleId, storageKey: `drafts/${vehicleId}/${randomUUID()}.png`, storageProvider: 'r2',
+        mimeType: 'image/png', sizeBytes: 8, position, isCover: position === 0 }).returning().then(([row]) => row);
+    const covers = async (vehicleId: string) =>
+      (await getDb().select().from(vehicleImages).where(and(eq(vehicleImages.vehicleId, vehicleId), eq(vehicleImages.isCover, true)))).map((row) => row.id);
+    const setup = async () => {
+      const draft = await createDraft({ type: 'car', slug: `teste-${randomUUID()}` });
+      const first = await addImage(draft.id, 0);
+      const second = await addImage(draft.id, 1);
+      return { draft, first, second };
+    };
+
+    it('marca a foto escolhida como capa e desmarca a anterior', async () => {
+      const { draft, first, second } = await setup();
+      await setCoverPhoto(draft.id, second.id, draft.versionNumber);
+      expect(await covers(draft.id)).toEqual([second.id]);
+      await setCoverPhoto(draft.id, first.id, draft.versionNumber + 1);
+      expect(await covers(draft.id)).toEqual([first.id]);
+    });
+
+    it('devolve a versão nova do veículo e registra a auditoria', async () => {
+      const { draft, second } = await setup();
+      const result = await setCoverPhoto(draft.id, second.id, draft.versionNumber);
+      expect(result).toEqual({ vehicleVersion: draft.versionNumber + 1 });
+      const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(row.versionNumber).toBe(draft.versionNumber + 1);
+      const [entry] = await getDb().select().from(vehicleAudit).where(and(eq(vehicleAudit.vehicleId, draft.id), eq(vehicleAudit.operation, 'cover_changed')));
+      expect(entry.after).toMatchObject({ imageId: second.id });
+    });
+
+    it('recusa imagem de outro veículo e não altera nada', async () => {
+      const { draft, first } = await setup();
+      const other = await setup();
+      await expect(setCoverPhoto(draft.id, other.second.id, draft.versionNumber)).rejects.toBeInstanceOf(VehicleNotFoundError);
+      expect(await covers(draft.id)).toEqual([first.id]);
+      expect(await covers(other.draft.id)).toEqual([other.first.id]);
+      const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(row.versionNumber).toBe(draft.versionNumber);
+    });
+
+    it('recusa com versão velha', async () => {
+      const { draft, first, second } = await setup();
+      await expect(setCoverPhoto(draft.id, second.id, draft.versionNumber + 5)).rejects.toBeInstanceOf(StaleVehicleError);
+      expect(await covers(draft.id)).toEqual([first.id]);
+    });
+
+    it('não falha ao definir como capa a foto que já é capa', async () => {
+      const { draft, first } = await setup();
+      await expect(setCoverPhoto(draft.id, first.id, draft.versionNumber)).resolves.toEqual({ vehicleVersion: draft.versionNumber + 1 });
+      expect(await covers(draft.id)).toEqual([first.id]);
+    });
+
+    it('recusa veículo descartado antes de olhar a versão', async () => {
+      const { draft, first } = await setup();
+      const { versionNumber } = await discardDraft(draft.id, draft.versionNumber, { put: vi.fn(), delete: vi.fn(async () => {}) });
+      await expect(setCoverPhoto(draft.id, first.id, versionNumber)).rejects.toBeInstanceOf(DiscardedVehicleError);
+      await expect(setCoverPhoto(draft.id, first.id, versionNumber + 9)).rejects.toBeInstanceOf(DiscardedVehicleError);
+      const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(row.versionNumber).toBe(versionNumber);
     });
   });
 });
