@@ -12,13 +12,15 @@ const stub = vi.hoisted(() => ({
   addPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   removePhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   changeVehicleStatus: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
+  setCoverPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
+  discardDraft: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
 }));
 
-vi.mock('@/server/vehicles/service', () => ({ createDraft: stub.createDraft, updateVehicle: stub.updateVehicle, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus }));
+vi.mock('@/server/vehicles/service', () => ({ createDraft: stub.createDraft, updateVehicle: stub.updateVehicle, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus, setCoverPhoto: stub.setCoverPhoto, discardDraft: stub.discardDraft }));
 vi.mock('next/cache', () => ({ revalidatePath: stub.revalidatePath }));
 vi.mock('next/navigation', () => ({ redirect: stub.redirect, notFound: vi.fn() }));
 
-import { addVehiclePhoto, changeStatus, createVehicle, removeVehiclePhoto, saveVehicle } from './actions';
+import { addVehiclePhoto, changeStatus, createVehicle, discardVehicleDraft, removeVehiclePhoto, saveVehicle, setVehicleCover } from './actions';
 import { maskMileage, maskPrice } from './masks';
 
 const id = '6f1c1c1e-7c1e-4b59-9a53-2d2f0c1d3a11';
@@ -29,7 +31,7 @@ const formDataOf = (fields: Record<string, string>) => {
 };
 const empty = { message: null };
 
-beforeEach(() => { vi.clearAllMocks(); stub.updateVehicle.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({ vehicleVersion: 5 }); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); stub.createDraft.mockResolvedValue({ id }); });
+beforeEach(() => { vi.clearAllMocks(); stub.updateVehicle.mockResolvedValue({ versionNumber: 2, brand: 'Honda', model: 'CG', priceCents: 100, imageCount: 1 }); stub.setCoverPhoto.mockResolvedValue({ vehicleVersion: 8 }); stub.discardDraft.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({ vehicleVersion: 5 }); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); stub.createDraft.mockResolvedValue({ id }); });
 
 describe('salvar veículo', () => {
   it('pede recarga quando a versão enviada está velha', async () => {
@@ -54,11 +56,36 @@ describe('salvar veículo', () => {
     expect(stub.updateVehicle).toHaveBeenCalledWith(id, 3, expect.objectContaining({ priceCents: undefined }));
   });
 
-  it('revalida a lista e a própria página no sucesso', async () => {
+  it('revalida só a lista no sucesso', async () => {
     const state = await saveVehicle(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
     expect(state.message).toBe('Veículo salvo.');
     expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
-    expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  // O cliente é dono da versão e das pendências; revalidar o detalhe a cada pausa de digitação
+  // refaria a assinatura das fotos e a galeria inteira baixaria de novo.
+  it('não revalida a rota de detalhe', async () => {
+    await saveVehicle(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
+    expect(stub.revalidatePath).toHaveBeenCalledTimes(1);
+    expect(stub.revalidatePath).not.toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('devolve a versão nova e o que falta para publicar', async () => {
+    stub.updateVehicle.mockResolvedValueOnce({ versionNumber: 7, brand: 'Honda', model: null, priceCents: null, imageCount: 0 });
+    const state = await saveVehicle(empty, formDataOf({ id, version: '6', brand: 'Honda' }));
+    expect(state).toEqual({ message: 'Veículo salvo.', version: 7, missing: ['Modelo', 'Preço', 'Pelo menos uma foto'] });
+  });
+
+  it('devolve lista vazia quando nada falta', async () => {
+    stub.updateVehicle.mockResolvedValueOnce({ versionNumber: 3, brand: 'Honda', model: 'CG', priceCents: 1850000, imageCount: 2 });
+    expect((await saveVehicle(empty, formDataOf({ id, version: '2' }))).missing).toEqual([]);
+  });
+
+  it('não devolve versão nem pendências quando falha', async () => {
+    stub.updateVehicle.mockRejectedValueOnce(new stub.StaleVehicleError());
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1' }));
+    expect(state.version).toBeUndefined();
+    expect(state.missing).toBeUndefined();
   });
 
   it('recusa ano não numérico sem chamar o serviço', async () => {
@@ -297,5 +324,49 @@ describe('cadastrar veículo', () => {
     await expect(createVehicle(empty, formDataOf({ type: 'motorcycle' })))
       .rejects.toMatchObject({ redirectUrl: `/admin/veiculos/${id}` });
     expect(stub.createDraft).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('definir capa', () => {
+  const coverForm = () => formDataOf({ id, version: '5', imageId });
+
+  it('repassa foto e versão ao serviço e devolve a versão nova', async () => {
+    const state = await setVehicleCover(empty, coverForm());
+    expect(stub.setCoverPhoto).toHaveBeenCalledWith(id, imageId, 5);
+    expect(state).toEqual({ message: 'Capa atualizada.', version: 8 });
+  });
+
+  it('pede recarga quando a versão está velha', async () => {
+    stub.setCoverPhoto.mockRejectedValueOnce(new stub.StaleVehicleError());
+    expect((await setVehicleCover(empty, coverForm())).message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
+  });
+});
+
+describe('excluir rascunho', () => {
+  const discardForm = () => formDataOf({ id, version: '2' });
+
+  it('redireciona ao estoque após excluir', async () => {
+    await expect(discardVehicleDraft(empty, discardForm())).rejects.toMatchObject({ redirectUrl: '/admin' });
+    expect(stub.discardDraft).toHaveBeenCalledWith(id, 2);
+    expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
+  });
+
+  it('devolve mensagem própria quando o anúncio já foi publicado', async () => {
+    stub.discardDraft.mockRejectedValueOnce(new Error('Não é possível excluir um anúncio que já foi publicado.'));
+    const state = await discardVehicleDraft(empty, discardForm());
+    expect(state.message).toBe('Não é possível excluir um anúncio que já foi publicado.');
+    expect(stub.redirect).not.toHaveBeenCalled();
+  });
+
+  it('não vaza erro inesperado e não redireciona', async () => {
+    stub.discardDraft.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    expect((await discardVehicleDraft(empty, discardForm())).message).toBe('Não foi possível salvar agora. Tente de novo.');
+    expect(stub.redirect).not.toHaveBeenCalled();
+  });
+
+  // O rascunho já foi excluído: falha ao revalidar não pode virar erro nem impedir a saída da tela.
+  it('não transforma falha de revalidação em erro', async () => {
+    stub.revalidatePath.mockImplementationOnce(() => { throw new Error('falha ao revalidar'); });
+    await expect(discardVehicleDraft(empty, discardForm())).rejects.toMatchObject({ redirectUrl: '/admin' });
   });
 });

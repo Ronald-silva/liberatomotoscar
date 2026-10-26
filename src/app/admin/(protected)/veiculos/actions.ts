@@ -2,12 +2,15 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { addPhoto, createDraft, changeVehicleStatus, removePhoto, updateVehicle } from '@/server/vehicles/service';
+import { addPhoto, createDraft, changeVehicleStatus, discardDraft, removePhoto, setCoverPhoto, updateVehicle } from '@/server/vehicles/service';
+import { publishRequirements } from '@/server/vehicles/validation';
 import { toFormMessage } from './feedback';
 
 // `version` só vem preenchido quando a operação incrementou a versão do veículo e a tela precisa
 // dela em seguida — é o caso do envio de várias fotos, uma após a outra, sem recarregar.
-export type FormState = { message: string | null; version?: number };
+// `missing` só vem do salvamento: o que ainda falta para publicar, já recalculado, para a tela
+// não precisar perguntar de novo ao servidor a cada pausa na digitação.
+export type FormState = { message: string | null; version?: number; missing?: readonly string[] };
 
 const text = (data: FormData, key: string) => String(data.get(key) ?? '').trim();
 const orNull = (value: string) => value === '' ? null : value;
@@ -63,9 +66,12 @@ function readPriceCents(typed: string): number | undefined {
   return cents === null ? fail('Informe o preço em reais, por exemplo 18.500,00.') : cents;
 }
 
-// Um único "Salvar" para a tela inteira: dados e preço na mesma transação do serviço.
+// Um único salvamento para a tela inteira: dados e preço na mesma transação do serviço.
+// Não usa `run`: devolve também as pendências e, de propósito, não revalida a rota de detalhe —
+// a tela é dona da versão e das pendências, e revalidar a cada pausa na digitação refaria a
+// assinatura das fotos e baixaria a galeria inteira de novo.
 export async function saveVehicle(_state: FormState, formData: FormData): Promise<FormState> {
-  return run(formData, 'Veículo salvo.', (id, version) => {
+  try {
     // Limites iguais aos do serviço, validados aqui para dar a mensagem certa em vez da genérica.
     const short = (key: string) => limitedText(text(formData, key), 160, 'Marca, modelo, versão e cor aceitam até 160 caracteres.');
     const year = wholeNumber(text(formData, 'year'));
@@ -73,14 +79,35 @@ export async function saveVehicle(_state: FormState, formData: FormData): Promis
     if (year !== null && (year < 1900 || year > 2100)) fail('O ano deve estar entre 1900 e 2100.');
     if (mileageKm !== null && mileageKm > MAX_INT) fail('A quilometragem informada é grande demais.');
     const priceCents = readPriceCents(text(formData, 'price'));
-    return updateVehicle(id, version, {
+    const { imageCount, ...saved } = await updateVehicle(text(formData, 'id'), Number(text(formData, 'version')), {
       details: {
         brand: short('brand'), model: short('model'), version: short('versionName'), year, mileageKm, color: short('color'),
         description: limitedText(text(formData, 'description'), 5000, 'A descrição aceita até 5000 caracteres.'),
       },
       priceCents,
     });
-  });
+    revalidatePath('/admin');
+    const missing = publishRequirements(saved, imageCount).filter((item) => !item.done).map((item) => item.label);
+    return { message: 'Veículo salvo.', version: saved.versionNumber, missing };
+  } catch (error) {
+    return { message: toFormMessage(error) };
+  }
+}
+
+export async function setVehicleCover(_state: FormState, formData: FormData): Promise<FormState> {
+  return run(formData, 'Capa atualizada.', (id, version) => setCoverPhoto(id, text(formData, 'imageId'), version));
+}
+
+export async function discardVehicleDraft(_state: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await discardDraft(text(formData, 'id'), Number(text(formData, 'version')));
+  } catch (error) {
+    return { message: toFormMessage(error) };
+  }
+  // O rascunho já foi excluído aqui: falha ao revalidar não pode virar mensagem de erro, ou a
+  // pessoa ficaria numa tela de um anúncio que não existe mais. A lista se corrige na próxima navegação.
+  try { revalidatePath('/admin'); } catch { /* ver acima */ }
+  redirect('/admin'); // redirect lança: um catch o engoliria
 }
 
 export async function addVehiclePhoto(_state: FormState, formData: FormData): Promise<FormState> {
