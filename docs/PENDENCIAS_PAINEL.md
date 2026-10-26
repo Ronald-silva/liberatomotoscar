@@ -1,45 +1,37 @@
-# Pendências conhecidas do painel — depois da apresentação
+# Pendências conhecidas do painel
 
-Achados classificados como Minor durante as revisões de 2026-10-25 e deliberadamente adiados.
-Nenhum deles bloqueia a apresentação. A revisão final do branch triou e confirmou que podem esperar.
+Atualizado em 26/10/2026 após o cadastro guiado no celular.
 
-## Lista
+## Resolvido nesta entrega
 
-- **Task 3+4** — check-r2 não imprime nem limpa a chave órfã se o delete falhar.
-- **Task 3+4** — catch genérico do import esconde a causa do erro de banco.
-- **Task 5** — preço 0 exibido como "Sem preço".
-- **Task 5** — cores das etiquetas em hex fixo, fora dos tokens --admin-*.
-- **Task 5** — testes cobrem 3 das 10 mensagens conhecidas; nada protege contra deriva
-- **Task 6** — mensagem de versão velha sem botão de recarregar.
-- **Task 6** — sessão expirada vira mensagem genérica.
-- **Task 6** — página reconhece erro por nome/texto em vez de instanceof.
-- **Task 7** — mensagem local do cliente não passa por toFormMessage.
-- **Task 7** — rótulo "Tirar ou escolher foto" engana no Android (capture força câmera).
-- **Task 7** — getAdminPhotoReadUrl por imagem na edição; URL com falha derruba a página.
-- **Task 7** — .catch(() => null) engole erro de assinatura em silêncio na lista.
-- **Task 6** — estado local mascara valores reformatados pelo servidor após salvar.
-- **Task 6** — campo Ano aceita "2.024" e converte em 2024.
-- **Task 6** — não há teste de montagem de VehicleForms; o re-revisor aponta que
-- **Task 8** — botões de estado sem feedback de envio ("Publicando..." nunca aparece).
-- **Task 8** — rótulo "Publicar" é ambíguo quando o veículo está reservado/vendido.
-- **Task 8** — status inválido por POST cai na mensagem genérica.
-- **Task 8** — sem teste de componente que prove a derivação dos botões.
-- **Task 9** — os dois botões mostram "Criando..." juntos (pending do formulário inteiro).
-- **Task 9** — revalidatePath dentro do try pode gerar rascunho órfão duplicado.
-- **Task 9** — nada protege contra classe de CSS Modules inexistente — foi exatamente
+- Câmera e galeria agora têm escolhas separadas. A galeria aceita várias fotos; a câmera usa `capture="environment"` somente no seu próprio input.
+- `VehicleForms` grava automaticamente, mantém os dados após falha e tem testes de montagem.
+- A tela mostra `Salvando...`, `✓ salvo` e uma tentativa de recuperação quando a gravação falha.
+- A publicação confirma disponibilidade e mostra `Publicando...` durante o envio.
+- Os botões de criação de moto/carro não mostram `Criando...` juntos.
+- A guarda de classes CSS Modules inexistentes está coberta por `css-classes.test.ts`.
+- A foto e a mudança de estado devolvem a nova versão à fila do editor; isso foi confirmado por teste e pelo fluxo real.
+- A página de detalhe usa duas consultas paralelas e tolera falha ao assinar URL de foto.
+- O estoque permite filtrar por estado, com contagens.
 
-## Prioridade sugerida pela revisão final
+## Antes de publicar esta branch
 
-1. **Guarda contra classe de CSS Modules inexistente** (Task 9). O build não acusa classe ausente:
-   CSS Modules devolve `undefined` em silêncio. Foi assim que um arquivo de estilo foi parar em
-   caminho errado e passou em typecheck, lint e build sem ninguém notar. É o de maior valor.
-2. **Teste de montagem de `VehicleForms`** (Task 6), com happy-dom ou jsdom como devDependency:
-   provaria que o valor digitado persiste após erro e que o `version` oculto acompanha a prop nova.
-3. O restante é cosmético ou dívida de teste.
+- Aplicar a migração não destrutiva `drizzle/0005_vehicle_discarded.sql` ao Neon atual **somente com ordem explícita do proprietário**. Em 26/10/2026, a constraint `vehicle_status_valid` do banco atual ainda não aceita `discarded`; a ação “Excluir rascunho” falharia. A migração deve vir antes do deploy do código.
+- O código está somente na branch `painel-cadastro-simples`; nenhum deploy ou configuração da Vercel foi alterado nesta entrega.
 
-## Nota de arquitetura para a Fase 3
+## Limites e melhorias posteriores
 
-`src/app/admin/(protected)/layout.tsx` **não é barreira de segurança** no Next 16: o layout não
-impede o segmento de executar (ver `node_modules/next/dist/docs/01-app/02-guides/authentication.md`).
-A barreira real é o `requireAdmin()` dentro de `src/server/vehicles/service.ts`, presente em todas as
-funções administrativas. Qualquer rota nova precisa passar pelo serviço — não basta colocá-la sob o grupo.
+- A vitrine pública continua lendo o catálogo estático. Publicar no painel ainda não coloca o veículo na vitrine.
+- O upload depende da redução de imagem no navegador e do limite de corpo da server action.
+- URLs assinadas do R2 expiram em 15 minutos; uma tela aberta por mais tempo pode precisar de recarga.
+- Se o `delete` compensatório no R2 falhar, um objeto órfão pode permanecer. A limpeza automática desses órfãos continua pendente.
+- A exclusão lógica mantém veículo e auditoria no banco por desenho. Um veículo de teste publicado e depois arquivado não pode ser removido fisicamente.
+- A exclusão de um dos sete veículos legados apaga o vínculo com suas fotos estáticas; o importador não restaura esse vínculo. A confirmação é a proteção atual.
+- Melhorar a mensagem quando a sessão expira e ampliar a cobertura das mensagens de erro conhecidas.
+- O estado local do formulário pode mostrar um valor com a formatação anterior até a próxima recarga se o servidor normalizar um campo.
+- A lista ainda pode usar um fallback sem capa quando a assinatura R2 falha; o erro é registrado no servidor.
+- As cores das etiquetas de estado usam valores fixos em parte do CSS; podem ser alinhadas aos tokens do painel.
+
+## Segurança da rota
+
+O layout de `(protected)` não é a barreira de autorização no Next 16. Cada operação administrativa passa por `requireAdmin()` no serviço; funções novas devem seguir esse padrão.

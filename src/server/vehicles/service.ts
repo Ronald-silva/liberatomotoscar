@@ -252,7 +252,7 @@ export async function removePhoto(vehicleId: string, imageId: string, expectedVe
     const [after] = await tx.update(vehicles).set({ updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
       .where(eq(vehicles.id, vehicleId)).returning();
     await audit(tx, after, actor.userId, 'photo_removed', before, { imageId: image.id, storageKey: image.storageKey });
-    return image;
+    return { ...image, vehicleVersion: after.versionNumber };
   });
   if (removed.storageProvider === 'r2') {
     try { await (storage ?? createR2Storage()).delete(removed.storageKey); } catch { /* orphan cleanup is documented */ }

@@ -237,6 +237,27 @@
 .checkItemOn { color: var(--admin-ok); }
 .checkMark { display: inline-grid; place-items: center; width: 1.5rem; font-weight: 700; }
 
+.saveIndicator { display: flex; flex-wrap: wrap; align-items: center; gap: var(--admin-space-1); min-height: 44px; margin-top: var(--admin-space-2); color: var(--admin-muted); }
+.saveIndicator .buttonCompact { width: auto; }
+.uploadChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--admin-space-1); }
+.uploadProgress { min-height: 1.5rem; margin: var(--admin-space-1) 0 0; color: var(--admin-muted); }
+.photoActions { display: grid; gap: var(--admin-space-1); }
+.photoActions .badge { justify-self: start; }
+.dangerActions { display: grid; gap: var(--admin-space-1); margin-top: var(--admin-space-4); padding-top: var(--admin-space-3); border-top: 1px solid var(--admin-line); }
+.editorWithFooter { padding-bottom: calc(var(--admin-sticky-action) + var(--admin-space-5) + var(--admin-space-3)); }
+.editorFooter { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; padding: var(--admin-space-1) var(--admin-space-2) max(var(--admin-space-2), env(safe-area-inset-bottom)); background: var(--admin-bg); border-top: 1px solid var(--admin-line); }
+.editorFooterKeyboard { display: none; }
+.editorFooterInner { width: min(100%, 640px); margin: 0 auto; }
+.editorFooter .chipHint { margin-top: var(--admin-space-1); }
+.confirmPublish { display: grid; gap: var(--admin-space-1); }
+.confirmPublish .notice { margin: 0; }
+.statusFilter { display: flex; gap: var(--admin-space-1); overflow-x: auto; padding: var(--admin-space-2) 2px; margin: var(--admin-space-1) -2px 0; scrollbar-width: thin; }
+.filterLink { display: inline-flex; align-items: center; min-height: 44px; flex: 0 0 auto; padding: var(--admin-space-1) var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); color: var(--admin-ink); text-decoration: none; }
+.filterLink:hover { border-color: var(--admin-ink); }
+.filterLink:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
+.filterLinkActive { background: var(--admin-accent); border-color: var(--admin-accent); font-weight: 700; }
+@media (max-width: 480px) { .uploadChoices { grid-template-columns: 1fr; } }
+
 /* O container de rolagem é o documento, não um elemento deste módulo; sem isto o navegador
    encosta o campo focado atrás da barra fixa ao rolá-lo para a tela. */
 :global(html) { scroll-padding-bottom: calc(var(--admin-sticky-action, 5.25rem) + var(--admin-space-2, 1rem)); }

@@ -1,50 +1,46 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import styles from '../../../admin.module.css';
 import { changeStatus, type FormState } from '../actions';
 import { FormNotice } from '../FormNotice';
-import { SubmitButton } from '../SubmitButton';
 import { actionLabels, statusLabels, type VehicleStatus } from '../status';
+import type { VehicleDraft } from './useVehicleDraft';
 
 const initial: FormState = { message: null };
 
-// `targets` vem do servidor, derivado de allowedStatusTransitions: a tela só oferece o que o
-// serviço aceita. `publishBlocked` traz o que falta para publicar, pela mesma regra que o
-// serviço usa — o botão fica desabilitado com o motivo à vista, em vez de recusar depois do toque.
-export function StatusActions({ vehicleId, version, status, targets, publishBlocked = [] }: {
-  vehicleId: string; version: number; status: VehicleStatus; targets: VehicleStatus[]; publishBlocked?: readonly string[];
+export function StatusActions({ vehicleId, draft, status, targets }: {
+  vehicleId: string; draft: VehicleDraft; status: VehicleStatus; targets: VehicleStatus[];
 }) {
-  const [state, action] = useActionState(changeStatus, initial);
-  const [confirming, setConfirming] = useState(false);
-  const [seen, setSeen] = useState(state);
-  // O formulário de confirmação fica montado durante o envio (para o botão mostrar "Publicando...")
-  // e só fecha quando chega o resultado da action.
-  if (seen !== state) { setSeen(state); setConfirming(false); }
-  const hidden = <>
-    <input type="hidden" name="id" value={vehicleId} />
-    <input type="hidden" name="version" value={version} />
-  </>;
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const router = useRouter();
+  const ordinary = targets.filter((target) => target !== 'published' && target !== 'archived');
+
+  async function change(target: VehicleStatus) {
+    setBusy(true);
+    if (!await draft.saveBeforeAction()) { setBusy(false); return; }
+    const state = await draft.enqueue((version) => {
+      const data = new FormData();
+      data.set('id', vehicleId);
+      data.set('version', String(version));
+      data.set('status', target);
+      return changeStatus(initial, data);
+    }).catch((): FormState => ({ message: 'Não foi possível atualizar o anúncio. Tente de novo.' }));
+    setBusy(false);
+    setMessage(state.version === undefined ? state.message : null);
+    if (state.version !== undefined) router.refresh();
+  }
+
   return <section aria-labelledby="estado-title">
     <h2 id="estado-title" className={styles.subheading}>Situação: {statusLabels[status]}</h2>
-    {confirming ? <form className={styles.form} action={action}>
-      {hidden}
-      <input type="hidden" name="status" value="published" />
-      <input type="hidden" name="confirmAvailability" value="true" />
-      <p className={styles.notice} role="alert">Este veículo está disponível para venda?</p>
-      <SubmitButton label="Sim, publicar" pendingLabel="Publicando..." />
-      <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" onClick={() => setConfirming(false)}>Cancelar</button>
-    </form> : <form className={styles.statusActions} action={action}>
-      {hidden}
-      {targets.map((target) => target === 'published'
-        ? <button key={target} className={styles.button} type="button" disabled={publishBlocked.length > 0}
-          aria-describedby={publishBlocked.length > 0 ? 'publicar-bloqueado' : undefined}
-          onClick={() => setConfirming(true)}>{actionLabels[target]}</button>
-        : <SubmitButton key={target} secondary name="status" value={target} label={actionLabels[target]} pendingLabel="Atualizando..." />)}
-      {publishBlocked.length > 0 ? <p id="publicar-bloqueado" className={styles.chipHint}>
-        Para publicar, complete: {publishBlocked.join(', ')}.
-      </p> : null}
-    </form>}
-    <FormNotice message={state.message} vehicleId={vehicleId} />
+    {ordinary.length > 0 ? <div className={styles.statusActions}>
+      {ordinary.map((target) => <button key={target} className={`${styles.button} ${styles.buttonSecondary}`}
+        type="button" disabled={busy} onClick={() => void change(target)}>
+        {busy ? 'Atualizando...' : actionLabels[target]}
+      </button>)}
+    </div> : null}
+    <FormNotice message={message} vehicleId={vehicleId} />
   </section>;
 }

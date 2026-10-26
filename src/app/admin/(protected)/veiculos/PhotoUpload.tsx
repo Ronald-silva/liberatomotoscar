@@ -1,9 +1,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from '../../admin.module.css';
 import { addVehiclePhoto, type FormState } from './actions';
 import { FormNotice } from './FormNotice';
+import type { VehicleDraft } from './[id]/useVehicleDraft';
 
 const MAX_SIDE = 1920;
 const QUALITY = 0.82;
@@ -21,9 +23,14 @@ async function decode(file: File): Promise<{ source: CanvasImageSource; width: n
   } catch {
     const url = URL.createObjectURL(file);
     const image = new Image();
-    image.src = url;
-    await image.decode();
-    return { source: image, width: image.naturalWidth, height: image.naturalHeight, release: () => URL.revokeObjectURL(url) };
+    try {
+      image.src = url;
+      await image.decode();
+      return { source: image, width: image.naturalWidth, height: image.naturalHeight, release: () => URL.revokeObjectURL(url) };
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
   }
 }
 
@@ -58,10 +65,12 @@ async function shrink(file: File): Promise<File> {
  * Sem `capture`: forçar a câmera impedia escolher fotos já tiradas, que é o caso comum de quem
  * fotografa o veículo antes de sentar para cadastrar.
  */
-export function PhotoUpload({ vehicleId, version }: { vehicleId: string; version: number }) {
+export function PhotoUpload({ vehicleId, draft }: { vehicleId: string; draft: VehicleDraft }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const input = useRef<HTMLInputElement>(null);
+  const cameraInput = useRef<HTMLInputElement>(null);
+  const galleryInput = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   async function send(file: File, atVersion: number): Promise<FormState> {
     const data = new FormData();
@@ -76,7 +85,6 @@ export function PhotoUpload({ vehicleId, version }: { vehicleId: string; version
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
     setMessage(null);
-    let current = version;
     let sent = 0;
     let failure: string | null = null;
 
@@ -89,26 +97,42 @@ export function PhotoUpload({ vehicleId, version }: { vehicleId: string; version
         failure = error instanceof Error && error.message === 'grande' ? TOO_BIG : BAD_FILE;
         break;
       }
-      const state = await send(photo, current);
+      let state: FormState;
+      try {
+        state = await draft.enqueue((version) => send(photo, version));
+      } catch {
+        failure = 'Não foi possível enviar esta foto. Tente de novo.';
+        break;
+      }
       // Sem versão nova, a foto não entrou: a mensagem da action diz por quê.
       if (state.version === undefined) { failure = state.message; break; }
-      current = state.version;
+      draft.photoAdded();
       sent += 1;
     }
 
     setBusy(null);
-    if (input.current) input.current.value = '';
+    if (cameraInput.current) cameraInput.current.value = '';
+    if (galleryInput.current) galleryInput.current.value = '';
+    if (sent > 0) router.refresh();
     const done = sent === 0 ? null : sent === 1 ? 'Foto adicionada.' : `${sent} fotos adicionadas.`;
     setMessage(failure && done ? `${done} A seguinte não deu: ${failure}` : failure ?? done);
   }
 
   return <div className={styles.form}>
-    <label className={`${styles.button} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy !== null}>
-      {busy ?? 'Adicionar fotos'}
-      <input ref={input} className={styles.visuallyHidden} type="file" accept="image/*" multiple
-        disabled={busy !== null} onChange={onChange} />
-    </label>
+    <div className={styles.uploadChoices}>
+      <label className={`${styles.button} ${styles.buttonSecondary} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy !== null}>
+        Tirar foto
+        <input ref={cameraInput} className={styles.visuallyHidden} type="file" accept="image/*" capture="environment"
+          disabled={busy !== null} onChange={onChange} />
+      </label>
+      <label className={`${styles.button} ${styles.buttonSecondary} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy !== null}>
+        Escolher da galeria
+        <input ref={galleryInput} className={styles.visuallyHidden} type="file" accept="image/*" multiple
+          disabled={busy !== null} onChange={onChange} />
+      </label>
+    </div>
     <p className={styles.chipHint}>Pode escolher várias de uma vez. A primeira vira a capa do anúncio.</p>
+    <p className={styles.uploadProgress} role="status" aria-live="polite">{busy}</p>
     <FormNotice message={message} vehicleId={vehicleId} />
   </div>;
 }

@@ -41,8 +41,9 @@ function parsePriceCents(typed: string): number | null {
 
 // A versão nova, quando o serviço a devolve, volta para a tela no FormState.
 function newVersionOf(result: unknown): number | undefined {
-  if (typeof result !== 'object' || result === null || !('vehicleVersion' in result)) return undefined;
-  const version = (result as { vehicleVersion: unknown }).vehicleVersion;
+  if (typeof result !== 'object' || result === null) return undefined;
+  const version = 'vehicleVersion' in result ? result.vehicleVersion
+    : 'versionNumber' in result ? result.versionNumber : undefined;
   return typeof version === 'number' ? version : undefined;
 }
 

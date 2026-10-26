@@ -225,6 +225,11 @@ describe('adicionar foto', () => {
 describe('remover foto', () => {
   const removeForm = () => formDataOf({ id, version: '5', imageId });
 
+  it('devolve a versão nova para a próxima operação da fila', async () => {
+    stub.removePhoto.mockResolvedValueOnce({ vehicleVersion: 6 });
+    expect(await removeVehiclePhoto(empty, removeForm())).toEqual({ message: 'Foto removida.', version: 6 });
+  });
+
   it('repassa veículo, foto e versão e revalida', async () => {
     const state = await removeVehiclePhoto(empty, removeForm());
     expect(state.message).toBe('Foto removida.');
@@ -248,6 +253,12 @@ describe('mudar estado', () => {
     expect(stub.changeVehicleStatus).toHaveBeenCalledWith(id, 6, 'reserved', { confirmAvailability: false });
     expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
     expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('devolve a versão nova para a fila do editor após publicar', async () => {
+    stub.changeVehicleStatus.mockResolvedValueOnce({ versionNumber: 7 });
+    expect(await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' })))
+      .toEqual({ message: 'Estado atualizado.', version: 7 });
   });
 
   it('só envia a confirmação quando o campo vale exatamente "true"', async () => {
