@@ -4,7 +4,12 @@ import { closeDb, getDb } from '@/server/db/client';
 import { importLegacyVehicles } from '@/server/vehicles/import-legacy';
 
 loadEnvConfig(process.cwd());
-const DEVELOPMENT_BRANCH_ID = 'br-dry-star-b6ma37vq';
+// Branch única do projeto novo em us-east-1 (liberato-motos-car-us). O nome "development" é
+// histórico: o projeto anterior tinha development e production separadas. Com uma branch só, toda
+// escrita é em produção, e esta trava mudou de sentido — deixou de proteger contra "escrever na
+// branch errada" e passa a proteger contra "escrever no projeto errado": o script recusa se a
+// conexão não for exatamente esta branch.
+const DEVELOPMENT_BRANCH_ID = 'br-quiet-tooth-b83ew3t8';
 
 function databaseHost(): string | null {
   try {

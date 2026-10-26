@@ -73,7 +73,7 @@ Este passo importa porque o upload de foto é a parte mais visual da demonstraç
 Isso enche o estoque que ele vai ver.
 
 ```
-npx tsx scripts/import-legacy.ts --execute-development br-dry-star-b6ma37vq
+npx tsx scripts/import-legacy.ts --execute-development br-quiet-tooth-b83ew3t8
 ```
 
 | Resultado | Significado | O que fazer |
@@ -91,7 +91,7 @@ o número que ele imprime.
 ### Passo 6. Dar acesso ao Liberato
 
 ```
-npm run auth:grant-development -- --execute-development br-dry-star-b6ma37vq
+npm run auth:grant-development -- --execute-development br-quiet-tooth-b83ew3t8
 ```
 
 | Resultado | Significado | O que fazer |

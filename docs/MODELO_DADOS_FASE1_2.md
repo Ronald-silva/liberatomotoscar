@@ -39,7 +39,7 @@ As cinco migrações foram aplicadas em um PostgreSQL 16 descartável em `127.0.
 ## Implantação futura e rollback
 
 1. Obter autorização para migração remota, verificar backup/restauração e revisar os arquivos SQL. Criar ou confirmar um papel de migração separado do papel de runtime. O papel de runtime deve ter os privilégios mínimos descritos em `FUNDACAO_TECNICA_FASE1.md`; ele não deve ter `UPDATE`, `DELETE` ou `TRUNCATE` em `vehicle_audit`.
-2. Conferir novamente a branch antes de qualquer escrita: `NEON_DEVELOPMENT_BRANCH_ID=br-dry-star-b6ma37vq npm run db:check`. Esse verificador executa apenas `SELECT 1` e associa endpoint à branch. Não divulgar a saída de variáveis de ambiente.
+2. Conferir novamente a branch antes de qualquer escrita: `NEON_DEVELOPMENT_BRANCH_ID=br-quiet-tooth-b83ew3t8 npm run db:check`. Esse verificador executa apenas `SELECT 1` e associa endpoint à branch. Não divulgar a saída de variáveis de ambiente.
 3. Com `DATABASE_URL_DIRECT` configurada para a branch autorizada, aplicar **somente após autorização**: `npm run db:migrate`. `npm run db:generate` apenas gera SQL local quando o schema muda. Nunca apontar os testes de integração para o Neon: use um PostgreSQL isolado e defina `DATABASE_URL` e `TEST_DATABASE_URL` com a mesma URL local.
 4. Conferir histórico, tabelas, constraints e índices após a migração. A importação legada é uma operação separada e não deve publicar anúncios automaticamente.
 
