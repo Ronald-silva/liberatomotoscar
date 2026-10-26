@@ -38,15 +38,19 @@ Para **cada** tipo, o Playwright confirmou: criação pelo seletor Moto/Carro; p
 
 O fluxo executado usou **14 interações de toque equivalentes** até publicar, incluindo troca de capa e uma edição adicional, sem contar teclas digitadas nem recargas de verificação. É a contagem da sequência automatizada, não uma medição em um Android físico.
 
-Layout: sem rolagem horizontal em 360, 390, 430, 768 e 1440 px. No rascunho, o rodapé não cobriu a última ação; com o campo Preço focado e viewport de 390×500 px, ele ficou visível e o rodapé foi ocultado. O filtro de estado e as confirmações foram cobertos por testes de componente; a exclusão de rascunho **não** foi executada no Neon atual pela pendência de migração abaixo.
+Layout: sem rolagem horizontal em 360, 390, 430, 768 e 1440 px. No rascunho, o rodapé não cobriu a última ação; com o campo Preço focado e viewport de 390×500 px, ele ficou visível e o rodapé foi ocultado. O filtro de estado e as confirmações foram cobertos por testes de componente.
 
 O filtro também foi verificado no navegador real: `?estado=arquivado` ficou ativo e exibiu o registro de teste arquivado; `?estado=rascunho` não o exibiu.
 
 Limpeza limitada aos dois veículos de teste: ambos foram arquivados; as quatro linhas de imagem foram removidas; quatro objetos R2 correspondentes foram verificados como ausentes. **Zero veículos preexistentes e zero imagens preexistentes foram modificados** nas comparações antes/depois. As duas linhas de veículo e sua auditoria permanecem arquivadas, conforme o modelo append-only.
 
-## Pendência para publicação
+## Migração concluída após o teste inicial
 
-O Neon atual ainda aplica `vehicle_status_valid` sem `discarded`. Por orientação do proprietário, **nenhuma migração foi executada**. A migração não destrutiva `drizzle/0005_vehicle_discarded.sql` precisa ser revisada e aplicada **antes** de publicar esta branch; sem ela, “Excluir rascunho” falha. Nenhum deploy ou ajuste da Vercel foi feito.
+Após ordem explícita do proprietário para concluir a pendência, a conexão direta foi conferida contra a branch de produção documentada e a conexão de runtime. O histórico tinha cinco migrações aplicadas; `drizzle/0005_vehicle_status_discarded.sql` era a única pendente. `npm run db:migrate` passou. A conferência posterior mostrou seis entradas no histórico, a constraint `vehicle_status_valid` aceitando `discarded` e os mesmos 17 veículos presentes antes da migração.
+
+Foi criado um rascunho de teste adicional com marcador `62E0DD7068`, ID `232bb49d-02fa-46af-9d1f-f5784498778f`, e uma foto. A ação “Excluir rascunho” redirecionou ao estoque; o registro ficou em `discarded` com auditoria `discarded`, sua linha de imagem sumiu e o objeto R2 foi confirmado ausente. Nenhum veículo ou imagem preexistente foi modificado. No estoque, o registro não apareceu em “Tudo” e apareceu no filtro “Descartados”. A linha descartada e sua auditoria permanecem no Neon por desenho.
+
+**Nenhum deploy ou ajuste da Vercel foi feito.** A branch de código ainda precisa de uma decisão de publicação separada.
 
 ## Limites conhecidos
 

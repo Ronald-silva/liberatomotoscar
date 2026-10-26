@@ -14,9 +14,9 @@ Atualizado em 26/10/2026 após o cadastro guiado no celular.
 - A página de detalhe usa duas consultas paralelas e tolera falha ao assinar URL de foto.
 - O estoque permite filtrar por estado, com contagens.
 
-## Antes de publicar esta branch
+## Estado do banco e publicação
 
-- Aplicar a migração não destrutiva `drizzle/0005_vehicle_discarded.sql` ao Neon atual **somente com ordem explícita do proprietário**. Em 26/10/2026, a constraint `vehicle_status_valid` do banco atual ainda não aceita `discarded`; a ação “Excluir rascunho” falharia. A migração deve vir antes do deploy do código.
+- A migração não destrutiva `drizzle/0005_vehicle_status_discarded.sql` foi aplicada ao Neon atual em 26/10/2026, após ordem explícita do proprietário. O histórico passou de cinco para seis entradas; `vehicle_status_valid` aceita `discarded`. A exclusão de um rascunho de teste com uma foto passou no navegador, no banco, na auditoria e no R2.
 - O código está somente na branch `painel-cadastro-simples`; nenhum deploy ou configuração da Vercel foi alterado nesta entrega.
 
 ## Limites e melhorias posteriores
