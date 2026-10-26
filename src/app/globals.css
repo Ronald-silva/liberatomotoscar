@@ -200,7 +200,7 @@ img { max-width: 100%; }
   pointer-events: none;
   background: radial-gradient(circle, rgba(224, 37, 47, 0.20), transparent 62%);
 }
-.hero-media { position: absolute; inset: 0; z-index: 0; }
+.hero-media { position: absolute; inset: 0 var(--space-4) var(--space-4); z-index: 0; overflow: hidden; border-radius: var(--radius-card); }
 .hero-image { object-fit: cover; object-position: center 60%; }
 .hero-shade {
   position: absolute;
@@ -301,9 +301,9 @@ img { max-width: 100%; }
 .vehicle-number::before { content: counter(veiculo, decimal-leading-zero); }
 .vehicle-card { display: grid; grid-template-columns: minmax(0, 45%) minmax(0, 55%); min-width: 0; background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--radius-card); -webkit-backdrop-filter: blur(16px);
  backdrop-filter: blur(16px); overflow: hidden; transition: transform var(--duration) var(--ease), border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
-/* Palco: o veículo deixa o painel branco e passa a pousar sobre o escuro, com
-   um brilho vermelho na base e o próprio reflexo embaixo. */
-.vehicle-image-wrap { --chao: 13%; position: relative; height: 100%; min-height: 380px; overflow: hidden; }
+/* Palco escuro com um brilho discreto atrás da foto do veículo. */
+.vehicle-image-wrap { position: relative; display: grid; place-items: center; height: 100%; min-height: clamp(380px, 34vw, 450px); overflow: hidden; }
+.vehicle-photo { position: relative; z-index: 1; display: block; width: min(calc(100% - 2 * var(--space-4)), 560px); aspect-ratio: 4 / 3; overflow: hidden; border-radius: var(--radius-box); box-shadow: 0 28px 34px rgba(0,0,0,.45); }
 .vehicle-image-wrap::before {
   content: '';
   position: absolute;
@@ -313,21 +313,7 @@ img { max-width: 100%; }
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 100%, rgba(224,37,47,.30), rgba(224,37,47,.05) 45%, transparent 70%);
 }
-.vehicle-reflection {
-  position: absolute;
-  z-index: 0;
-  inset: var(--space-4) var(--space-4) var(--chao);
-  pointer-events: none;
-  transform: translateY(100%) scaleY(-1);
-  opacity: .24;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 46%, rgba(0, 0, 0, 0.95));
-  mask-image: linear-gradient(to bottom, transparent 46%, rgba(0, 0, 0, 0.95));
-}
-/* A arte do reflexo é a mesma foto, servida pelo otimizador. Como background de
-   CSS ela saía crua: 11,3 MB de PNG por visita, sem carregamento adiado, só
-   para um enfeite a 24% de opacidade atrás do veículo. */
-.vehicle-reflection-art { object-fit: contain; object-position: center bottom; }
-.vehicle-image { z-index: 1; object-fit: contain; padding: var(--space-4) var(--space-4) var(--chao); filter: drop-shadow(0 28px 34px rgba(0,0,0,.72)); transition: transform 480ms var(--ease); }
+.vehicle-image { object-fit: cover; transition: transform 480ms var(--ease); }
 .vehicle-card:hover .vehicle-image { transform: scale(1.035); }
 .vehicle-number, .vehicle-type { position: absolute; top: var(--space-4); z-index: 2; color: var(--white); font-size: .62rem; font-weight: 800; letter-spacing: .12em; }
 .vehicle-number { left: var(--space-4); color: var(--ink-soft); }
@@ -361,7 +347,7 @@ img { max-width: 100%; }
 .step h3 { margin: auto 0 var(--space-3); font-family: var(--font-display), sans-serif; font-size: 2.15rem; text-transform: uppercase; line-height: 1; }
 .step p { margin: 0; color: var(--ink-muted); font-size: .82rem; line-height: 1.65; }
 
-.trade { position: relative; min-height: 410px; display: flex; align-items: center; overflow: hidden; background: #15191f; }
+.trade { position: relative; min-height: 410px; display: flex; align-items: center; overflow: hidden; margin-inline: var(--space-4); border-radius: var(--radius-card); background: #15191f; }
 .trade-media { position: absolute; inset: 0; z-index: 0; }
 .trade-art { object-fit: cover; object-position: right center; opacity: .9; }
 .trade::before { content: ''; position: absolute; z-index: 1; inset: 0; background: linear-gradient(90deg, #11151b 0%, rgba(17,21,27,.95) 47%, rgba(17,21,27,.18) 100%); }
@@ -439,9 +425,10 @@ img { max-width: 100%; }
 .detail-contact p:not(.eyebrow) { max-width: 510px; margin: 0; color: var(--ink-muted); line-height: 1.6; }
 .viewer { background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--radius-box); overflow: hidden; }
 .viewer-stage { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: radial-gradient(ellipse at 50% 108%, rgba(224,37,47,.22), transparent 62%), #0c0e13; }
+.viewer-photo { position: absolute; inset: var(--space-4); overflow: hidden; border-radius: var(--radius-box); pointer-events: none; }
 .viewer-stage--interactive { cursor: grab; touch-action: pan-y; }
 .viewer-stage--interactive:active { cursor: grabbing; }
-.viewer-image { object-fit: contain; padding: var(--space-5); filter: drop-shadow(0 28px 34px rgba(0,0,0,.7)); user-select: none; pointer-events: none; }
+.viewer-image { object-fit: cover; user-select: none; pointer-events: none; }
 .viewer-badge { position: absolute; left: var(--space-4); bottom: var(--space-4); padding: var(--space-2) var(--space-4); border-radius: var(--radius-pill); background: rgba(5,7,10,.75); font-size: .6rem; letter-spacing: .14em; font-weight: 800; }
 .viewer-caption { margin: 0; padding: var(--space-4); color: var(--ink-muted); font-size: .73rem; line-height: 1.55; }
 .viewer-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3); }
@@ -454,8 +441,8 @@ img { max-width: 100%; }
 .related-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
 .related-link { display: flex; align-items: center; gap: var(--space-4); min-height: 100px; padding: var(--space-3); background: var(--card-bg); border: 1px solid var(--card-line); border-radius: var(--radius-box); }
 .related-link:hover { border-color: var(--red); }
-.related-thumb { position: relative; width: 116px; height: 75px; flex: none; }
-.related-thumb img { object-fit: contain; border-radius: 12px; }
+.related-thumb { position: relative; width: 116px; height: 75px; flex: none; overflow: hidden; border-radius: var(--radius-box); }
+.related-thumb img { object-fit: cover; }
 .related-link span { display: block; margin-bottom: var(--space-1); color: var(--ink-soft); font-size: .65rem; text-transform: uppercase; }
 .related-link strong { font-family: var(--font-display), sans-serif; font-size: 1.5rem; text-transform: uppercase; }
 
@@ -480,6 +467,10 @@ img { max-width: 100%; }
 @media (max-width: 1100px) {
   .header-location { display: none; }
   .showcase-heading { align-items: start; flex-direction: column; }
+}
+
+@media (min-width: 801px) and (max-width: 1100px) {
+  .vehicle-card { grid-template-columns: minmax(0, 55%) minmax(0, 45%); }
 }
 
 @media (min-width: 801px) and (max-width: 950px) {
@@ -530,7 +521,7 @@ img { max-width: 100%; }
   .header-actions .button svg { display: none; }
   /* No celular, texto, foto inteira e faixa inferior ocupam linhas próprias. */
   .hero { min-height: 0; flex-direction: column; align-items: stretch; }
-  .hero-media { position: relative; inset: auto; width: 100%; height: auto; aspect-ratio: 1672 / 941; }
+  .hero-media { position: relative; inset: auto; width: calc(100% - 2 * var(--space-4)); height: auto; margin-inline: var(--space-4); aspect-ratio: 1672 / 941; border-radius: var(--radius-box); }
   .hero-image { object-fit: contain; }
   .hero-shade { display: none; }
   .hero-content { padding-block: 138px var(--space-6); }

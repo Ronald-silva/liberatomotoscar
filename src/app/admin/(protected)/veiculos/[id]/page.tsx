@@ -19,7 +19,7 @@ export default async function EditVehiclePage({ params }: { params: Promise<{ id
   return <VehicleEditor
     vehicleId={vehicle.id} type={vehicle.type} status={vehicle.status}
     slug={vehicle.slug}
-    isNew={isDiscardable(vehicle)} canDiscard={isDiscardable(vehicle)}
+    isNew={vehicle.status === 'draft' && vehicle.publishedAt === null} canDiscard={isDiscardable(vehicle)}
     targets={[...allowedStatusTransitions[vehicle.status]]}
     initialVersion={vehicle.versionNumber}
     initialFields={{

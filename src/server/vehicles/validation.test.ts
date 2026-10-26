@@ -86,9 +86,9 @@ describe('requisitos de publicação', () => {
     }
   });
 
-  it('só permite excluir rascunho que nunca foi publicado', () => {
+  it('permite excluir todo rascunho e recusa outros estados', () => {
     expect(isDiscardable({ status: 'draft', publishedAt: null })).toBe(true);
-    expect(isDiscardable({ status: 'draft', publishedAt: new Date() })).toBe(false);
+    expect(isDiscardable({ status: 'draft', publishedAt: new Date() })).toBe(true);
     expect(isDiscardable({ status: 'published', publishedAt: new Date() })).toBe(false);
     expect(isDiscardable({ status: 'archived', publishedAt: null })).toBe(false);
   });

@@ -53,22 +53,14 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
           {vehicles.map((vehicle) => (
             <article className="vehicle-card" key={vehicle.slug} data-categoria={vehicle.category}>
               <div className="vehicle-image-wrap">
-                <Image
-                  src={vehicle.image}
-                  unoptimized={vehicle.image.startsWith('https://')}
-                  alt={vehicle.imageAlt}
-                  fill
-                  sizes="(max-width: 800px) 100vw, 45vw"
-                  className="vehicle-image"
-                />
-                <span className="vehicle-reflection" aria-hidden="true">
+                <span className="vehicle-photo">
                   <Image
                     src={vehicle.image}
                     unoptimized={vehicle.image.startsWith('https://')}
-                    alt=""
+                    alt={vehicle.imageAlt}
                     fill
-                    sizes="(max-width: 800px) 100vw, 45vw"
-                    className="vehicle-reflection-art"
+                    sizes="(max-width: 800px) 100vw, 560px"
+                    className="vehicle-image"
                   />
                 </span>
                 <span className="vehicle-number" aria-hidden="true" />

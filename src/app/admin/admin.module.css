@@ -147,8 +147,8 @@
 .galleryItem .badge { justify-self: start; }
 .galleryImage { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--admin-radius); }
 .galleryEmpty { display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--admin-radius); border: 1px dashed var(--admin-line); color: var(--admin-muted); }
-.cover { width: 72px; height: 56px; object-fit: cover; border-radius: 6px; grid-row: span 3; }
-.coverEmpty { display: grid; place-items: center; width: 72px; height: 56px; border-radius: 6px; border: 1px dashed var(--admin-line); color: var(--admin-muted); font-size: 0.75rem; grid-row: span 3; }
+.cover { width: 72px; height: 56px; object-fit: cover; border-radius: var(--admin-radius); grid-row: span 3; }
+.coverEmpty { display: grid; place-items: center; width: 72px; height: 56px; border-radius: var(--admin-radius); border: 1px dashed var(--admin-line); color: var(--admin-muted); font-size: 0.75rem; grid-row: span 3; }
 .subheading { margin: var(--admin-space-4) 0 0; font-size: 1.25rem; }
 
 .typeChoice { display: grid; gap: var(--admin-space-2); margin-top: var(--admin-space-4); }

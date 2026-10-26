@@ -61,15 +61,17 @@ export function Viewer360({
         onPointerUp={() => { pointerX.current = null; }}
         onPointerCancel={() => { pointerX.current = null; }}
       >
-        <Image
-          src={images[frame]}
-          unoptimized={images[frame].startsWith('https://')}
-          alt={alt}
-          fill
-          sizes="(max-width: 900px) 100vw, 60vw"
-          className="viewer-image"
-          priority
-        />
+        <span className="viewer-photo">
+          <Image
+            src={images[frame]}
+            unoptimized={images[frame].startsWith('https://')}
+            alt={alt}
+            fill
+            sizes="(max-width: 900px) 100vw, 60vw"
+            className="viewer-image"
+            priority
+          />
+        </span>
         <span className="viewer-badge">{badge}</span>
       </div>
       {isRotatable ? (

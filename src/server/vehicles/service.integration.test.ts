@@ -139,20 +139,23 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       expect(storage.delete).toHaveBeenCalledTimes(2);
     });
 
-    it('recusa descartar um veículo que já foi publicado', async () => {
+    it('recusa anúncio publicado e descarta quando ele volta a rascunho', async () => {
       const draft = await createDraft({ type: 'car' });
       const priced = await updateVehicle(draft.id, draft.versionNumber, { details: { brand: 'Fiat', model: 'Uno' }, priceCents: 100_00 });
       const photo = await addPhoto(draft.id, priced.versionNumber, png, 'image/png', fakeStorage());
       const published = await changeVehicleStatus(draft.id, photo.vehicleVersion, 'published', { confirmAvailability: true });
-      await expect(discardDraft(draft.id, published.versionNumber, fakeStorage())).rejects.toThrow('Não é possível excluir um anúncio que já foi publicado.');
-      // Arquivado e de volta a rascunho: o status é draft, mas já foi publicado um dia.
+      await expect(discardDraft(draft.id, published.versionNumber, fakeStorage())).rejects.toThrow('Só é possível excluir anúncios em rascunho.');
+      // O histórico de publicação continua no banco, mesmo após o descarte.
       const archived = await changeVehicleStatus(draft.id, published.versionNumber, 'archived');
       const reverted = await changeVehicleStatus(draft.id, archived.versionNumber, 'draft');
       expect(reverted.publishedAt).not.toBeNull();
       const storage = fakeStorage();
-      await expect(discardDraft(draft.id, reverted.versionNumber, storage)).rejects.toThrow('Não é possível excluir um anúncio que já foi publicado.');
-      expect(storage.delete).not.toHaveBeenCalled();
-      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(1);
+      await expect(discardDraft(draft.id, reverted.versionNumber, storage)).resolves.toMatchObject({ status: 'discarded' });
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(0);
+      const [discarded] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(discarded.status).toBe('discarded');
+      expect(discarded.publishedAt).not.toBeNull();
     });
 
     it('recusa descartar com versão velha', async () => {

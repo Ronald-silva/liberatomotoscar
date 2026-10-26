@@ -7,7 +7,7 @@ const KNOWN = new Map<string, string>([
   ['Este anúncio foi alterado. Recarregue antes de salvar.', 'Este anúncio foi alterado. Recarregue antes de salvar.'],
   ['Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.', 'Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.'],
   ['Mudança de estado não permitida.', 'Mudança de estado não permitida.'],
-  ['Não é possível excluir um anúncio que já foi publicado.', 'Não é possível excluir um anúncio que já foi publicado.'],
+  ['Só é possível excluir anúncios em rascunho.', 'Só é possível excluir anúncios em rascunho.'],
   ['Este anúncio foi excluído.', 'Este anúncio foi excluído.'],
   ['Use a exclusão do rascunho.', 'Use a exclusão do rascunho.'],
   ['O anúncio precisa manter uma foto.', 'O anúncio precisa manter uma foto.'],

@@ -35,10 +35,10 @@ export function assertStatusTransition(current: z.infer<typeof vehicleStatus>, n
   }
 }
 
-// Só o rascunho que nunca foi publicado pode ser excluído. O status sozinho não basta:
-// archived -> draft é permitido, então um ex-publicado também pode estar em 'draft'.
-export function isDiscardable(vehicle: { status: string; publishedAt: Date | null }): boolean {
-  return vehicle.status === 'draft' && vehicle.publishedAt === null;
+// Um anúncio que voltou a rascunho pode ser descartado. O descarte mantém a linha
+// e a auditoria; só remove as fotos e tira o anúncio do estoque ativo.
+export function isDiscardable(vehicle: { status: string; publishedAt?: Date | null }): boolean {
+  return vehicle.status === 'draft';
 }
 
 type Publishable = { brand: string | null; model: string | null; priceCents: number | null };

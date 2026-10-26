@@ -304,7 +304,7 @@ export async function discardDraft(vehicleId: string, expectedVersion: number, s
     const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId)).for('update');
     if (!before) throw new VehicleNotFoundError();
     if (before.versionNumber !== expectedVersion) throw new StaleVehicleError();
-    if (!isDiscardable(before)) throw new Error('Não é possível excluir um anúncio que já foi publicado.');
+    if (!isDiscardable(before)) throw new Error('Só é possível excluir anúncios em rascunho.');
     const removed = await tx.select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
     await tx.delete(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
     const [after] = await tx.update(vehicles).set({ status: 'discarded', updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })

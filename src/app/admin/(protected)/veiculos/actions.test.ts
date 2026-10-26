@@ -369,10 +369,10 @@ describe('excluir rascunho', () => {
     expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
   });
 
-  it('devolve mensagem própria quando o anúncio já foi publicado', async () => {
-    stub.discardDraft.mockRejectedValueOnce(new Error('Não é possível excluir um anúncio que já foi publicado.'));
+  it('devolve mensagem própria quando o anúncio não está em rascunho', async () => {
+    stub.discardDraft.mockRejectedValueOnce(new Error('Só é possível excluir anúncios em rascunho.'));
     const state = await discardVehicleDraft(empty, discardForm());
-    expect(state.message).toBe('Não é possível excluir um anúncio que já foi publicado.');
+    expect(state.message).toBe('Só é possível excluir anúncios em rascunho.');
     expect(stub.redirect).not.toHaveBeenCalled();
   });
 
