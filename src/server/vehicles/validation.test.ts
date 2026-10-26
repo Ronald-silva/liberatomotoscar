@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { allowedStatusTransitions, assertPublishable, publishRequirements, assertStatusTransition, detailsInput, draftInput, priceInput, vehicleStatus } from './validation';
 
 describe('validação comercial', () => {
+  it('aceita discarded como estado válido', () => {
+    expect(vehicleStatus.parse('discarded')).toBe('discarded');
+  });
+  it('não oferece discarded como transição de nenhum estado', () => {
+    for (const targets of Object.values(allowedStatusTransitions)) {
+      expect(targets).not.toContain('discarded');
+    }
+  });
+  it('não permite transição a partir de discarded', () => {
+    expect(allowedStatusTransitions.discarded).toEqual([]);
+    expect(() => assertStatusTransition('discarded', 'draft')).toThrow('Mudança de estado não permitida.');
+  });
   it('rejeita preço negativo, fracionário e acima do inteiro PostgreSQL', () => {
     for (const value of [-1, 1.5, 2_147_483_648, NaN]) expect(priceInput.safeParse(value).success).toBe(false);
     expect(priceInput.parse(0)).toBe(0); // só rascunho pode ter zero

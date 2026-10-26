@@ -1,9 +1,11 @@
-export const statusLabels = { draft: 'Rascunho', published: 'Publicado', reserved: 'Reservado', sold: 'Vendido', archived: 'Arquivado' } as const;
+export const statusLabels = { draft: 'Rascunho', published: 'Publicado', reserved: 'Reservado', sold: 'Vendido', archived: 'Arquivado', discarded: 'Descartado' } as const;
 export type VehicleStatus = keyof typeof statusLabels;
 
 // Rótulo do botão que leva o veículo a cada estado de destino.
 export const actionLabels: Record<VehicleStatus, string> = {
   draft: 'Voltar para rascunho', published: 'Publicar', reserved: 'Reservar', sold: 'Marcar vendido', archived: 'Arquivar',
+  // Nunca vira botão de transição: discarded não está em allowedStatusTransitions.
+  discarded: 'Excluir rascunho',
 };
 
 // Sempre devolve a base da etiqueta; a classe do estado só entra se existir, nunca "undefined".

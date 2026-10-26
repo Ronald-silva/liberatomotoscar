@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { allowedStatusTransitions } from '@/server/vehicles/validation';
 import { actionLabels, badgeClassName, statusLabels } from './status';
 
-const styles = { badge_draft: 'd', badge_published: 'p', badge_reserved: 'r', badge_sold: 's', badge_archived: 'a', badge: 'b' };
+const styles = { badge_draft: 'd', badge_published: 'p', badge_reserved: 'r', badge_sold: 's', badge_archived: 'a', badge_discarded: 'x', badge: 'b' };
 
 describe('estados do veículo', () => {
-  it('tem rótulo e classe de etiqueta para cada um dos cinco estados', () => {
+  it('tem rótulo e classe de etiqueta para cada um dos seis estados', () => {
     for (const status of Object.keys(allowedStatusTransitions)) {
       expect(statusLabels[status as keyof typeof statusLabels]).toBeTruthy();
       expect(badgeClassName(styles, status)).not.toContain('undefined');

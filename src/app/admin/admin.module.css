@@ -101,6 +101,7 @@
 .badge_published { color: var(--admin-ok); border-color: var(--admin-ok); }
 .badge_reserved { color: var(--admin-warn); border-color: var(--admin-warn); }
 .badge_sold { color: var(--admin-danger); border-color: var(--admin-danger); }
+.badge_discarded { color: var(--admin-muted); border-color: var(--admin-line); border-style: dotted; text-decoration: line-through; }
 .badge_archived { color: var(--admin-muted); border-color: var(--admin-line); border-style: dashed; }
 .statusActions { display: grid; gap: var(--admin-space-1); margin-top: var(--admin-space-2); }
 .stickyAction {

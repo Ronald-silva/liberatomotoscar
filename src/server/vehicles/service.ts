@@ -150,6 +150,8 @@ export async function changeVehicleStatus(id: string, expectedVersion: number, n
   options: { confirmAvailability?: boolean } = {}) {
   const actor = await requireAdmin();
   const status = vehicleStatus.parse(nextStatus);
+  // Descartar apaga arquivos e dados do rascunho; não pode ser só uma troca de estado.
+  if (status === 'discarded') throw new Error('Use a exclusão do rascunho.');
   return getDb().transaction(async (tx) => {
     const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, idSchema.parse(id))).for('update');
     if (!before) throw new VehicleNotFoundError();

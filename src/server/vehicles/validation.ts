@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const text = z.string().trim().min(1).max(160);
 export const vehicleType = z.enum(['motorcycle', 'car']);
-export const vehicleStatus = z.enum(['draft', 'published', 'reserved', 'sold', 'archived']);
+export const vehicleStatus = z.enum(['draft', 'published', 'reserved', 'sold', 'archived', 'discarded']);
 export const idSchema = z.uuid();
 export const slugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120);
 
@@ -25,6 +25,8 @@ export const allowedStatusTransitions = {
   reserved: ['published', 'sold', 'archived'],
   sold: ['published', 'archived'],
   archived: ['draft'],
+  // Terminal: não é destino de nenhuma transição; só a exclusão do rascunho chega aqui.
+  discarded: [],
 } as const satisfies Record<z.infer<typeof vehicleStatus>, readonly z.infer<typeof vehicleStatus>[]>;
 
 export function assertStatusTransition(current: z.infer<typeof vehicleStatus>, next: z.infer<typeof vehicleStatus>): void {

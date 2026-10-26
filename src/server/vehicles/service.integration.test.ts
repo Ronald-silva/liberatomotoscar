@@ -18,6 +18,14 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
   });
   afterAll(closeDb);
 
+  it('recusa descartar por changeVehicleStatus e deixa o rascunho intacto', async () => {
+    const draft = await createDraft({ type: 'car', slug: `teste-${randomUUID()}` });
+    await expect(changeVehicleStatus(draft.id, draft.versionNumber, 'discarded')).rejects.toThrow('Use a exclusão do rascunho.');
+    const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+    expect(row.status).toBe('draft');
+    expect(row.versionNumber).toBe(draft.versionNumber);
+  });
+
   it('persiste rascunho, preço, foto, publicação, venda e auditoria sem sobrescrever versão antiga', async () => {
     const slug = `teste-${randomUUID()}`;
     const draft = await createDraft({ type: 'motorcycle', slug });
