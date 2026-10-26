@@ -4,12 +4,13 @@ import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
 import { createR2Storage, checkPhoto, type PhotoStorage } from '@/server/storage/r2';
-import { assertPublishable, assertStatusTransition, detailsInput, draftInput, idSchema, priceInput, slugSchema, vehicleStatus, versionInput } from './validation';
+import { assertPublishable, assertStatusTransition, detailsInput, draftInput, idSchema, isDiscardable, priceInput, slugSchema, vehicleStatus, versionInput } from './validation';
 
 type Vehicle = typeof vehicles.$inferSelect;
 type Status = Vehicle['status'];
 
 export class VehicleNotFoundError extends Error { constructor() { super('Veículo não encontrado'); } }
+export class DiscardedVehicleError extends Error { constructor() { super('Este anúncio foi excluído.'); } }
 export class StaleVehicleError extends Error { constructor() { super('Este anúncio foi alterado. Recarregue antes de salvar.'); } }
 
 function snapshot(vehicle: Vehicle) {
@@ -129,6 +130,7 @@ export async function updateVehicle(id: string, expectedVersion: number,
   return getDb().transaction(async (tx) => {
     const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, idSchema.parse(id))).for('update');
     if (!before) throw new VehicleNotFoundError();
+    if (before.status === 'discarded') throw new DiscardedVehicleError();
     if (before.versionNumber !== versionInput.parse(expectedVersion)) throw new StaleVehicleError();
     if (price === 0 && before.status !== 'draft' && before.status !== 'archived') {
       throw new Error('Preço zero não é permitido em anúncio publicado.');
@@ -188,6 +190,8 @@ export async function addPhoto(id: string, expectedVersion: number, body: Uint8A
     return await getDb().transaction(async (tx) => {
       const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, id)).for('update');
       if (!before) throw new VehicleNotFoundError();
+      // Checado antes da versão: um excluído nunca volta a aceitar foto, seja qual for a versão enviada.
+      if (before.status === 'discarded') throw new DiscardedVehicleError();
       if (before.versionNumber !== expectedVersion) throw new StaleVehicleError();
       const [count] = await tx.select({ total: sql<number>`count(*)::int` }).from(vehicleImages).where(eq(vehicleImages.vehicleId, id));
       const [image] = await tx.insert(vehicleImages).values({ vehicleId: id, storageKey: saved.key,
@@ -215,6 +219,7 @@ export async function removePhoto(vehicleId: string, imageId: string, expectedVe
   const removed = await getDb().transaction(async (tx) => {
     const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId)).for('update');
     if (!before) throw new VehicleNotFoundError();
+    if (before.status === 'discarded') throw new DiscardedVehicleError();
     if (before.versionNumber !== expectedVersion) throw new StaleVehicleError();
     const images = await tx.select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId)).orderBy(asc(vehicleImages.position));
     const image = images.find((item) => item.id === imageId);
@@ -234,4 +239,34 @@ export async function removePhoto(vehicleId: string, imageId: string, expectedVe
     try { await (storage ?? createR2Storage()).delete(removed.storageKey); } catch { /* orphan cleanup is documented */ }
   }
   return removed;
+}
+
+// Exclusão lógica: o veículo e a auditoria ficam; somem as linhas de imagem e os arquivos do R2.
+// Os objetos só saem depois do commit — apagar antes deixaria um rascunho com fotos quebradas se a
+// transação desfizesse. Falha no R2 vira objeto órfão, nunca um descarte desfeito.
+export async function discardDraft(vehicleId: string, expectedVersion: number, storage?: PhotoStorage) {
+  const actor = await requireAdmin();
+  idSchema.parse(vehicleId);
+  versionInput.parse(expectedVersion);
+  const result = await getDb().transaction(async (tx) => {
+    const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId)).for('update');
+    if (!before) throw new VehicleNotFoundError();
+    if (before.versionNumber !== expectedVersion) throw new StaleVehicleError();
+    if (!isDiscardable(before)) throw new Error('Não é possível excluir um anúncio que já foi publicado.');
+    const removed = await tx.select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
+    await tx.delete(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
+    const [after] = await tx.update(vehicles).set({ status: 'discarded', updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
+      .where(and(eq(vehicles.id, vehicleId), eq(vehicles.versionNumber, expectedVersion))).returning();
+    if (!after) throw new StaleVehicleError();
+    await audit(tx, after, actor.userId, 'discarded', before);
+    return { removed, versionNumber: after.versionNumber };
+  });
+  const r2Images = result.removed.filter((image) => image.storageProvider === 'r2');
+  if (r2Images.length > 0) {
+    const photoStorage = storage ?? createR2Storage();
+    for (const image of r2Images) {
+      try { await photoStorage.delete(image.storageKey); } catch { /* orphan cleanup is documented */ }
+    }
+  }
+  return { status: 'discarded' as const, versionNumber: result.versionNumber };
 }

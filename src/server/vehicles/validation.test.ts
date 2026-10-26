@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedStatusTransitions, assertPublishable, publishRequirements, assertStatusTransition, detailsInput, draftInput, priceInput, vehicleStatus } from './validation';
+import { allowedStatusTransitions, assertPublishable, publishRequirements, assertStatusTransition, detailsInput, draftInput, isDiscardable, priceInput, vehicleStatus } from './validation';
 
 describe('validação comercial', () => {
   it('aceita discarded como estado válido', () => {
@@ -84,5 +84,12 @@ describe('requisitos de publicação', () => {
       const recusa = (() => { try { assertPublishable(vehicle, photos); return false; } catch { return true; } })();
       expect(recusa).toBe(faltando);
     }
+  });
+
+  it('só permite excluir rascunho que nunca foi publicado', () => {
+    expect(isDiscardable({ status: 'draft', publishedAt: null })).toBe(true);
+    expect(isDiscardable({ status: 'draft', publishedAt: new Date() })).toBe(false);
+    expect(isDiscardable({ status: 'published', publishedAt: new Date() })).toBe(false);
+    expect(isDiscardable({ status: 'archived', publishedAt: null })).toBe(false);
   });
 });

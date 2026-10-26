@@ -7,8 +7,8 @@ vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: 'phase12
 
 import { closeDb, getDb } from '@/server/db/client';
 import { usersTable, vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
-import { addPhoto, changeVehicleStatus, createDraft, getPublicVehicleBySlug, listPublicVehicles,
-  updateVehicle } from './service';
+import { addPhoto, changeVehicleStatus, createDraft, discardDraft, getPublicVehicleBySlug, listPublicVehicles,
+  removePhoto, StaleVehicleError, updateVehicle } from './service';
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (autorização simulada)', () => {
   beforeAll(async () => {
@@ -90,5 +90,96 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
     await expect(addPhoto(draft.id, 2, Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]), 'image/png', storage)).rejects.toThrow();
     expect(storage.delete).toHaveBeenCalledWith(key);
     expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(0);
+  });
+
+  describe('discardDraft', () => {
+    const fakeStorage = () => ({ put: vi.fn(async () => ({ key: `drafts/x/${randomUUID()}.png`, mimeType: 'image/png' as const, sizeBytes: 8 })), delete: vi.fn(async () => {}) });
+    const png = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const addImage = (vehicleId: string, storageKey: string, storageProvider: 'r2' | 'legacy_public', position: number) =>
+      getDb().insert(vehicleImages).values({ vehicleId, storageKey, storageProvider, mimeType: 'image/png', sizeBytes: 8, position, isCover: position === 0 });
+
+    it('descarta o rascunho, apaga as linhas de imagem e os objetos r2, e mantém a auditoria', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const key = `drafts/${draft.id}/${randomUUID()}.png`;
+      await addImage(draft.id, key, 'r2', 0);
+      const storage = fakeStorage();
+      // O objeto só pode sair do R2 depois que a transação confirmou: a linha já tem de estar apagada.
+      storage.delete.mockImplementation(async () => {
+        const rows = await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id));
+        expect(rows).toHaveLength(0);
+      });
+      const result = await discardDraft(draft.id, draft.versionNumber, storage);
+      expect(result).toEqual({ status: 'discarded', versionNumber: draft.versionNumber + 1 });
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+      expect(storage.delete).toHaveBeenCalledWith(key);
+      const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(row.status).toBe('discarded');
+      expect(row.versionNumber).toBe(draft.versionNumber + 1);
+      const audits = await getDb().select().from(vehicleAudit).where(eq(vehicleAudit.vehicleId, draft.id));
+      expect(audits.map((item) => item.operation)).toEqual(expect.arrayContaining(['created', 'discarded']));
+    });
+
+    it('não apaga objeto de imagem com provedor legacy_public', async () => {
+      const draft = await createDraft({ type: 'motorcycle' });
+      await addImage(draft.id, `/fotos/legado-${randomUUID()}.png`, 'legacy_public', 0);
+      const storage = fakeStorage();
+      await discardDraft(draft.id, draft.versionNumber, storage);
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(0);
+    });
+
+    it('continua descartado quando o R2 falha ao apagar um objeto', async () => {
+      const draft = await createDraft({ type: 'car' });
+      await addImage(draft.id, `drafts/${draft.id}/${randomUUID()}.png`, 'r2', 0);
+      await addImage(draft.id, `drafts/${draft.id}/${randomUUID()}.png`, 'r2', 1);
+      const storage = fakeStorage();
+      storage.delete.mockRejectedValueOnce(new Error('r2 fora do ar'));
+      await expect(discardDraft(draft.id, draft.versionNumber, storage)).resolves.toMatchObject({ status: 'discarded' });
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('recusa descartar um veículo que já foi publicado', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const priced = await updateVehicle(draft.id, draft.versionNumber, { details: { brand: 'Fiat', model: 'Uno' }, priceCents: 100_00 });
+      const photo = await addPhoto(draft.id, priced.versionNumber, png, 'image/png', fakeStorage());
+      const published = await changeVehicleStatus(draft.id, photo.vehicleVersion, 'published', { confirmAvailability: true });
+      await expect(discardDraft(draft.id, published.versionNumber, fakeStorage())).rejects.toThrow('Não é possível excluir um anúncio que já foi publicado.');
+      // Arquivado e de volta a rascunho: o status é draft, mas já foi publicado um dia.
+      const archived = await changeVehicleStatus(draft.id, published.versionNumber, 'archived');
+      const reverted = await changeVehicleStatus(draft.id, archived.versionNumber, 'draft');
+      expect(reverted.publishedAt).not.toBeNull();
+      const storage = fakeStorage();
+      await expect(discardDraft(draft.id, reverted.versionNumber, storage)).rejects.toThrow('Não é possível excluir um anúncio que já foi publicado.');
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(1);
+    });
+
+    it('recusa descartar com versão velha', async () => {
+      const draft = await createDraft({ type: 'car' });
+      await addImage(draft.id, `drafts/${draft.id}/${randomUUID()}.png`, 'r2', 0);
+      const storage = fakeStorage();
+      await expect(discardDraft(draft.id, draft.versionNumber + 5, storage)).rejects.toBeInstanceOf(StaleVehicleError);
+      expect(storage.delete).not.toHaveBeenCalled();
+      const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(row.status).toBe('draft');
+      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(1);
+    });
+
+    it('recusa editar, enviar ou remover foto de um veículo descartado', async () => {
+      const draft = await createDraft({ type: 'car' });
+      const imageKey = `drafts/${draft.id}/${randomUUID()}.png`;
+      const [image] = await addImage(draft.id, imageKey, 'r2', 0).returning();
+      const { versionNumber } = await discardDraft(draft.id, draft.versionNumber, fakeStorage());
+      const storage = fakeStorage();
+      const message = 'Este anúncio foi excluído.';
+      await expect(updateVehicle(draft.id, versionNumber, { details: { brand: 'Fiat' } })).rejects.toThrow(message);
+      await expect(addPhoto(draft.id, versionNumber, png, 'image/png', storage)).rejects.toThrow(message);
+      // A foto enviada antes de a recusa acontecer não pode ficar órfã.
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+      await expect(removePhoto(draft.id, image.id, versionNumber, storage)).rejects.toThrow(message);
+      const [row] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(row.versionNumber).toBe(versionNumber);
+      expect(row.brand).toBeNull();
+    });
   });
 });
