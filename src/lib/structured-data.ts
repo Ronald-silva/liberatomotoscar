@@ -47,7 +47,7 @@ export function buildVehicleSchema(vehicle: InventoryVehicle): Record<string, un
     name: vehicle.title,
     description: vehicle.description,
     url,
-    image: `${SITE_URL}${encodeURI(vehicle.image)}`,
+    image: vehicle.image.startsWith('https://') ? vehicle.image : `${SITE_URL}${encodeURI(vehicle.image)}`,
     brand: { '@type': 'Brand', name: vehicle.brand },
     model: vehicle.model,
     ...(vehicle.version && { vehicleConfiguration: vehicle.version }),

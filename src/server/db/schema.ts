@@ -61,7 +61,7 @@ export const vehicles = pgTable('vehicles', {
   color: text('color'),
   priceCents: integer('price_cents'),
   description: text('description'),
-  status: text('status', { enum: ['draft', 'published', 'reserved', 'sold', 'archived'] }).notNull().default('draft'),
+  status: text('status', { enum: ['draft', 'published', 'reserved', 'sold', 'archived', 'discarded'] }).notNull().default('draft'),
   availabilityConfirmedAt: timestamp('availability_confirmed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -73,7 +73,7 @@ export const vehicles = pgTable('vehicles', {
 }, (table) => [
   check('vehicle_slug_format', sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(${table.slug}) <= 120`),
   check('vehicle_type_valid', sql`${table.type} IN ('motorcycle', 'car')`),
-  check('vehicle_status_valid', sql`${table.status} IN ('draft', 'published', 'reserved', 'sold', 'archived')`),
+  check('vehicle_status_valid', sql`${table.status} IN ('draft', 'published', 'reserved', 'sold', 'archived', 'discarded')`),
   check('vehicle_year_valid', sql`${table.year} IS NULL OR ${table.year} BETWEEN 1900 AND 2100`),
   check('vehicle_mileage_valid', sql`${table.mileageKm} IS NULL OR ${table.mileageKm} >= 0`),
   check('vehicle_price_valid', sql`${table.priceCents} IS NULL OR ${table.priceCents} BETWEEN 0 AND 2147483647`),

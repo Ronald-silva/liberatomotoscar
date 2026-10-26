@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const text = z.string().trim().min(1).max(160);
 export const vehicleType = z.enum(['motorcycle', 'car']);
-export const vehicleStatus = z.enum(['draft', 'published', 'reserved', 'sold', 'archived']);
+export const vehicleStatus = z.enum(['draft', 'published', 'reserved', 'sold', 'archived', 'discarded']);
 export const idSchema = z.uuid();
 export const slugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120);
 
@@ -25,6 +25,8 @@ export const allowedStatusTransitions = {
   reserved: ['published', 'sold', 'archived'],
   sold: ['published', 'archived'],
   archived: ['draft'],
+  // Terminal: não é destino de nenhuma transição; só a exclusão do rascunho chega aqui.
+  discarded: [],
 } as const satisfies Record<z.infer<typeof vehicleStatus>, readonly z.infer<typeof vehicleStatus>[]>;
 
 export function assertStatusTransition(current: z.infer<typeof vehicleStatus>, next: z.infer<typeof vehicleStatus>): void {
@@ -33,10 +35,28 @@ export function assertStatusTransition(current: z.infer<typeof vehicleStatus>, n
   }
 }
 
-export function assertPublishable(vehicle: {
-  brand: string | null; model: string | null; priceCents: number | null;
-}, imageCount: number): void {
-  if (!vehicle.brand?.trim() || !vehicle.model?.trim() || !vehicle.priceCents || vehicle.priceCents <= 0 || imageCount < 1) {
+// Só o rascunho que nunca foi publicado pode ser excluído. O status sozinho não basta:
+// archived -> draft é permitido, então um ex-publicado também pode estar em 'draft'.
+export function isDiscardable(vehicle: { status: string; publishedAt: Date | null }): boolean {
+  return vehicle.status === 'draft' && vehicle.publishedAt === null;
+}
+
+type Publishable = { brand: string | null; model: string | null; priceCents: number | null };
+
+// Fonte única do que falta para publicar: o serviço recusa por aqui e a tela mostra a mesma
+// lista, item por item, antes de a pessoa tocar em Publicar. Sem isso a regra viveria em dois
+// lugares e a tela acabaria mentindo.
+export function publishRequirements(vehicle: Publishable, imageCount: number): readonly { label: string; done: boolean }[] {
+  return [
+    { label: 'Marca', done: Boolean(vehicle.brand?.trim()) },
+    { label: 'Modelo', done: Boolean(vehicle.model?.trim()) },
+    { label: 'Preço', done: Boolean(vehicle.priceCents && vehicle.priceCents > 0) },
+    { label: 'Pelo menos uma foto', done: imageCount >= 1 },
+  ];
+}
+
+export function assertPublishable(vehicle: Publishable, imageCount: number): void {
+  if (publishRequirements(vehicle, imageCount).some((item) => !item.done)) {
     throw new Error('Para publicar, informe marca, modelo, preço maior que zero e pelo menos uma foto.');
   }
 }

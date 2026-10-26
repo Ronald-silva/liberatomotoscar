@@ -24,12 +24,26 @@ export function checkPhoto(body: Uint8Array, mimeType: string): asserts mimeType
   }
 }
 
+type Config = ReturnType<typeof getR2Config>;
+let cached: { key: string; client: S3Client } | undefined;
+
+// Um cliente por processo: a galeria assina várias fotos na mesma tela e cada S3Client novo
+// remonta credenciais e cadeia de middleware sem necessidade. A chave inclui a conta e a
+// credencial, então mudar de configuração continua gerando um cliente novo.
+function s3Client(cfg: Config): S3Client {
+  const key = `${cfg.accountId}/${cfg.accessKeyId}`;
+  if (cached?.key !== key) {
+    cached = { key, client: new S3Client({
+      region: 'auto', endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
+    }) };
+  }
+  return cached.client;
+}
+
 export function createR2Storage(): PhotoStorage {
   const cfg = getR2Config();
-  const client = new S3Client({
-    region: 'auto', endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
-    credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
-  });
+  const client = s3Client(cfg);
   return {
     async put(vehicleId, body, mimeType) {
       checkPhoto(body, mimeType);

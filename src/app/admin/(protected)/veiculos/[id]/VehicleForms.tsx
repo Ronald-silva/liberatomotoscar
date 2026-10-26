@@ -1,59 +1,69 @@
 'use client';
 
-import { useActionState, useState, type ChangeEvent } from 'react';
+import type { ChangeEvent } from 'react';
+import { brandsFor, COMMON_COLORS, modelsFor, suggest, type VehicleType } from '@/data/catalogo-marcas-modelos';
 import styles from '../../../admin.module.css';
-import { saveDetails, savePrice, type FormState } from '../actions';
-import { FormNotice } from '../FormNotice';
-import { SubmitButton } from '../SubmitButton';
+import { ChipPicker } from '../ChipPicker';
+import { Combobox } from '../Combobox';
+import { maskMileage, maskPrice, yearOptions } from '../masks';
+import { SaveIndicator } from './SaveIndicator';
+import type { DraftFieldName, VehicleDraft } from './useVehicleDraft';
 
-type Vehicle = {
-  id: string; versionNumber: number; brand: string | null; model: string | null; version: string | null;
-  year: number | null; mileageKm: number | null; color: string | null; description: string | null; priceCents: number | null;
-};
-
-const initial: FormState = { message: null };
-const priceText = (cents: number | null) => cents ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(cents / 100) : '';
-
-function Message({ state, vehicleId }: { state: FormState; vehicleId: string }) {
-  return <FormNotice message={state.message} vehicleId={vehicleId} />;
-}
-
-// Campos controlados: o React 19 limpa campos não controlados depois de toda action, até com erro.
-// Sem `key` por versão, salvar um formulário não apaga o que foi digitado no outro.
-export function VehicleForms({ vehicle }: { vehicle: Vehicle }) {
-  const [details, detailsAction] = useActionState(saveDetails, initial);
-  const [price, priceAction] = useActionState(savePrice, initial);
-  const [fields, setFields] = useState({
-    brand: vehicle.brand ?? '', model: vehicle.model ?? '', versionName: vehicle.version ?? '', year: String(vehicle.year ?? ''),
-    mileageKm: String(vehicle.mileageKm ?? ''), color: vehicle.color ?? '', description: vehicle.description ?? '',
-  });
-  const [priceValue, setPriceValue] = useState(priceText(vehicle.priceCents));
-  const bind = (name: keyof typeof fields) => ({
+export function VehicleForms({ draft, type, currentYear }: { draft: VehicleDraft; type: VehicleType; currentYear: number }) {
+  const { fields } = draft;
+  const bind = (name: DraftFieldName) => ({
     name, value: fields[name], autoComplete: 'off', className: styles.input,
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFields((current) => ({ ...current, [name]: event.target.value })),
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => draft.set(name, event.target.value),
   });
-  const hidden = <>
-    <input type="hidden" name="id" value={vehicle.id} />
-    <input type="hidden" name="version" value={vehicle.versionNumber} />
-  </>;
-  return <>
-    <form className={styles.form} action={detailsAction}>
-      {hidden}
-      <label className={styles.field}>Marca<input {...bind('brand')} maxLength={160} /></label>
-      <label className={styles.field}>Modelo<input {...bind('model')} maxLength={160} /></label>
-      <label className={styles.field}>Versão<input {...bind('versionName')} maxLength={160} /></label>
-      <label className={styles.field}>Ano<input {...bind('year')} inputMode="numeric" maxLength={4} /></label>
-      <label className={styles.field}>Quilometragem (km)<input {...bind('mileageKm')} inputMode="decimal" /></label>
-      <label className={styles.field}>Cor<input {...bind('color')} maxLength={160} /></label>
-      <label className={styles.field}>Descrição<textarea {...bind('description')} maxLength={5000} rows={5} /></label>
-      <SubmitButton label="Salvar dados" />
-      <Message state={details} vehicleId={vehicle.id} />
-    </form>
-    <form className={styles.form} action={priceAction}>
-      {hidden}
-      <label className={styles.field}>Preço (R$)<input className={styles.input} name="price" value={priceValue} onChange={(event) => setPriceValue(event.target.value)} inputMode="decimal" placeholder="18.500,00" autoComplete="off" /></label>
-      <SubmitButton label="Salvar preço" />
-      <Message state={price} vehicleId={vehicle.id} />
-    </form>
-  </>;
+  const brands = brandsFor(type);
+  const models = modelsFor(type, fields.brand);
+  const isMotorcycle = type === 'motorcycle';
+
+  return <div className={styles.form} onBlurCapture={() => draft.flush()}>
+    <ChipPicker legend="Marca" hint={isMotorcycle ? 'Toque na marca da moto.' : 'Toque na marca do carro.'}
+      options={brands} value={fields.brand} onChange={(value) => { draft.set('brand', value); draft.set('model', ''); }}
+      otherLabel="Outra marca" otherPlaceholder="Digite a marca" />
+
+    <Combobox label="Modelo" value={fields.model} onChange={(value) => draft.set('model', value)}
+      options={models} suggest={suggest} placeholder="Comece a digitar"
+      hint="Digite as primeiras letras e toque na sugestão."
+      disabledHint="Escolha a marca primeiro e as sugestões aparecem aqui." />
+
+    <label className={styles.field}>Ano
+      <select className={styles.input} name="year" value={fields.year} onChange={(event) => draft.set('year', event.target.value)}>
+        <option value="">Não informado</option>
+        {yearOptions(currentYear).map((year) => <option key={year} value={year}>{year}</option>)}
+      </select>
+    </label>
+
+    <div className={styles.field}>
+      <label htmlFor="vehicle-mileage">Quilometragem</label>
+      <input {...bind('mileageKm')} id="vehicle-mileage" aria-describedby="vehicle-mileage-hint" inputMode="numeric" placeholder="25.000"
+        onChange={(event) => draft.set('mileageKm', maskMileage(event.target.value))} />
+      <span id="vehicle-mileage-hint" className={styles.chipHint}>Só números. O ponto é colocado sozinho.</span>
+    </div>
+
+    <ChipPicker legend="Cor" options={COMMON_COLORS} value={fields.color}
+      onChange={(value) => draft.set('color', value)} otherLabel="Outra cor" otherPlaceholder="Digite a cor" />
+
+    <div className={styles.field}>
+      <label htmlFor="vehicle-price">Preço</label>
+      <input {...bind('price')} id="vehicle-price" aria-describedby="vehicle-price-hint" inputMode="numeric" placeholder="18.500"
+        onChange={(event) => draft.set('price', maskPrice(event.target.value))} />
+      <span id="vehicle-price-hint" className={styles.chipHint}>Em reais, sem centavos. Digite 18500 e aparece 18.500.</span>
+    </div>
+
+    <details className={styles.optional}>
+      <summary className={styles.optionalSummary}>Detalhes opcionais</summary>
+      <label className={styles.field}>Versão
+        <input {...bind('versionName')} maxLength={160} placeholder="Flex, ESDi, Sahara..." />
+      </label>
+      <label className={styles.field}>Descrição
+        <textarea {...bind('description')} maxLength={5000} rows={5}
+          placeholder="Único dono, revisões em dia, pneus novos..." />
+      </label>
+    </details>
+
+    <SaveIndicator state={draft.saveState} message={draft.message} onRetry={draft.retry} />
+  </div>;
 }

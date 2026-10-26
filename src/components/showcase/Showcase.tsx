@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowUpRight, MoveRight } from 'lucide-react';
-import { INVENTORY_VEHICLES, formatKilometers, formatPrice } from '@/data/inventory-vehicles';
+import { formatKilometers, formatPrice, type InventoryVehicle } from '@/data/inventory-vehicles';
 import { FiltroVitrine, type OpcaoFiltro } from '@/components/showcase/FiltroVitrine';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 
@@ -15,13 +15,13 @@ const CATEGORIAS: { valor: string; rotulo: string }[] = [
  * filtro é a única parte que roda no navegador. A numeração dos cards vem de
  * um contador CSS, que reconta sozinho quando o filtro esconde algum.
  */
-export function Showcase() {
+export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
   const opcoes: OpcaoFiltro[] = [
-    { valor: 'todos', rotulo: 'Todos', total: INVENTORY_VEHICLES.length },
+    { valor: 'todos', rotulo: 'Todos', total: vehicles.length },
     ...CATEGORIAS.map(({ valor, rotulo }) => ({
       valor,
       rotulo,
-      total: INVENTORY_VEHICLES.filter((vehicle) => vehicle.category === valor).length,
+      total: vehicles.filter((vehicle) => vehicle.category === valor).length,
     })),
   ];
 
@@ -50,11 +50,12 @@ export function Showcase() {
         </p>
 
         <div className="vehicle-grid">
-          {INVENTORY_VEHICLES.map((vehicle) => (
+          {vehicles.map((vehicle) => (
             <article className="vehicle-card" key={vehicle.slug} data-categoria={vehicle.category}>
               <div className="vehicle-image-wrap">
                 <Image
                   src={vehicle.image}
+                  unoptimized={vehicle.image.startsWith('https://')}
                   alt={vehicle.imageAlt}
                   fill
                   sizes="(max-width: 800px) 100vw, 45vw"
@@ -63,6 +64,7 @@ export function Showcase() {
                 <span className="vehicle-reflection" aria-hidden="true">
                   <Image
                     src={vehicle.image}
+                    unoptimized={vehicle.image.startsWith('https://')}
                     alt=""
                     fill
                     sizes="(max-width: 800px) 100vw, 45vw"

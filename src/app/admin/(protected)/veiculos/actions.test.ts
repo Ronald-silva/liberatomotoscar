@@ -5,21 +5,23 @@ const stub = vi.hoisted(() => ({
   StaleVehicleError: class StaleVehicleError extends Error {
     constructor() { super('Este anúncio foi alterado. Recarregue antes de salvar.'); }
   },
-  updateDetails: vi.fn(async (id: string, version: number, input: unknown): Promise<object> => ({ id, version, input })),
-  updatePrice: vi.fn(async (id: string, version: number, cents: number): Promise<object> => ({ id, version, cents })),
+  updateVehicle: vi.fn(async (id: string, version: number, input: unknown): Promise<object> => ({ id, version, input })),
   revalidatePath: vi.fn(),
   createDraft: vi.fn<(...args: unknown[]) => Promise<{ id: string }>>(async () => ({ id: '' })),
   redirect: vi.fn((url: string): never => { throw Object.assign(new Error('NEXT_REDIRECT'), { redirectUrl: url }); }),
   addPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   removePhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
   changeVehicleStatus: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
+  setCoverPhoto: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
+  discardDraft: vi.fn<(...args: unknown[]) => Promise<object>>(async () => ({})),
 }));
 
-vi.mock('@/server/vehicles/service', () => ({ createDraft: stub.createDraft, updateDetails: stub.updateDetails, updatePrice: stub.updatePrice, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus }));
+vi.mock('@/server/vehicles/service', () => ({ createDraft: stub.createDraft, updateVehicle: stub.updateVehicle, addPhoto: stub.addPhoto, removePhoto: stub.removePhoto, changeVehicleStatus: stub.changeVehicleStatus, setCoverPhoto: stub.setCoverPhoto, discardDraft: stub.discardDraft }));
 vi.mock('next/cache', () => ({ revalidatePath: stub.revalidatePath }));
 vi.mock('next/navigation', () => ({ redirect: stub.redirect, notFound: vi.fn() }));
 
-import { addVehiclePhoto, changeStatus, createVehicle, removeVehiclePhoto, saveDetails, savePrice } from './actions';
+import { addVehiclePhoto, changeStatus, createVehicle, discardVehicleDraft, removeVehiclePhoto, saveVehicle, setVehicleCover } from './actions';
+import { maskMileage, maskPrice } from './masks';
 
 const id = '6f1c1c1e-7c1e-4b59-9a53-2d2f0c1d3a11';
 const formDataOf = (fields: Record<string, string>) => {
@@ -29,39 +31,72 @@ const formDataOf = (fields: Record<string, string>) => {
 };
 const empty = { message: null };
 
-beforeEach(() => { vi.clearAllMocks(); stub.updateDetails.mockResolvedValue({}); stub.updatePrice.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({}); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); stub.createDraft.mockResolvedValue({ id }); });
+beforeEach(() => { vi.clearAllMocks(); stub.updateVehicle.mockResolvedValue({ versionNumber: 2, brand: 'Honda', model: 'CG', priceCents: 100, imageCount: 1 }); stub.setCoverPhoto.mockResolvedValue({ vehicleVersion: 8 }); stub.discardDraft.mockResolvedValue({}); stub.addPhoto.mockResolvedValue({ vehicleVersion: 5 }); stub.removePhoto.mockResolvedValue({}); stub.changeVehicleStatus.mockResolvedValue({}); stub.createDraft.mockResolvedValue({ id }); });
 
-describe('salvar dados', () => {
+describe('salvar veículo', () => {
   it('pede recarga quando a versão enviada está velha', async () => {
-    stub.updateDetails.mockRejectedValueOnce(new stub.StaleVehicleError());
-    const state = await saveDetails(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
+    stub.updateVehicle.mockRejectedValueOnce(new stub.StaleVehicleError());
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
     expect(state.message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
     expect(stub.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('envia os campos tipados e vazios como nulos, com a versão do formulário', async () => {
-    await saveDetails(empty, formDataOf({ id, version: '3', brand: 'Honda', model: 'CG 160', versionName: '', year: '2022', mileageKm: '15000', color: '', description: '' }));
-    expect(stub.updateDetails).toHaveBeenCalledWith(id, 3, {
-      brand: 'Honda', model: 'CG 160', version: null, year: 2022, mileageKm: 15000, color: null, description: null,
+  it('envia dados e preço numa chamada só, com a versão do formulário', async () => {
+    await saveVehicle(empty, formDataOf({ id, version: '3', brand: 'Honda', model: 'CG 160', versionName: '', year: '2022', mileageKm: '15000', color: '', description: '', price: '18.500' }));
+    expect(stub.updateVehicle).toHaveBeenCalledWith(id, 3, {
+      details: { brand: 'Honda', model: 'CG 160', version: null, year: 2022, mileageKm: 15000, color: null, description: null },
+      priceCents: 1850000,
     });
   });
 
-  it('revalida a lista e a própria página no sucesso', async () => {
-    const state = await saveDetails(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
-    expect(state.message).toBe('Dados salvos.');
+  // Com um formulário só, o campo vazio precisa significar "ainda não tem preço" — nunca zerar o
+  // que já estava salvo.
+  it('campo de preço vazio não mexe no preço salvo', async () => {
+    await saveVehicle(empty, formDataOf({ id, version: '3', brand: 'Honda', price: '' }));
+    expect(stub.updateVehicle).toHaveBeenCalledWith(id, 3, expect.objectContaining({ priceCents: undefined }));
+  });
+
+  it('revalida só a lista no sucesso', async () => {
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
+    expect(state.message).toBe('Veículo salvo.');
     expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
-    expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  // O cliente é dono da versão e das pendências; revalidar o detalhe a cada pausa de digitação
+  // refaria a assinatura das fotos e a galeria inteira baixaria de novo.
+  it('não revalida a rota de detalhe', async () => {
+    await saveVehicle(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
+    expect(stub.revalidatePath).toHaveBeenCalledTimes(1);
+    expect(stub.revalidatePath).not.toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('devolve a versão nova e o que falta para publicar', async () => {
+    stub.updateVehicle.mockResolvedValueOnce({ versionNumber: 7, brand: 'Honda', model: null, priceCents: null, imageCount: 0 });
+    const state = await saveVehicle(empty, formDataOf({ id, version: '6', brand: 'Honda' }));
+    expect(state).toEqual({ message: 'Veículo salvo.', version: 7, missing: ['Modelo', 'Preço', 'Pelo menos uma foto'] });
+  });
+
+  it('devolve lista vazia quando nada falta', async () => {
+    stub.updateVehicle.mockResolvedValueOnce({ versionNumber: 3, brand: 'Honda', model: 'CG', priceCents: 1850000, imageCount: 2 });
+    expect((await saveVehicle(empty, formDataOf({ id, version: '2' }))).missing).toEqual([]);
+  });
+
+  it('não devolve versão nem pendências quando falha', async () => {
+    stub.updateVehicle.mockRejectedValueOnce(new stub.StaleVehicleError());
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1' }));
+    expect(state.version).toBeUndefined();
+    expect(state.missing).toBeUndefined();
   });
 
   it('recusa ano não numérico sem chamar o serviço', async () => {
-    const state = await saveDetails(empty, formDataOf({ id, version: '1', year: 'dois mil' }));
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1', year: 'dois mil' }));
     expect(state.message).toBeTruthy();
-    expect(stub.updateDetails).not.toHaveBeenCalled();
+    expect(stub.updateVehicle).not.toHaveBeenCalled();
   });
 
   it('não vaza erro inesperado', async () => {
-    stub.updateDetails.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
-    const state = await saveDetails(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
+    stub.updateVehicle.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1', brand: 'Honda' }));
     expect(state.message).toBe('Não foi possível salvar agora. Tente de novo.');
   });
 });
@@ -74,50 +109,57 @@ describe('limites validados antes do serviço', () => {
     [{ brand: 'x'.repeat(161) }, 'Marca, modelo, versão e cor aceitam até 160 caracteres.'],
     [{ description: 'x'.repeat(5001) }, 'A descrição aceita até 5000 caracteres.'],
   ])('recusa %j com mensagem própria', async (fields, message) => {
-    const state = await saveDetails(empty, formDataOf({ id, version: '1', ...fields }));
+    const state = await saveVehicle(empty, formDataOf({ id, version: '1', ...fields }));
     expect(state.message).toBe(message);
-    expect(stub.updateDetails).not.toHaveBeenCalled();
+    expect(stub.updateVehicle).not.toHaveBeenCalled();
   });
 
   it('aceita quilometragem com ponto de milhar', async () => {
-    await saveDetails(empty, formDataOf({ id, version: '1', mileageKm: '15.000' }));
-    expect(stub.updateDetails).toHaveBeenCalledWith(id, 1, expect.objectContaining({ mileageKm: 15000 }));
+    await saveVehicle(empty, formDataOf({ id, version: '1', mileageKm: '15.000' }));
+    expect(stub.updateVehicle).toHaveBeenCalledWith(id, 1, expect.objectContaining({
+      details: expect.objectContaining({ mileageKm: 15000 }),
+    }));
   });
 
   it('recusa preço acima do máximo e aceita o máximo', async () => {
-    const over = await savePrice(empty, formDataOf({ id, version: '1', price: '21.474.836,48' }));
+    const over = await saveVehicle(empty, formDataOf({ id, version: '1', price: '21.474.836,48' }));
     expect(over.message).toBe('O preço máximo é R$ 21.474.836,47.');
-    expect(stub.updatePrice).not.toHaveBeenCalled();
-    await savePrice(empty, formDataOf({ id, version: '1', price: '21.474.836,47' }));
-    expect(stub.updatePrice).toHaveBeenCalledWith(id, 1, 2147483647);
+    expect(stub.updateVehicle).not.toHaveBeenCalled();
+    await saveVehicle(empty, formDataOf({ id, version: '1', price: '21.474.836,47' }));
+    expect(stub.updateVehicle).toHaveBeenCalledWith(id, 1, expect.objectContaining({ priceCents: 2147483647 }));
   });
 });
 
-describe('salvar preço', () => {
+describe('preço em reais convertido para centavos', () => {
   it.each([['18500', 1850000], ['18.500', 1850000], ['18500,00', 1850000], ['18.500,00', 1850000], ['R$ 18.500,5', 1850050], ['0', 0]])(
-    'converte "%s" em reais para centavos', async (typed, cents) => {
-      await savePrice(empty, formDataOf({ id, version: '2', price: typed }));
-      expect(stub.updatePrice).toHaveBeenCalledWith(id, 2, cents);
+    'converte "%s" em %i centavos', async (typed, cents) => {
+      await saveVehicle(empty, formDataOf({ id, version: '2', price: typed }));
+      expect(stub.updateVehicle).toHaveBeenCalledWith(id, 2, expect.objectContaining({ priceCents: cents }));
     });
 
-  it.each(['abc', '', '18,500,00', '1.85', '-5', '18500,001'])('recusa "%s" sem chamar o serviço', async (typed) => {
-    const state = await savePrice(empty, formDataOf({ id, version: '2', price: typed }));
+  it.each(['abc', '18,500,00', '1.85', '-5', '18500,001'])('recusa "%s" sem chamar o serviço', async (typed) => {
+    const state = await saveVehicle(empty, formDataOf({ id, version: '2', price: typed }));
     expect(state.message).toBeTruthy();
-    expect(stub.updatePrice).not.toHaveBeenCalled();
+    expect(stub.updateVehicle).not.toHaveBeenCalled();
   });
+});
 
-  it('revalida a lista e a própria página no sucesso', async () => {
-    const state = await savePrice(empty, formDataOf({ id, version: '2', price: '1000' }));
-    expect(state.message).toBe('Preço salvo.');
-    expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
-    expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
-  });
+// A máscara da tela e o leitor do servidor são códigos separados; este bloco prova que eles
+// concordam, para a tela nunca mostrar um valor que a action vai recusar.
+describe('máscara da tela e leitura do servidor combinam', () => {
+  it.each([['18500', 1850000], ['1850000', 185000000], ['18500,50', 1850050], ['900', 90000]])(
+    'o preço digitado "%s" chega como %i centavos', async (typed, cents) => {
+      await saveVehicle(empty, formDataOf({ id, version: '1', price: maskPrice(typed) }));
+      expect(stub.updateVehicle).toHaveBeenCalledWith(id, 1, expect.objectContaining({ priceCents: cents }));
+    });
 
-  it('pede recarga quando a versão está velha', async () => {
-    stub.updatePrice.mockRejectedValueOnce(new stub.StaleVehicleError());
-    const state = await savePrice(empty, formDataOf({ id, version: '1', price: '1000' }));
-    expect(state.message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
-  });
+  it.each([['150000', 150000], ['12500', 12500], ['980', 980]])(
+    'a quilometragem digitada "%s" chega como %i', async (typed, km) => {
+      await saveVehicle(empty, formDataOf({ id, version: '1', mileageKm: maskMileage(typed) }));
+      expect(stub.updateVehicle).toHaveBeenCalledWith(id, 1, expect.objectContaining({
+        details: expect.objectContaining({ mileageKm: km }),
+      }));
+    });
 });
 
 const imageId = '0a5b7c1e-1111-4b59-9a53-2d2f0c1d3a22';
@@ -166,10 +208,27 @@ describe('adicionar foto', () => {
     stub.addPhoto.mockRejectedValueOnce(new Error('R2 secret abc'));
     expect((await addVehiclePhoto(empty, photoForm(jpeg()))).message).toBe('Não foi possível salvar agora. Tente de novo.');
   });
+
+  // Sem a versão nova de volta, a segunda foto de uma seleção múltipla seria recusada por
+  // "anúncio alterado": cada foto incrementa a versão do veículo.
+  it('devolve a versão nova para a foto seguinte poder ir sem recarregar', async () => {
+    stub.addPhoto.mockResolvedValueOnce({ vehicleVersion: 9 });
+    expect(await addVehiclePhoto(empty, photoForm(jpeg()))).toEqual({ message: 'Foto adicionada.', version: 9 });
+  });
+
+  it('não inventa versão quando a foto falha', async () => {
+    stub.addPhoto.mockRejectedValueOnce(new stub.StaleVehicleError());
+    expect((await addVehiclePhoto(empty, photoForm(jpeg()))).version).toBeUndefined();
+  });
 });
 
 describe('remover foto', () => {
   const removeForm = () => formDataOf({ id, version: '5', imageId });
+
+  it('devolve a versão nova para a próxima operação da fila', async () => {
+    stub.removePhoto.mockResolvedValueOnce({ vehicleVersion: 6 });
+    expect(await removeVehiclePhoto(empty, removeForm())).toEqual({ message: 'Foto removida.', version: 6 });
+  });
 
   it('repassa veículo, foto e versão e revalida', async () => {
     const state = await removeVehiclePhoto(empty, removeForm());
@@ -194,6 +253,19 @@ describe('mudar estado', () => {
     expect(stub.changeVehicleStatus).toHaveBeenCalledWith(id, 6, 'reserved', { confirmAvailability: false });
     expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
     expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
+  });
+
+  it('devolve a versão nova para a fila do editor após publicar', async () => {
+    stub.changeVehicleStatus.mockResolvedValueOnce({ versionNumber: 7 });
+    expect(await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' })))
+      .toEqual({ message: 'Estado atualizado.', version: 7 });
+  });
+
+  it('não informa falha de publicação quando só a revalidação falha', async () => {
+    stub.changeVehicleStatus.mockResolvedValueOnce({ versionNumber: 7 });
+    stub.revalidatePath.mockImplementationOnce(() => { throw new Error('falha na invalidação'); });
+    expect(await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' })))
+      .toEqual({ message: 'Estado atualizado.', version: 7 });
   });
 
   it('só envia a confirmação quando o campo vale exatamente "true"', async () => {
@@ -260,5 +332,59 @@ describe('cadastrar veículo', () => {
     const state = await createVehicle(empty, formDataOf({ type: 'car' }));
     expect(state.message).toBe('Não foi possível salvar agora. Tente de novo.');
     expect(stub.redirect).not.toHaveBeenCalled();
+  });
+
+  // Com revalidatePath dentro do try, uma falha dele virava mensagem de erro com o rascunho JÁ
+  // criado: a pessoa tocava de novo e nascia um órfão por toque. O redirecionamento tem de
+  // acontecer mesmo assim, porque o veículo existe.
+  it('não transforma falha de revalidação em erro de criação', async () => {
+    stub.revalidatePath.mockImplementationOnce(() => { throw new Error('falha ao revalidar'); });
+    await expect(createVehicle(empty, formDataOf({ type: 'motorcycle' })))
+      .rejects.toMatchObject({ redirectUrl: `/admin/veiculos/${id}` });
+    expect(stub.createDraft).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('definir capa', () => {
+  const coverForm = () => formDataOf({ id, version: '5', imageId });
+
+  it('repassa foto e versão ao serviço e devolve a versão nova', async () => {
+    const state = await setVehicleCover(empty, coverForm());
+    expect(stub.setCoverPhoto).toHaveBeenCalledWith(id, imageId, 5);
+    expect(state).toEqual({ message: 'Capa atualizada.', version: 8 });
+  });
+
+  it('pede recarga quando a versão está velha', async () => {
+    stub.setCoverPhoto.mockRejectedValueOnce(new stub.StaleVehicleError());
+    expect((await setVehicleCover(empty, coverForm())).message).toBe('Este anúncio foi alterado. Recarregue antes de salvar.');
+  });
+});
+
+describe('excluir rascunho', () => {
+  const discardForm = () => formDataOf({ id, version: '2' });
+
+  it('redireciona ao estoque após excluir', async () => {
+    await expect(discardVehicleDraft(empty, discardForm())).rejects.toMatchObject({ redirectUrl: '/admin' });
+    expect(stub.discardDraft).toHaveBeenCalledWith(id, 2);
+    expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
+  });
+
+  it('devolve mensagem própria quando o anúncio já foi publicado', async () => {
+    stub.discardDraft.mockRejectedValueOnce(new Error('Não é possível excluir um anúncio que já foi publicado.'));
+    const state = await discardVehicleDraft(empty, discardForm());
+    expect(state.message).toBe('Não é possível excluir um anúncio que já foi publicado.');
+    expect(stub.redirect).not.toHaveBeenCalled();
+  });
+
+  it('não vaza erro inesperado e não redireciona', async () => {
+    stub.discardDraft.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.0.0.1:5432'));
+    expect((await discardVehicleDraft(empty, discardForm())).message).toBe('Não foi possível salvar agora. Tente de novo.');
+    expect(stub.redirect).not.toHaveBeenCalled();
+  });
+
+  // O rascunho já foi excluído: falha ao revalidar não pode virar erro nem impedir a saída da tela.
+  it('não transforma falha de revalidação em erro', async () => {
+    stub.revalidatePath.mockImplementationOnce(() => { throw new Error('falha ao revalidar'); });
+    await expect(discardVehicleDraft(empty, discardForm())).rejects.toMatchObject({ redirectUrl: '/admin' });
   });
 });

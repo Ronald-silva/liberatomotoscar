@@ -2,10 +2,15 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { addPhoto, createDraft, changeVehicleStatus, removePhoto, updateDetails, updatePrice } from '@/server/vehicles/service';
+import { addPhoto, createDraft, changeVehicleStatus, discardDraft, removePhoto, setCoverPhoto, updateVehicle } from '@/server/vehicles/service';
+import { publishRequirements } from '@/server/vehicles/validation';
 import { toFormMessage } from './feedback';
 
-export type FormState = { message: string | null };
+// `version` só vem preenchido quando a operação incrementou a versão do veículo e a tela precisa
+// dela em seguida — é o caso do envio de várias fotos, uma após a outra, sem recarregar.
+// `missing` só vem do salvamento: o que ainda falta para publicar, já recalculado, para a tela
+// não precisar perguntar de novo ao servidor a cada pausa na digitação.
+export type FormState = { message: string | null; version?: number; missing?: readonly string[] };
 
 const text = (data: FormData, key: string) => String(data.get(key) ?? '').trim();
 const orNull = (value: string) => value === '' ? null : value;
@@ -34,39 +39,78 @@ function parsePriceCents(typed: string): number | null {
   return total > MAX_INT ? fail('O preço máximo é R$ 21.474.836,47.') : total;
 }
 
+// A versão nova, quando o serviço a devolve, volta para a tela no FormState.
+function newVersionOf(result: unknown): number | undefined {
+  if (typeof result !== 'object' || result === null) return undefined;
+  const version = 'vehicleVersion' in result ? result.vehicleVersion
+    : 'versionNumber' in result ? result.versionNumber : undefined;
+  return typeof version === 'number' ? version : undefined;
+}
+
 async function run(data: FormData, success: string, apply: (id: string, version: number) => Promise<unknown>): Promise<FormState> {
   const id = text(data, 'id');
+  let result: unknown;
   try {
-    await apply(id, Number(text(data, 'version'))); // apply pode lançar antes de chamar o serviço
-    revalidatePath('/admin');
-    revalidatePath(`/admin/veiculos/${id}`);
-    return { message: success };
+    result = await apply(id, Number(text(data, 'version'))); // apply pode lançar antes de chamar o serviço
   } catch (error) {
     return { message: toFormMessage(error) };
   }
+  // O estado já foi gravado. Falha de invalidação não deve pedir que a pessoa
+  // repita Publicar ou uma exclusão de foto, criando uma resposta falsa.
+  try { revalidatePath('/admin'); revalidatePath(`/admin/veiculos/${id}`); } catch { /* rotas dinâmicas leem o banco no próximo pedido */ }
+  return { message: success, version: newVersionOf(result) };
 }
 
-export async function saveDetails(_state: FormState, formData: FormData): Promise<FormState> {
-  return run(formData, 'Dados salvos.', (id, version) => {
+// Campo de preço vazio significa "preço ainda não definido": não mexe no que está salvo.
+// Texto que não é preço é erro, não silêncio.
+function readPriceCents(typed: string): number | undefined {
+  if (typed === '') return undefined;
+  const cents = parsePriceCents(typed);
+  return cents === null ? fail('Informe o preço em reais, por exemplo 18.500,00.') : cents;
+}
+
+// Um único salvamento para a tela inteira: dados e preço na mesma transação do serviço.
+// Não usa `run`: devolve também as pendências e, de propósito, não revalida a rota de detalhe —
+// a tela é dona da versão e das pendências, e revalidar a cada pausa na digitação refaria a
+// assinatura das fotos e baixaria a galeria inteira de novo.
+export async function saveVehicle(_state: FormState, formData: FormData): Promise<FormState> {
+  try {
     // Limites iguais aos do serviço, validados aqui para dar a mensagem certa em vez da genérica.
     const short = (key: string) => limitedText(text(formData, key), 160, 'Marca, modelo, versão e cor aceitam até 160 caracteres.');
     const year = wholeNumber(text(formData, 'year'));
     const mileageKm = wholeNumber(text(formData, 'mileageKm'));
     if (year !== null && (year < 1900 || year > 2100)) fail('O ano deve estar entre 1900 e 2100.');
     if (mileageKm !== null && mileageKm > MAX_INT) fail('A quilometragem informada é grande demais.');
-    return updateDetails(id, version, {
-      brand: short('brand'), model: short('model'), version: short('versionName'), year, mileageKm, color: short('color'),
-      description: limitedText(text(formData, 'description'), 5000, 'A descrição aceita até 5000 caracteres.'),
+    const priceCents = readPriceCents(text(formData, 'price'));
+    const { imageCount, ...saved } = await updateVehicle(text(formData, 'id'), Number(text(formData, 'version')), {
+      details: {
+        brand: short('brand'), model: short('model'), version: short('versionName'), year, mileageKm, color: short('color'),
+        description: limitedText(text(formData, 'description'), 5000, 'A descrição aceita até 5000 caracteres.'),
+      },
+      priceCents,
     });
-  });
+    revalidatePath('/admin');
+    const missing = publishRequirements(saved, imageCount).filter((item) => !item.done).map((item) => item.label);
+    return { message: 'Veículo salvo.', version: saved.versionNumber, missing };
+  } catch (error) {
+    return { message: toFormMessage(error) };
+  }
 }
 
-export async function savePrice(_state: FormState, formData: FormData): Promise<FormState> {
-  let cents: number | null;
-  try { cents = parsePriceCents(text(formData, 'price')); } catch (error) { return { message: toFormMessage(error) }; }
-  if (cents === null) return { message: toFormMessage(new Error('Informe o preço em reais, por exemplo 18.500,00.')) };
-  const price = cents;
-  return run(formData, 'Preço salvo.', (id, version) => updatePrice(id, version, price));
+export async function setVehicleCover(_state: FormState, formData: FormData): Promise<FormState> {
+  return run(formData, 'Capa atualizada.', (id, version) => setCoverPhoto(id, text(formData, 'imageId'), version));
+}
+
+export async function discardVehicleDraft(_state: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await discardDraft(text(formData, 'id'), Number(text(formData, 'version')));
+  } catch (error) {
+    return { message: toFormMessage(error) };
+  }
+  // O rascunho já foi excluído aqui: falha ao revalidar não pode virar mensagem de erro, ou a
+  // pessoa ficaria numa tela de um anúncio que não existe mais. A lista se corrige na próxima navegação.
+  try { revalidatePath('/admin'); } catch { /* ver acima */ }
+  redirect('/admin'); // redirect lança: um catch o engoliria
 }
 
 export async function addVehiclePhoto(_state: FormState, formData: FormData): Promise<FormState> {
@@ -83,7 +127,13 @@ export async function removeVehiclePhoto(_state: FormState, formData: FormData):
 export async function changeStatus(_state: FormState, formData: FormData): Promise<FormState> {
   // O serviço valida a transição e exige confirmAvailability === true para publicar.
   const confirmAvailability = text(formData, 'confirmAvailability') === 'true';
-  return run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
+  const result = await run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
+  if (result.version !== undefined) {
+    // O catálogo é dinâmico; estes caminhos limpam também o cache de navegação
+    // de quem já abriu a vitrine ou um anúncio nesta sessão.
+    try { revalidatePath('/'); revalidatePath('/veiculos/[slug]', 'page'); } catch { /* estado já persistido */ }
+  }
+  return result;
 }
 
 const VEHICLE_TYPES = ['motorcycle', 'car'] as const;
@@ -94,9 +144,14 @@ export async function createVehicle(_state: FormState, formData: FormData): Prom
   let id: string;
   try {
     id = (await createDraft({ type })).id;
-    revalidatePath('/admin');
   } catch (error) {
     return { message: toFormMessage(error) };
   }
-  redirect(`/admin/veiculos/${id}`); // fora do try: redirect lança e o catch o engoliria
+  // O rascunho já existe neste ponto, então nada pode impedir a ida até ele. Dentro do try acima,
+  // uma falha ao revalidar virava mensagem de erro com o veículo JÁ criado — a pessoa tocava de
+  // novo e nascia um órfão por toque. Fora do try sem proteção, a falha derrubava o
+  // redirecionamento e dava no mesmo. O preço de engolir o erro é a lista do estoque ficar uma
+  // navegação desatualizada; o preço de não redirecionar é rascunho duplicado.
+  try { revalidatePath('/admin'); } catch { /* lista se corrige na próxima navegação */ }
+  redirect(`/admin/veiculos/${id}`); // redirect lança: um catch o engoliria
 }

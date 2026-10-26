@@ -4,14 +4,13 @@ import { ArrowLeft, ArrowUpRight, ChevronRight } from 'lucide-react';
 import { Viewer360 } from '@/components/viewer-360/Viewer360';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 import {
-  INVENTORY_VEHICLES,
   formatKilometers,
   formatPrice,
   type InventoryVehicle,
 } from '@/data/inventory-vehicles';
 
-export function InventoryDetail({ vehicle }: { vehicle: InventoryVehicle }) {
-  const others = INVENTORY_VEHICLES.filter((item) => item.slug !== vehicle.slug);
+export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: InventoryVehicle; vehicles: InventoryVehicle[]; images: string[] }) {
+  const others = vehicles.filter((item) => item.slug !== vehicle.slug);
   const related = [
     ...others.filter((item) => item.category === vehicle.category),
     ...others.filter((item) => item.category !== vehicle.category),
@@ -29,11 +28,13 @@ export function InventoryDetail({ vehicle }: { vehicle: InventoryVehicle }) {
 
           <div className="detail-grid">
             <Viewer360
-              images={[vehicle.image]}
+              images={images.length ? images : [vehicle.image]}
               title={vehicle.title}
               alt={vehicle.imageAlt}
-              badge="FOTO DO ANÚNCIO"
-              singleImageCaption="Uma imagem foi fornecida para este anúncio. Peça mais fotos à loja para avaliar outros ângulos."
+              badge={images.length ? 'FOTO DO ANÚNCIO' : 'FOTO INDISPONÍVEL'}
+              singleImageCaption={images.length
+                ? 'Uma imagem foi fornecida para este anúncio. Peça mais fotos à loja para avaliar outros ângulos.'
+                : 'A foto deste anúncio está indisponível no momento. Consulte a loja para recebê-la.'}
             />
             <div>
               <p className="eyebrow"><span className="eyebrow-line" /> {vehicle.categoryLabel}</p>
@@ -140,7 +141,7 @@ export function InventoryDetail({ vehicle }: { vehicle: InventoryVehicle }) {
           <div className="related-grid">
             {related.map((item) => (
               <Link className="related-link" href={`/veiculos/${item.slug}`} key={item.slug}>
-                <span className="related-thumb"><Image src={item.image} alt="" fill sizes="116px" /></span>
+                <span className="related-thumb"><Image src={item.image} unoptimized={item.image.startsWith('https://')} alt="" fill sizes="116px" /></span>
                 <span><span>{item.categoryLabel}</span><strong>{item.title}</strong></span>
                 <ArrowUpRight size={20} aria-hidden="true" />
               </Link>

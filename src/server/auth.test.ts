@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isAdminAuthConfigured, isAllowedGoogleProfile } from './auth-policy';
+import { isAdminAuthConfigured, isAllowedGoogleProfile, allowedAdminEmails } from './auth-policy';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -59,5 +59,27 @@ describe('entrada Google permitida', () => {
     vi.stubEnv('ADMIN_GOOGLE_EMAIL', ' , , ');
     expect(isAdminAuthConfigured()).toBe(false);
     expect(isAllowedGoogleProfile('google', { email: 'proprietario@example.com', email_verified: true })).toBe(false);
+  });
+});
+
+// Consumida também por scripts/grant-admin-development.ts, que fica fora do alcance dos testes.
+// Antes de ser compartilhada, o script tinha a própria cópia da leitura e parou de achar a conta
+// quando uma segunda foi acrescentada ao ADMIN_GOOGLE_EMAIL — sem quebrar o login.
+describe('lista de contas administrativas', () => {
+  it('separa por vírgula, apara espaços e normaliza a caixa', () => {
+    vi.stubEnv('ADMIN_GOOGLE_EMAIL', ' Proprietario@Example.com , Gerente@Example.com ');
+    expect(allowedAdminEmails()).toEqual(['proprietario@example.com', 'gerente@example.com']);
+  });
+
+  it('devolve uma só quando há uma só, sem vírgula sobrando', () => {
+    vi.stubEnv('ADMIN_GOOGLE_EMAIL', 'unico@example.com');
+    expect(allowedAdminEmails()).toEqual(['unico@example.com']);
+  });
+
+  it('devolve lista vazia quando a variável está ausente ou vazia', () => {
+    vi.stubEnv('ADMIN_GOOGLE_EMAIL', '');
+    expect(allowedAdminEmails()).toEqual([]);
+    vi.stubEnv('ADMIN_GOOGLE_EMAIL', ' , ');
+    expect(allowedAdminEmails()).toEqual([]);
   });
 });

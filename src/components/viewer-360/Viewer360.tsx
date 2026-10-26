@@ -63,6 +63,7 @@ export function Viewer360({
       >
         <Image
           src={images[frame]}
+          unoptimized={images[frame].startsWith('https://')}
           alt={alt}
           fill
           sizes="(max-width: 900px) 100vw, 60vw"
