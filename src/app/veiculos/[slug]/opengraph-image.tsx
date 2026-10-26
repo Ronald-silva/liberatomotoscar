@@ -1,31 +1,35 @@
 import { ImageResponse } from 'next/og';
+import { connection } from 'next/server';
 import { STORE } from '@/data/store';
 import {
-  INVENTORY_VEHICLES,
   formatKilometers,
   formatPrice,
-  getInventoryVehicle,
 } from '@/data/inventory-vehicles';
-import { DEMO_VEHICLES, getDemoVehicle } from '@/data/mock-vehicles';
+import { getDemoVehicle } from '@/data/mock-vehicles';
 import { OG_CONTENT_TYPE, OG_SIZE, loadOgFonts, loadPublicImage } from '@/lib/og';
+import { getPublicVehicleWithPhotos } from '@/server/vehicles/service';
+import { toCatalogVehicle } from '@/server/vehicles/public-catalog';
 
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const alt = `Veículo anunciado pela ${STORE.name}`;
 
-export function generateStaticParams() {
-  return [...INVENTORY_VEHICLES, ...DEMO_VEHICLES].map((vehicle) => ({ slug: vehicle.slug }));
-}
-
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const stockVehicle = getInventoryVehicle(slug);
+  await connection();
+  const publicVehicle = await getPublicVehicleWithPhotos(slug);
+  const stockVehicle = publicVehicle ? toCatalogVehicle({ ...publicVehicle, image: publicVehicle.images[0] ?? null }) : null;
   const demoVehicle = stockVehicle ? undefined : getDemoVehicle(slug);
   const vehicle = stockVehicle ?? demoVehicle;
 
   if (!vehicle) return new Response('Not found', { status: 404 });
 
-  const [fonts, photo] = await Promise.all([loadOgFonts(), loadPublicImage(vehicle.image)]);
+  const [fonts, photo] = await Promise.all([loadOgFonts(), vehicle.image.startsWith('https://')
+    ? fetch(vehicle.image).then(async (response) => {
+      if (!response.ok) throw new Error('Foto pública indisponível');
+      return `data:${response.headers.get('content-type') ?? 'image/jpeg'};base64,${Buffer.from(await response.arrayBuffer()).toString('base64')}`;
+    }).catch(() => loadPublicImage('/images/fachada.png'))
+    : loadPublicImage(vehicle.image)]);
 
   const facts = stockVehicle
     ? [

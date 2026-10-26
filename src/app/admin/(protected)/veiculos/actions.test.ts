@@ -261,6 +261,13 @@ describe('mudar estado', () => {
       .toEqual({ message: 'Estado atualizado.', version: 7 });
   });
 
+  it('não informa falha de publicação quando só a revalidação falha', async () => {
+    stub.changeVehicleStatus.mockResolvedValueOnce({ versionNumber: 7 });
+    stub.revalidatePath.mockImplementationOnce(() => { throw new Error('falha na invalidação'); });
+    expect(await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' })))
+      .toEqual({ message: 'Estado atualizado.', version: 7 });
+  });
+
   it('só envia a confirmação quando o campo vale exatamente "true"', async () => {
     await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' }));
     expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: true });

@@ -36,11 +36,13 @@ export function DangerActions({ vehicleId, draft, canDiscard, archiveTargetAvail
   }
 
   if (!canDiscard && !archiveTargetAvailable) return null;
-  return <section className={styles.dangerActions} aria-label="Outras ações">
+  return <section className={styles.dangerActions} aria-labelledby="gerenciar-anuncio-title">
+    <h2 id="gerenciar-anuncio-title" className={styles.subheading}>Gerenciar anúncio</h2>
+    <p className={styles.description}>Estas ações são opcionais e separadas da publicação.</p>
     {confirming ? <>
       <p className={styles.notice} role="alert">{confirming === 'discard'
         ? 'Excluir este rascunho? As fotos enviadas serão apagadas e esta ação não pode ser desfeita.'
-        : 'Arquivar este anúncio? Ele sairá dos anúncios ativos.'}</p>
+        : 'Arquivar este anúncio? Ele sairá do catálogo público. Para voltar a publicar, abra o rascunho novamente.'}</p>
       <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy}
         onClick={() => void execute()}>{busy ? 'Aguarde...' : confirming === 'discard' ? 'Sim, excluir rascunho' : 'Sim, arquivar'}</button>
       <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy}

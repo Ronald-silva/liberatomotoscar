@@ -42,7 +42,7 @@ export interface InventoryVehicle {
   category: VehicleCategory;
   categoryLabel: string;
   color: string;
-  condition: 'Seminovo';
+  condition: 'Seminovo' | 'Não informada';
   availability?: 'disponivel' | 'reservado' | 'vendido';
   /** PNG com fundo transparente, fornecido pela loja. Serve ao palco escuro do
    *  card e também ao painel claro das imagens de Open Graph. */

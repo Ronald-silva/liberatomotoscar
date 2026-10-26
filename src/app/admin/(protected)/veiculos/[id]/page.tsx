@@ -18,6 +18,7 @@ export default async function EditVehiclePage({ params }: { params: Promise<{ id
   const initialMissing = publishRequirements(vehicle, photos.length).filter((item) => !item.done).map((item) => item.label);
   return <VehicleEditor
     vehicleId={vehicle.id} type={vehicle.type} status={vehicle.status}
+    slug={vehicle.slug}
     isNew={isDiscardable(vehicle)} canDiscard={isDiscardable(vehicle)}
     targets={[...allowedStatusTransitions[vehicle.status]]}
     initialVersion={vehicle.versionNumber}

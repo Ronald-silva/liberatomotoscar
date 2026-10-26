@@ -1,16 +1,18 @@
 import { ImageResponse } from 'next/og';
+import { connection } from 'next/server';
 import { STORE, STORE_ADDRESS_LINE } from '@/data/store';
-import { INVENTORY_VEHICLES } from '@/data/inventory-vehicles';
 import { OG_CONTENT_TYPE, OG_SIZE, loadOgFonts } from '@/lib/og';
+import { listPublicVehicles } from '@/server/vehicles/service';
 
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const alt = `${STORE.name} — ${STORE.tagline} de motos e carros em ${STORE.city}`;
 
 export default async function Image() {
-  const fonts = await loadOgFonts();
-  const motos = INVENTORY_VEHICLES.filter((vehicle) => vehicle.category === 'moto').length;
-  const carros = INVENTORY_VEHICLES.length - motos;
+  await connection();
+  const [fonts, vehicles] = await Promise.all([loadOgFonts(), listPublicVehicles()]);
+  const motos = vehicles.filter((vehicle) => vehicle.type === 'motorcycle').length;
+  const carros = vehicles.length - motos;
 
   return new ImageResponse(
     (

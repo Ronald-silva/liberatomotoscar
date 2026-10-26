@@ -44,9 +44,16 @@ type StoredPhotoRef = { storageKey: string; storageProvider: 'r2' | 'legacy_publ
 // do R2 é cálculo local. Um cliente serve o lote inteiro; sem nenhuma foto em r2, nenhum é criado.
 // Falha ao assinar vira foto vazia em vez de derrubar a tela.
 function photoUrlResolver(refs: readonly (StoredPhotoRef | null | undefined)[], storage?: PhotoStorage) {
-  const readUrl = refs.some((ref) => ref?.storageProvider === 'r2')
-    ? (storage ?? createR2Storage()).signedReadUrl
-    : undefined;
+  let readUrl: PhotoStorage['signedReadUrl'];
+  try {
+    readUrl = refs.some((ref) => ref?.storageProvider === 'r2')
+      ? (storage ?? createR2Storage()).signedReadUrl
+      : undefined;
+  } catch {
+    // A vitrine continua acessível se a configuração do R2 não estiver no
+    // processo local; cada foto R2 vira indisponível, sem esconder o anúncio.
+    readUrl = undefined;
+  }
   return async (ref: StoredPhotoRef | null | undefined): Promise<string | null> => {
     if (!ref) return null;
     if (ref.storageProvider === 'legacy_public') return ref.storageKey;
@@ -117,15 +124,41 @@ function publicVehicle(vehicle: Vehicle) {
   return { id, slug, type, brand, model, version, year, mileageKm, color, priceCents, description, status, publishedAt };
 }
 
-// Prepared for the later public cutover. The current storefront still reads the static catalog.
 export async function listPublicVehicles() {
   const rows = await getDb().select().from(vehicles).where(inArray(vehicles.status, publicStatuses)).orderBy(desc(vehicles.publishedAt));
   return rows.map(publicVehicle);
 }
 
+// A vitrine só recebe veículos visíveis e sua capa. Fotos privadas do R2 são
+// assinadas no pedido, sem persistir URLs que expiram em uma página estática.
+export async function listPublicVehiclesWithCover(storage?: PhotoStorage) {
+  const rows = await getDb().select({ vehicle: vehicles, cover: {
+    storageKey: vehicleImages.storageKey, storageProvider: vehicleImages.storageProvider,
+  } }).from(vehicles).leftJoin(vehicleImages,
+    and(eq(vehicleImages.vehicleId, vehicles.id), eq(vehicleImages.isCover, true)))
+    .where(inArray(vehicles.status, publicStatuses)).orderBy(desc(vehicles.publishedAt));
+  const photoUrl = photoUrlResolver(rows.map(({ cover }) => cover), storage);
+  return Promise.all(rows.map(async ({ vehicle, cover }) => ({
+    ...publicVehicle(vehicle), image: await photoUrl(cover),
+  })));
+}
+
+export async function getPublicVehicleWithPhotos(slug: string, storage?: PhotoStorage) {
+  const vehicle = await getPublicVehicleBySlug(slug);
+  if (!vehicle) return null;
+  const images = await getDb().select({ storageKey: vehicleImages.storageKey,
+    storageProvider: vehicleImages.storageProvider }).from(vehicleImages)
+    .where(eq(vehicleImages.vehicleId, vehicle.id)).orderBy(asc(vehicleImages.position));
+  const photoUrl = photoUrlResolver(images, storage);
+  const urls = (await Promise.all(images.map(photoUrl))).filter((url): url is string => Boolean(url));
+  return { ...vehicle, images: urls };
+}
+
 export async function getPublicVehicleBySlug(slug: string) {
+  const parsed = slugSchema.safeParse(slug);
+  if (!parsed.success) return null;
   const [row] = await getDb().select().from(vehicles)
-    .where(and(eq(vehicles.slug, slugSchema.parse(slug)), inArray(vehicles.status, [...publicStatuses, 'sold']))).limit(1);
+    .where(and(eq(vehicles.slug, parsed.data), inArray(vehicles.status, [...publicStatuses, 'sold']))).limit(1);
   return row ? publicVehicle(row) : null;
 }
 

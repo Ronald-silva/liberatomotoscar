@@ -10,7 +10,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const fields = { brand: 'Honda', model: 'CG 160', versionName: '', year: '2024', mileageKm: '1200', color: 'Preto', description: '', price: '18.500' };
 const props = {
-  vehicleId: 'v1', type: 'motorcycle' as const, status: 'draft' as const, isNew: true, canDiscard: true,
+  vehicleId: 'v1', slug: 'honda-cg-160-teste', type: 'motorcycle' as const, status: 'draft' as const, isNew: true, canDiscard: true,
   targets: ['published', 'archived'] as ('published' | 'archived')[], initialVersion: 3,
   initialFields: fields, initialMissing: ['Pelo menos uma foto'], photos: [], currentYear: 2026,
 };
@@ -24,6 +24,8 @@ it('ordena as três seções e mantém uma ação principal no rodapé', () => {
     '1O veículo', '2Fotos', '3Conferir e publicar',
   ]);
   const publish = screen.getByRole('button', { name: 'Publicar anúncio' }) as HTMLButtonElement;
+  const management = screen.getByRole('heading', { name: 'Gerenciar anúncio' });
+  expect(publish.compareDocumentPosition(management) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(publish.disabled).toBe(true);
   expect(screen.getByText(/Para publicar, complete: Pelo menos uma foto/)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Excluir rascunho' })).toBeTruthy();
@@ -42,6 +44,11 @@ it('pede confirmação de disponibilidade e publica com a versão atual', async 
   expect(data.get('version')).toBe('3');
   expect(data.get('confirmAvailability')).toBe('true');
   await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  expect(screen.getByText('Anúncio publicado. Situação: Publicado.')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Situação: Publicado' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Excluir rascunho' })).toBeNull();
+  expect((screen.getByRole('link', { name: 'Ver anúncio público' }) as HTMLAnchorElement).getAttribute('href'))
+    .toBe('/veiculos/honda-cg-160-teste');
 });
 
 it('mostra anúncio publicado sem etapas nem rodapé e sem exclusão', () => {

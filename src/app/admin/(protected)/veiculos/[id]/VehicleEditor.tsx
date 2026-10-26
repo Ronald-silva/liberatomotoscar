@@ -18,9 +18,9 @@ import { useVehicleDraft, type DraftFields } from './useVehicleDraft';
 const initial: FormState = { message: null };
 const checks = ['Marca', 'Modelo', 'Preço', 'Pelo menos uma foto'] as const;
 
-export function VehicleEditor({ vehicleId, type, status, isNew, canDiscard, targets, initialVersion, initialFields,
+export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard, targets, initialVersion, initialFields,
   initialMissing, photos, currentYear }: {
-  vehicleId: string; type: VehicleType; status: VehicleStatus; isNew: boolean; canDiscard: boolean;
+  vehicleId: string; slug: string; type: VehicleType; status: VehicleStatus; isNew: boolean; canDiscard: boolean;
   targets: VehicleStatus[]; initialVersion: number; initialFields: DraftFields; initialMissing: readonly string[];
   photos: GalleryPhoto[]; currentYear: number;
 }) {
@@ -28,6 +28,7 @@ export function VehicleEditor({ vehicleId, type, status, isNew, canDiscard, targ
   const [confirming, setConfirming] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [publishedNow, setPublishedNow] = useState(false);
   const [editingField, setEditingField] = useState(false);
   const router = useRouter();
   const name = [draft.fields.brand, draft.fields.model].filter(Boolean).join(' ');
@@ -69,15 +70,20 @@ export function VehicleEditor({ vehicleId, type, status, isNew, canDiscard, targ
     }).catch((): FormState => ({ message: 'Não foi possível publicar agora. Tente de novo.' }));
     setPublishing(false);
     setConfirming(false);
-    setPublishMessage(state.version === undefined ? state.message : null);
-    if (state.version !== undefined) router.refresh();
+    setPublishMessage(state.version === undefined ? state.message : 'Anúncio publicado. Situação: Publicado.');
+    if (state.version !== undefined) { setPublishedNow(true); router.refresh(); }
   }
 
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
-    <div className={`${styles.listPanel} ${canPublish ? styles.editorWithFooter : ''}`}>
+    <div className={styles.listPanel}>
       <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">Voltar ao estoque</Link>
       <h1 id="editar-title" className={styles.heading}>{title}</h1>
       {isNew ? <p className={styles.description}>Siga de cima para baixo. O que você preencher é salvo automaticamente.</p> : null}
+      {(status === 'published' || status === 'reserved' || status === 'sold' || publishedNow) ?
+        <div className={styles.publishedNotice} role="status">
+          <strong>{publishedNow ? 'Anúncio publicado.' : `Situação: ${status === 'reserved' ? 'Reservado' : status === 'sold' ? 'Vendido' : 'Publicado'}.`}</strong>
+          <Link href={`/veiculos/${slug}`} target="_blank" rel="noopener noreferrer">Ver anúncio público</Link>
+        </div> : null}
 
       <section aria-labelledby="veiculo-title">
         <h2 id="veiculo-title" className={styles.subheading}>{isNew ? <span className={styles.step}>1</span> : null}O veículo</h2>
@@ -90,7 +96,7 @@ export function VehicleEditor({ vehicleId, type, status, isNew, canDiscard, targ
         <PhotoUpload vehicleId={vehicleId} draft={draft} />
       </section>
 
-      <section aria-labelledby="conferir-title">
+      {canPublish && !publishedNow ? <section aria-labelledby="conferir-title">
         <h2 id="conferir-title" className={styles.subheading}>{isNew ? <span className={styles.step}>3</span> : null}Conferir e publicar</h2>
         <p className={styles.description}>{draft.missing.length === 0
           ? 'Tudo pronto. Pode publicar.' : 'Falta isto para o anúncio poder ser publicado:'}</p>
@@ -103,32 +109,35 @@ export function VehicleEditor({ vehicleId, type, status, isNew, canDiscard, targ
             </li>;
           })}
         </ul>
-        <StatusActions vehicleId={vehicleId} draft={draft} status={status} targets={targets} />
-      </section>
+        <div className={`${styles.editorFooter} ${editingField ? styles.editorFooterKeyboard : ''}`}>
+          <div className={styles.editorFooterInner}>
+            {confirming ? <div className={styles.confirmPublish}>
+              <p className={styles.notice} role="alert">Este veículo está disponível para venda?</p>
+              <button className={styles.button} type="button" disabled={publishing} onClick={() => void publish()}>
+                {publishing ? 'Publicando...' : 'Sim, publicar anúncio'}
+              </button>
+              <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={publishing}
+                onClick={() => setConfirming(false)}>Cancelar</button>
+            </div> : <>
+              <button className={styles.button} type="button" disabled={blocked}
+                aria-describedby={blocked ? 'publicar-bloqueado' : undefined} onClick={() => setConfirming(true)}>Publicar anúncio</button>
+              {blocked ? <p id="publicar-bloqueado" className={styles.chipHint}>
+                {draft.saveState === 'error' ? 'A gravação falhou. Tente de novo antes de publicar.'
+                  : draft.saveState === 'saving' ? 'Aguarde a gravação terminar.'
+                    : `Para publicar, complete: ${draft.missing.join(', ')}.`}
+              </p> : null}
+            </>}
+          </div>
+        </div>
+      </section> : null}
 
-      <DangerActions vehicleId={vehicleId} draft={draft} canDiscard={canDiscard} archiveTargetAvailable={targets.includes('archived')} />
+      <StatusActions vehicleId={vehicleId} draft={draft} status={publishedNow ? 'published' : status}
+        targets={publishedNow ? [] : targets} />
+
+      <DangerActions vehicleId={vehicleId} draft={draft} canDiscard={canDiscard && !publishedNow}
+        archiveTargetAvailable={!publishedNow && targets.includes('archived')} />
       <FormNotice message={publishMessage} vehicleId={vehicleId} role="alert" />
     </div>
 
-    {canPublish ? <div className={`${styles.editorFooter} ${editingField ? styles.editorFooterKeyboard : ''}`}>
-      <div className={styles.editorFooterInner}>
-        {confirming ? <div className={styles.confirmPublish}>
-          <p className={styles.notice} role="alert">Este veículo está disponível para venda?</p>
-          <button className={styles.button} type="button" disabled={publishing} onClick={() => void publish()}>
-            {publishing ? 'Publicando...' : 'Sim, publicar anúncio'}
-          </button>
-          <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={publishing}
-            onClick={() => setConfirming(false)}>Cancelar</button>
-        </div> : <>
-          <button className={styles.button} type="button" disabled={blocked}
-            aria-describedby={blocked ? 'publicar-bloqueado' : undefined} onClick={() => setConfirming(true)}>Publicar anúncio</button>
-          {blocked ? <p id="publicar-bloqueado" className={styles.chipHint}>
-            {draft.saveState === 'error' ? 'A gravação falhou. Tente de novo antes de publicar.'
-              : draft.saveState === 'saving' ? 'Aguarde a gravação terminar.'
-                : `Para publicar, complete: ${draft.missing.join(', ')}.`}
-          </p> : null}
-        </>}
-      </div>
-    </div> : null}
   </main>;
 }

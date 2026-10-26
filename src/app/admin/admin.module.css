@@ -245,12 +245,14 @@
 .photoActions .badge { justify-self: start; }
 .dangerActions { display: grid; gap: var(--admin-space-1); margin-top: var(--admin-space-4); padding-top: var(--admin-space-3); border-top: 1px solid var(--admin-line); }
 .editorWithFooter { padding-bottom: calc(var(--admin-sticky-action) + var(--admin-space-5) + var(--admin-space-3)); }
-.editorFooter { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; padding: var(--admin-space-1) var(--admin-space-2) max(var(--admin-space-2), env(safe-area-inset-bottom)); background: var(--admin-bg); border-top: 1px solid var(--admin-line); }
+.editorFooter { position: sticky; z-index: 4; bottom: 0; margin: var(--admin-space-2) calc(-1 * var(--admin-space-2)); padding: var(--admin-space-1) var(--admin-space-2) max(var(--admin-space-2), env(safe-area-inset-bottom)); background: var(--admin-bg); border: 2px solid var(--admin-accent); border-radius: var(--admin-radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
 .editorFooterKeyboard { display: none; }
 .editorFooterInner { width: min(100%, 640px); margin: 0 auto; }
 .editorFooter .chipHint { margin-top: var(--admin-space-1); }
 .confirmPublish { display: grid; gap: var(--admin-space-1); }
 .confirmPublish .notice { margin: 0; }
+.publishedNotice { display: grid; gap: var(--admin-space-1); margin: var(--admin-space-2) 0; padding: var(--admin-space-2); border: 2px solid var(--admin-accent); border-radius: var(--admin-radius); background: var(--admin-accent); }
+.publishedNotice a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .statusFilter { display: flex; gap: var(--admin-space-1); overflow-x: auto; padding: var(--admin-space-2) 2px; margin: var(--admin-space-1) -2px 0; scrollbar-width: thin; }
 .filterLink { display: inline-flex; align-items: center; min-height: 44px; flex: 0 0 auto; padding: var(--admin-space-1) var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); color: var(--admin-ink); text-decoration: none; }
 .filterLink:hover { border-color: var(--admin-ink); }

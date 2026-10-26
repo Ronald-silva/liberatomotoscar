@@ -49,14 +49,16 @@ function newVersionOf(result: unknown): number | undefined {
 
 async function run(data: FormData, success: string, apply: (id: string, version: number) => Promise<unknown>): Promise<FormState> {
   const id = text(data, 'id');
+  let result: unknown;
   try {
-    const result = await apply(id, Number(text(data, 'version'))); // apply pode lançar antes de chamar o serviço
-    revalidatePath('/admin');
-    revalidatePath(`/admin/veiculos/${id}`);
-    return { message: success, version: newVersionOf(result) };
+    result = await apply(id, Number(text(data, 'version'))); // apply pode lançar antes de chamar o serviço
   } catch (error) {
     return { message: toFormMessage(error) };
   }
+  // O estado já foi gravado. Falha de invalidação não deve pedir que a pessoa
+  // repita Publicar ou uma exclusão de foto, criando uma resposta falsa.
+  try { revalidatePath('/admin'); revalidatePath(`/admin/veiculos/${id}`); } catch { /* rotas dinâmicas leem o banco no próximo pedido */ }
+  return { message: success, version: newVersionOf(result) };
 }
 
 // Campo de preço vazio significa "preço ainda não definido": não mexe no que está salvo.
@@ -125,7 +127,13 @@ export async function removeVehiclePhoto(_state: FormState, formData: FormData):
 export async function changeStatus(_state: FormState, formData: FormData): Promise<FormState> {
   // O serviço valida a transição e exige confirmAvailability === true para publicar.
   const confirmAvailability = text(formData, 'confirmAvailability') === 'true';
-  return run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
+  const result = await run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
+  if (result.version !== undefined) {
+    // O catálogo é dinâmico; estes caminhos limpam também o cache de navegação
+    // de quem já abriu a vitrine ou um anúncio nesta sessão.
+    try { revalidatePath('/'); revalidatePath('/veiculos/[slug]', 'page'); } catch { /* estado já persistido */ }
+  }
+  return result;
 }
 
 const VEHICLE_TYPES = ['motorcycle', 'car'] as const;

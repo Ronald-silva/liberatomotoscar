@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
@@ -10,21 +11,18 @@ import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 import { VehicleViewEvent } from '@/components/marketing/VehicleViewEvent';
 import { InventoryDetail } from '@/components/vehicles/InventoryDetail';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { INVENTORY_VEHICLES, getInventoryVehicle } from '@/data/inventory-vehicles';
 import { DEMO_VEHICLES, getDemoVehicle } from '@/data/mock-vehicles';
 import { buildBreadcrumbSchema, buildVehicleSchema } from '@/lib/structured-data';
-
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return [...INVENTORY_VEHICLES, ...DEMO_VEHICLES].map((vehicle) => ({ slug: vehicle.slug }));
-}
+import { getPublicVehicleWithPhotos, listPublicVehiclesWithCover } from '@/server/vehicles/service';
+import { toCatalogVehicle } from '@/server/vehicles/public-catalog';
 
 export async function generateMetadata({
   params,
 }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const stockVehicle = getInventoryVehicle(slug);
+  await connection();
+  const publicVehicle = await getPublicVehicleWithPhotos(slug);
+  const stockVehicle = publicVehicle ? toCatalogVehicle({ ...publicVehicle, image: publicVehicle.images[0] ?? null }) : null;
   if (stockVehicle) {
     const title = `${stockVehicle.title} ${stockVehicle.color}`;
     const description = `${stockVehicle.shortDescription} Confira os dados informados no anúncio e consulte a Liberato Motos Car.`;
@@ -49,12 +47,16 @@ export async function generateMetadata({
 
 export default async function VehiclePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const stockVehicle = getInventoryVehicle(slug);
+  await connection();
+  const [publicVehicle, publicListings] = await Promise.all([
+    getPublicVehicleWithPhotos(slug), listPublicVehiclesWithCover(),
+  ]);
+  const stockVehicle = publicVehicle ? toCatalogVehicle({ ...publicVehicle, image: publicVehicle.images[0] ?? null }) : null;
   if (stockVehicle) {
     return (
       <div className="detail-page">
         <Header />
-        <main id="conteudo"><InventoryDetail vehicle={stockVehicle} /></main>
+        <main id="conteudo"><InventoryDetail vehicle={stockVehicle} vehicles={publicListings.map(toCatalogVehicle)} images={publicVehicle?.images ?? []} /></main>
         <Footer />
         <VehicleViewEvent slug={stockVehicle.slug} category={stockVehicle.category} />
         <JsonLd schema={buildVehicleSchema(stockVehicle)} />
