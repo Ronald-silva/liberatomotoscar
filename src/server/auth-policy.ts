@@ -1,6 +1,9 @@
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function allowedAdminEmails(): string[] {
+// Exportada porque os scripts de concessão precisam ler a mesma lista que o login usa. Quando
+// isso era duplicado, acrescentar uma segunda conta ao ADMIN_GOOGLE_EMAIL quebrou o script sem
+// quebrar o login, e a mensagem de erro apontava para o lugar errado.
+export function allowedAdminEmails(): string[] {
   return (process.env.ADMIN_GOOGLE_EMAIL ?? '').split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
 }
 
