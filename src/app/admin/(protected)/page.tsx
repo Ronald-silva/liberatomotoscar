@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { listAdminVehicles, listAdminVehiclesWithCover } from '@/server/vehicles/service';
+import { countAdminVehiclesByStatus, listAdminVehicles, listAdminVehiclesWithCover } from '@/server/vehicles/service';
 import { logoutAdmin } from '../actions';
 import styles from '../admin.module.css';
 import { badgeClassName, statusLabels } from './veiculos/status';
@@ -11,9 +11,14 @@ export const metadata: Metadata = { title: 'Painel', robots: { index: false, fol
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default async function AdminPage() {
+  // Lista e contagem em paralelo: cada ida ao banco custa ~53 ms, então esperar uma pela outra dobraria a espera do dono.
   // Se o armazenamento de fotos falhar (R2 ausente ou errado), o estoque aparece sem capas em vez de derrubar o painel.
-  const vehicles = await listAdminVehiclesWithCover()
-    .catch(() => listAdminVehicles().then((rows) => rows.map((row) => ({ ...row, coverUrl: null as string | null }))));
+  // A contagem ainda não é exibida e, se falhar, não pode levar a lista junto: o dono veio pela lista.
+  const [vehicles] = await Promise.all([
+    listAdminVehiclesWithCover()
+      .catch(() => listAdminVehicles().then((rows) => rows.filter((row) => row.status !== 'discarded').map((row) => ({ ...row, coverUrl: null as string | null })))),
+    countAdminVehiclesByStatus().catch(() => null),
+  ]);
   const create = <Link className={styles.button} href="/admin/veiculos/novo">Cadastrar veículo</Link>;
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="admin-title">

@@ -6,8 +6,9 @@ import { and, eq, sql } from 'drizzle-orm';
 vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: 'phase12-audit-actor' }) }));
 
 import { closeDb, getDb } from '@/server/db/client';
+import { vehicleStatus } from './validation';
 import { usersTable, vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
-import { addPhoto, changeVehicleStatus, createDraft, DiscardedVehicleError, discardDraft, getPublicVehicleBySlug, listPublicVehicles,
+import { addPhoto, changeVehicleStatus, countAdminVehiclesByStatus, createDraft, DiscardedVehicleError, discardDraft, getPublicVehicleBySlug, listAdminVehiclesWithCover, listPublicVehicles,
   removePhoto, setCoverPhoto, StaleVehicleError, updateVehicle, VehicleNotFoundError } from './service';
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (autorização simulada)', () => {
@@ -306,6 +307,49 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       }
       const two = await updateVehicle(draft.id, none.versionNumber, { details: allDetails });
       expect(two.imageCount).toBe(2);
+    });
+  });
+
+  describe('estoque por estado', () => {
+    const noStorage = { put: vi.fn(), delete: vi.fn(async () => {}) };
+    // As outras provas desta suíte deixam veículos para trás: por isso tudo aqui procura pelos ids criados, nunca por totais absolutos.
+    const discarded = async () => {
+      const draft = await createDraft({ type: 'car' });
+      await discardDraft(draft.id, draft.versionNumber, noStorage);
+      return draft;
+    };
+
+    it('exclui descartados da listagem sem filtro', async () => {
+      const kept = await createDraft({ type: 'car' });
+      const thrown = await discarded();
+      const ids = (await listAdminVehiclesWithCover({ storage: noStorage })).map((item) => item.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).not.toContain(thrown.id);
+    });
+
+    it('lista apenas o estado pedido, inclusive descartados quando pedidos de forma explícita', async () => {
+      const kept = await createDraft({ type: 'car' });
+      const thrown = await discarded();
+      const onlyDiscarded = (await listAdminVehiclesWithCover({ status: 'discarded', storage: noStorage })).map((item) => item.id);
+      expect(onlyDiscarded).toContain(thrown.id);
+      expect(onlyDiscarded).not.toContain(kept.id);
+      const onlyDrafts = await listAdminVehiclesWithCover({ status: 'draft', storage: noStorage });
+      expect(onlyDrafts.every((item) => item.status === 'draft')).toBe(true);
+      expect(onlyDrafts.map((item) => item.id)).toContain(kept.id);
+    });
+
+    it('conta os veículos por estado, com zero nos estados sem veículo', async () => {
+      const before = await countAdminVehiclesByStatus();
+      // Todo estado do modelo aparece, mesmo sem veículo, para a tela não adivinhar chaves ausentes.
+      expect(Object.keys(before).sort()).toEqual([...vehicleStatus.options].sort());
+      expect(Object.values(before).every((count) => Number.isInteger(count) && count >= 0)).toBe(true);
+      await createDraft({ type: 'car' });
+      await createDraft({ type: 'motorcycle' });
+      await discarded();
+      const after = await countAdminVehiclesByStatus();
+      expect(after.draft - before.draft).toBe(2);
+      expect(after.discarded - before.discarded).toBe(1);
+      expect(after.sold).toBe(before.sold);
     });
   });
 });

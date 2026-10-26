@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, ne, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
@@ -89,14 +89,26 @@ export async function listAdminVehicles() {
 }
 
 // Estoque com a foto de capa, em uma única consulta (sem N+1). R2 vira URL assinada de curta duração; legacy_public já é caminho público.
-export async function listAdminVehiclesWithCover(storage?: PhotoStorage) {
+// Sem estado pedido, o descartado fica de fora: o rascunho jogado fora sai do estoque, mas segue acessível se pedido de forma explícita.
+export async function listAdminVehiclesWithCover(options: { status?: Status; storage?: PhotoStorage } = {}) {
   await requireAdmin();
+  const { status, storage } = options;
   const rows = await getDb().select({ vehicle: vehicles, cover: { storageKey: vehicleImages.storageKey, storageProvider: vehicleImages.storageProvider } })
     .from(vehicles)
     .leftJoin(vehicleImages, and(eq(vehicleImages.vehicleId, vehicles.id), eq(vehicleImages.isCover, true)))
+    .where(status ? eq(vehicles.status, status) : ne(vehicles.status, 'discarded'))
     .orderBy(desc(vehicles.updatedAt));
   const photoUrl = photoUrlResolver(rows.map(({ cover }) => cover), storage);
   return Promise.all(rows.map(async ({ vehicle, cover }) => ({ ...vehicle, coverUrl: await photoUrl(cover) })));
+}
+
+// Um único group by; os estados sem veículo entram com zero para a tela não ter de adivinhar chaves ausentes.
+export async function countAdminVehiclesByStatus(): Promise<Record<Status, number>> {
+  await requireAdmin();
+  const rows = await getDb().select({ status: vehicles.status, total: sql<number>`count(*)::int` }).from(vehicles).groupBy(vehicles.status);
+  const counts = Object.fromEntries(vehicleStatus.options.map((status) => [status, 0])) as Record<Status, number>;
+  for (const { status, total } of rows) counts[status] = total;
+  return counts;
 }
 
 const publicStatuses: Status[] = ['published', 'reserved'];
