@@ -250,7 +250,7 @@ describe('mudar estado', () => {
   it('repassa veículo, versão e novo estado, e revalida lista e página', async () => {
     const state = await changeStatus(empty, statusForm('reserved'));
     expect(state.message).toBe('Estado atualizado.');
-    expect(stub.changeVehicleStatus).toHaveBeenCalledWith(id, 6, 'reserved', { confirmAvailability: false });
+    expect(stub.changeVehicleStatus).toHaveBeenCalledWith(id, 6, 'reserved', { confirmAvailability: false, confirmSale: false });
     expect(stub.revalidatePath).toHaveBeenCalledWith('/admin');
     expect(stub.revalidatePath).toHaveBeenCalledWith(`/admin/veiculos/${id}`);
   });
@@ -270,14 +270,23 @@ describe('mudar estado', () => {
 
   it('só envia a confirmação quando o campo vale exatamente "true"', async () => {
     await changeStatus(empty, statusForm('published', { confirmAvailability: 'true' }));
-    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: true });
+    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: true, confirmSale: false });
     await changeStatus(empty, statusForm('published', { confirmAvailability: 'on' }));
-    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: false });
+    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'published', { confirmAvailability: false, confirmSale: false });
+    await changeStatus(empty, statusForm('sold', { confirmSale: 'true' }));
+    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'sold', { confirmAvailability: false, confirmSale: true });
+    await changeStatus(empty, statusForm('sold', { confirmSale: 'on' }));
+    expect(stub.changeVehicleStatus).toHaveBeenLastCalledWith(id, 6, 'sold', { confirmAvailability: false, confirmSale: false });
   });
 
   it('pede a confirmação quando o serviço a exige', async () => {
     stub.changeVehicleStatus.mockRejectedValueOnce(new Error('Confirme a disponibilidade para publicar.'));
     expect((await changeStatus(empty, statusForm('published'))).message).toBe('Confirme a disponibilidade para publicar.');
+  });
+
+  it('pede confirmação explícita antes de marcar vendido', async () => {
+    stub.changeVehicleStatus.mockRejectedValueOnce(new Error('Confirme a venda antes de marcar o anúncio como vendido.'));
+    expect((await changeStatus(empty, statusForm('sold'))).message).toBe('Confirme a venda antes de marcar o anúncio como vendido.');
   });
 
   it('explica o que falta para publicar', async () => {
@@ -370,9 +379,9 @@ describe('excluir rascunho', () => {
   });
 
   it('devolve mensagem própria quando o anúncio não está em rascunho', async () => {
-    stub.discardDraft.mockRejectedValueOnce(new Error('Só é possível excluir anúncios em rascunho.'));
+    stub.discardDraft.mockRejectedValueOnce(new Error('Só é possível excluir rascunhos que nunca foram publicados.'));
     const state = await discardVehicleDraft(empty, discardForm());
-    expect(state.message).toBe('Só é possível excluir anúncios em rascunho.');
+    expect(state.message).toBe('Só é possível excluir rascunhos que nunca foram publicados.');
     expect(stub.redirect).not.toHaveBeenCalled();
   });
 

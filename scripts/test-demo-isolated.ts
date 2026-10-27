@@ -7,8 +7,9 @@ loadEnvConfig(process.cwd());
 
 async function main() {
   const execute = process.argv.includes('--execute-local');
-  if (!execute && !process.argv.includes('--preflight-only')) {
-    throw new Error('Use --preflight-only ou --execute-local para o ensaio com OpenRouter.');
+  const vehicles = process.argv.includes('--integration-vehicles');
+  if (!execute && !vehicles && !process.argv.includes('--preflight-only')) {
+    throw new Error('Use --preflight-only, --execute-local ou --integration-vehicles.');
   }
 
   const projectId = process.env.NEON_PROJECT_ID?.trim();
@@ -66,15 +67,15 @@ async function main() {
   }
 
   console.log(`Branch isolada verificada: ${branchId}.`);
-  if (!execute) return;
-  console.log('Iniciando ensaio HTTP real.');
-  const child = spawnSync('npm', ['test', '--', 'src/app/api/demo-ia/route.live.test.ts'], {
+  if (!execute && !vehicles) return;
+  console.log(vehicles ? 'Iniciando integração do estoque.' : 'Iniciando ensaio HTTP real.');
+  const child = spawnSync('npm', ['test', '--', vehicles ? 'src/server/vehicles/service.integration.test.ts' : 'src/app/api/demo-ia/route.live.test.ts'], {
     cwd: process.cwd(), stdio: 'inherit', env: {
       ...process.env,
       DATABASE_URL: pooledUrl,
       DATABASE_URL_DIRECT: directUrl,
       ISOLATED_NEON_TEST_BRANCH_ID: branchId,
-      RUN_LIVE_OPENROUTER: 'true',
+      ...(vehicles ? { TEST_DATABASE_URL: pooledUrl } : { RUN_LIVE_OPENROUTER: 'true' }),
     },
   });
   if (child.error) throw child.error;

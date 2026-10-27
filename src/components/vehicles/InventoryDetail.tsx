@@ -10,6 +10,8 @@ import {
 } from '@/data/inventory-vehicles';
 
 export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: InventoryVehicle; vehicles: InventoryVehicle[]; images: string[] }) {
+  const isSold = vehicle.availability === 'vendido';
+  const isReserved = vehicle.availability === 'reservado';
   const others = vehicles.filter((item) => item.slug !== vehicle.slug);
   const related = [
     ...others.filter((item) => item.category === vehicle.category),
@@ -39,12 +41,15 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
             <div>
               <p className="eyebrow"><span className="eyebrow-line" /> {vehicle.categoryLabel}</p>
               <h1 id="detail-title" className="detail-title detail-title--inventory">{vehicle.title}</h1>
+              {isSold ? <p className="detail-availability detail-availability--sold">Vendido · anúncio mantido para consulta histórica</p> : null}
+              {isReserved ? <p className="detail-availability detail-availability--reserved">Reservado · indisponível no momento</p> : null}
               <div className="detail-stock-facts" aria-label="Dados principais do anúncio">
                 {vehicle.year !== undefined && <span>{vehicle.year}</span>}
                 {vehicle.kilometers !== undefined && <span>{formatKilometers(vehicle.kilometers)}</span>}
                 <span>{vehicle.color}</span>
               </div>
               <p className="detail-price">{formatPrice(vehicle.priceBRL)}</p>
+              {isSold ? <p className="detail-price-note">Preço anunciado antes da venda.</p> : null}
               <p className="detail-subtitle">{vehicle.shortDescription}</p>
               <ul className="detail-highlights">
                 {vehicle.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}
@@ -115,21 +120,23 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
       <section className="detail-contact" aria-labelledby="detail-contact-title">
         <div className="container detail-contact-inner">
           <div>
-            <p className="eyebrow"><span className="eyebrow-line" /> ATENDIMENTO DIRETO</p>
-            <h2 id="detail-contact-title">Gostou deste veículo?</h2>
-            <p>Confirme a disponibilidade e tire suas dúvidas diretamente com a Liberato Motos Car.</p>
+            <p className="eyebrow"><span className="eyebrow-line" /> {isSold ? 'ANÚNCIO ENCERRADO' : 'ATENDIMENTO DIRETO'}</p>
+            <h2 id="detail-contact-title">{isSold ? 'Este veículo foi vendido.' : isReserved ? 'Veículo reservado.' : 'Gostou deste veículo?'}</h2>
+            <p>{isSold ? 'Veja outros anúncios para encontrar uma opção disponível.'
+              : isReserved ? 'Este veículo está reservado. Consulte a loja para saber se a reserva mudou.'
+                : 'Confirme a disponibilidade e tire suas dúvidas diretamente com a Liberato Motos Car.'}</p>
           </div>
           <div className="detail-cta">
-            <WhatsAppLink
+            {!isSold ? <WhatsAppLink
               className="button button--red"
               subject={`${vehicle.title} — referência ${vehicle.slug}`}
               placement={`detail_${vehicle.slug}`}
               showArrow
             >
-              Consultar veículo
-            </WhatsAppLink>
+              {isReserved ? 'Consultar reserva' : 'Consultar veículo'}
+            </WhatsAppLink> : null}
             <Link className="button button--outline" href="/#vitrine">
-              <ArrowLeft size={17} aria-hidden="true" /> Voltar aos veículos
+              <ArrowLeft size={17} aria-hidden="true" /> {isSold ? 'Ver outros veículos' : 'Voltar aos veículos'}
             </Link>
           </div>
         </div>

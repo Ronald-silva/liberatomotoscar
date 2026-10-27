@@ -25,7 +25,11 @@ export async function generateMetadata({
   const stockVehicle = publicVehicle ? toCatalogVehicle({ ...publicVehicle, image: publicVehicle.images[0] ?? null }) : null;
   if (stockVehicle) {
     const title = `${stockVehicle.title} ${stockVehicle.color}`;
-    const description = `${stockVehicle.shortDescription} Confira os dados informados no anúncio e consulte a Liberato Motos Car.`;
+    const description = stockVehicle.availability === 'vendido'
+      ? `${stockVehicle.title} foi vendido. Consulte outros veículos da Liberato Motos Car.`
+      : stockVehicle.availability === 'reservado'
+        ? `${stockVehicle.title} está reservado. Consulte a Liberato Motos Car para verificar a disponibilidade.`
+        : `${stockVehicle.shortDescription} Confira os dados informados no anúncio e consulte a Liberato Motos Car.`;
     return {
       title,
       description,

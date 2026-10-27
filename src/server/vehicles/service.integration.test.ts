@@ -43,7 +43,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
     expect(published.availabilityConfirmedAt).toBeInstanceOf(Date);
     expect((await getPublicVehicleBySlug(slug))?.status).toBe('published');
     expect((await listPublicVehicles()).some((item) => item.slug === slug)).toBe(true);
-    const sold = await changeVehicleStatus(draft.id, published.versionNumber, 'sold');
+    await expect(changeVehicleStatus(draft.id, published.versionNumber, 'sold')).rejects.toThrow('Confirme a venda antes de marcar o anúncio como vendido.');
+    const sold = await changeVehicleStatus(draft.id, published.versionNumber, 'sold', { confirmSale: true });
     expect(sold.status).toBe('sold');
     expect((await listPublicVehicles()).some((item) => item.slug === slug)).toBe(false);
     expect((await getPublicVehicleBySlug(slug))?.status).toBe('sold');
@@ -139,23 +140,24 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       expect(storage.delete).toHaveBeenCalledTimes(2);
     });
 
-    it('recusa anúncio publicado e descarta quando ele volta a rascunho', async () => {
+    it('preserva anúncio e fotos após publicação, mesmo quando volta a rascunho', async () => {
       const draft = await createDraft({ type: 'car' });
       const priced = await updateVehicle(draft.id, draft.versionNumber, { details: { brand: 'Fiat', model: 'Uno' }, priceCents: 100_00 });
       const photo = await addPhoto(draft.id, priced.versionNumber, png, 'image/png', fakeStorage());
       const published = await changeVehicleStatus(draft.id, photo.vehicleVersion, 'published', { confirmAvailability: true });
-      await expect(discardDraft(draft.id, published.versionNumber, fakeStorage())).rejects.toThrow('Só é possível excluir anúncios em rascunho.');
-      // O histórico de publicação continua no banco, mesmo após o descarte.
+      await expect(discardDraft(draft.id, published.versionNumber, fakeStorage())).rejects.toThrow('Só é possível excluir rascunhos que nunca foram publicados.');
       const archived = await changeVehicleStatus(draft.id, published.versionNumber, 'archived');
       const reverted = await changeVehicleStatus(draft.id, archived.versionNumber, 'draft');
       expect(reverted.publishedAt).not.toBeNull();
       const storage = fakeStorage();
-      await expect(discardDraft(draft.id, reverted.versionNumber, storage)).resolves.toMatchObject({ status: 'discarded' });
-      expect(storage.delete).toHaveBeenCalledTimes(1);
-      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(0);
-      const [discarded] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
-      expect(discarded.status).toBe('discarded');
-      expect(discarded.publishedAt).not.toBeNull();
+      await expect(discardDraft(draft.id, reverted.versionNumber, storage)).rejects.toThrow('Só é possível excluir rascunhos que nunca foram publicados.');
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(1);
+      const [retained] = await getDb().select().from(vehicles).where(eq(vehicles.id, draft.id));
+      expect(retained.status).toBe('draft');
+      expect(retained.publishedAt).not.toBeNull();
+      const audits = await getDb().select().from(vehicleAudit).where(eq(vehicleAudit.vehicleId, draft.id));
+      expect(audits.map((item) => item.operation)).not.toContain('discarded');
     });
 
     it('recusa descartar com versão velha', async () => {

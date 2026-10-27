@@ -201,7 +201,7 @@ export async function updateVehicle(id: string, expectedVersion: number,
 }
 
 export async function changeVehicleStatus(id: string, expectedVersion: number, nextStatus: unknown,
-  options: { confirmAvailability?: boolean } = {}) {
+  options: { confirmAvailability?: boolean; confirmSale?: boolean } = {}) {
   const actor = await requireAdmin();
   const status = vehicleStatus.parse(nextStatus);
   // Descartar apaga arquivos e dados do rascunho; não pode ser só uma troca de estado.
@@ -217,6 +217,7 @@ export async function changeVehicleStatus(id: string, expectedVersion: number, n
       const [count] = await tx.select({ total: sql<number>`count(*)::int` }).from(vehicleImages).where(eq(vehicleImages.vehicleId, before.id));
       assertPublishable(before, count.total);
     }
+    if (status === 'sold' && options.confirmSale !== true) throw new Error('Confirme a venda antes de marcar o anúncio como vendido.');
     const [after] = await tx.update(vehicles).set({
       status,
       availabilityConfirmedAt: status === 'published' ? now : before.availabilityConfirmedAt,
@@ -304,7 +305,7 @@ export async function discardDraft(vehicleId: string, expectedVersion: number, s
     const [before] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId)).for('update');
     if (!before) throw new VehicleNotFoundError();
     if (before.versionNumber !== expectedVersion) throw new StaleVehicleError();
-    if (!isDiscardable(before)) throw new Error('Só é possível excluir anúncios em rascunho.');
+    if (!isDiscardable(before)) throw new Error('Só é possível excluir rascunhos que nunca foram publicados.');
     const removed = await tx.select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
     await tx.delete(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
     const [after] = await tx.update(vehicles).set({ status: 'discarded', updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })

@@ -125,9 +125,10 @@ export async function removeVehiclePhoto(_state: FormState, formData: FormData):
 }
 
 export async function changeStatus(_state: FormState, formData: FormData): Promise<FormState> {
-  // O serviço valida a transição e exige confirmAvailability === true para publicar.
+  // O serviço valida a transição e exige confirmação explícita para publicar e vender.
   const confirmAvailability = text(formData, 'confirmAvailability') === 'true';
-  const result = await run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability }));
+  const confirmSale = text(formData, 'confirmSale') === 'true';
+  const result = await run(formData, 'Estado atualizado.', (id, version) => changeVehicleStatus(id, version, text(formData, 'status'), { confirmAvailability, confirmSale }));
   if (result.version !== undefined) {
     // O catálogo é dinâmico; estes caminhos limpam também o cache de navegação
     // de quem já abriu a vitrine ou um anúncio nesta sessão.

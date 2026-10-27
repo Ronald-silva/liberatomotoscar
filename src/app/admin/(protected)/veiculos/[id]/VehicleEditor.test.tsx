@@ -60,3 +60,36 @@ it('mostra anúncio publicado sem etapas nem rodapé e sem exclusão', () => {
   expect(screen.queryByRole('button', { name: 'Excluir rascunho' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Reservar' })).toBeTruthy();
 });
+
+it('só marca vendido após confirmação e envia a versão atual', async () => {
+  changeStatus.mockResolvedValue({ message: 'Estado atualizado.', version: 4 });
+  render(<VehicleEditor {...props} status="published" isNew={false} canDiscard={false}
+    targets={['reserved', 'sold', 'archived']} initialMissing={[]} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Marcar vendido' }));
+  expect(changeStatus).not.toHaveBeenCalled();
+  expect(screen.getByText(/Confirmar venda/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, marcar vendido' }));
+  await waitFor(() => expect(changeStatus).toHaveBeenCalledTimes(1));
+  const data = changeStatus.mock.calls[0][1] as FormData;
+  expect(data.get('status')).toBe('sold');
+  expect(data.get('version')).toBe('3');
+  expect(data.get('confirmSale')).toBe('true');
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+});
+
+it('permite cancelar e exige nova confirmação para republicar', async () => {
+  changeStatus.mockResolvedValue({ message: 'Estado atualizado.', version: 4 });
+  render(<VehicleEditor {...props} status="sold" isNew={false} canDiscard={false}
+    targets={['published', 'archived']} initialMissing={[]} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Republicar' }));
+  expect(changeStatus).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+  expect(changeStatus).not.toHaveBeenCalled();
+  expect(screen.queryByText(/disponibilidade foi conferida/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Republicar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, republicar' }));
+  await waitFor(() => expect(changeStatus).toHaveBeenCalledTimes(1));
+  const data = changeStatus.mock.calls[0][1] as FormData;
+  expect(data.get('status')).toBe('published');
+  expect(data.get('confirmAvailability')).toBe('true');
+});
