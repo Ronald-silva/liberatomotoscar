@@ -7,6 +7,7 @@ import { Showcase } from '@/components/showcase/Showcase';
 import { Experience } from '@/components/sections/Experience';
 import { Contact } from '@/components/sections/Contact';
 import { Footer } from '@/components/layout/Footer';
+import { SiteChatWidget } from '@/components/attendance/SiteChatWidget';
 import { Reveal } from '@/components/motion/Reveal';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { buildAutoDealerSchema } from '@/lib/structured-data';
@@ -29,6 +30,7 @@ export default async function Home() {
         <Reveal><Contact /></Reveal>
       </main>
       <Footer />
+      <SiteChatWidget />
       <JsonLd schema={buildAutoDealerSchema()} />
     </>
   );

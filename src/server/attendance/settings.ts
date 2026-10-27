@@ -11,11 +11,11 @@ export class StaleAttendanceSettingError extends Error {
   constructor() { super('O modo de atendimento mudou. Atualize a página antes de tentar novamente.'); }
 }
 
-// Sem linha no banco, o canal ainda não foi configurado: nenhuma automação roda.
+// Sem linha no banco, o canal inicia no modo determinístico (Chatbot) até o admin alterar.
 export async function readSiteSetting() {
   const [row] = await getDb().select().from(channelSettings)
     .where(eq(channelSettings.channel, 'site')).limit(1);
-  return row ?? { channel: 'site' as const, mode: 'disabled' as const, version: 1,
+  return row ?? { channel: 'site' as const, mode: 'deterministic' as const, version: 1,
     updatedBy: null, updatedAt: null };
 }
 
@@ -39,7 +39,7 @@ export async function setSiteMode(requestedMode: unknown, expectedVersion: numbe
   return getDb().transaction(async (tx) => {
     // A primeira mudança cria a linha desativada. Corridas de criação convergem
     // na chave primária; depois a comparação de versão decide um único vencedor.
-    await tx.insert(channelSettings).values({ channel: 'site', mode: 'disabled', version: 1 })
+    await tx.insert(channelSettings).values({ channel: 'site', mode: 'deterministic', version: 1 })
       .onConflictDoNothing();
     const [before] = await tx.select().from(channelSettings)
       .where(eq(channelSettings.channel, 'site')).for('update').limit(1);

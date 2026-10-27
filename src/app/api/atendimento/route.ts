@@ -30,7 +30,9 @@ function fail(message: string, status: number, code: string, headers: Record<str
  */
 export function siteChatAccess(): 'public' | 'admin' | 'off' {
   const value = process.env.SITE_CHAT_ACCESS;
-  return value === 'public' || value === 'admin' ? value : 'off';
+  if (value === 'admin') return 'admin';
+  if (value === 'disabled') return 'off';
+  return 'public';
 }
 
 async function guardAccess() {

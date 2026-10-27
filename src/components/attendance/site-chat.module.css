@@ -1,8 +1,8 @@
 .launcherWrap {
   position: fixed;
-  right: 1.25rem;
-  bottom: 5.5rem;
-  z-index: 45;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 95;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -13,20 +13,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
-  padding: 0.75rem 1.25rem;
-  border: 1px solid #4d535d;
+  min-height: 52px;
+  padding: 0.85rem 1.4rem;
+  border: 2px solid rgb(255 255 255 / 22%);
   border-radius: 999px;
-  background: #0a0d12;
-  color: #f7f7f4;
+  background: #ba1d28;
+  color: #ffffff;
   font: inherit;
-  font-weight: 700;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 55%);
   cursor: pointer;
 }
 
 .launcherButton:hover {
-  border-color: #ba1d28;
+  filter: brightness(1.1);
 }
 
 .launcherButton:focus-visible,

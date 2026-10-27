@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { Archivo, Space_Mono } from 'next/font/google';
 import { CampaignSync } from '@/components/marketing/CampaignSync';
 import { AnalyticsConsent } from '@/components/marketing/AnalyticsConsent';
-import { SiteAttendance } from '@/components/attendance/SiteAttendance';
 import { SITE_URL, STORE, STORE_ADDRESS_LINE } from '@/data/store';
 import './globals.css';
 
@@ -59,7 +58,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a className="skip-link" href="#conteudo">Pular para o conteúdo</a>
         <CampaignSync />
         {children}
-        <SiteAttendance />
         <AnalyticsConsent />
       </body>
     </html>

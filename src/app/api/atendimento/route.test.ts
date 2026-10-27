@@ -61,7 +61,7 @@ describe('rota /api/atendimento', () => {
   });
 
   it('responde 404 quando SITE_CHAT_ACCESS está desativado', async () => {
-    process.env.SITE_CHAT_ACCESS = 'off';
+    process.env.SITE_CHAT_ACCESS = 'disabled';
     const response = await GET(new Request('http://localhost:3000/api/atendimento'));
     expect(response.status).toBe(404);
     expect(mocks.getSiteChatView).not.toHaveBeenCalled();

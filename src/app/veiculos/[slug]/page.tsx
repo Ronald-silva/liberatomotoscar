@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, ChevronRight } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { SiteChatWidget } from '@/components/attendance/SiteChatWidget';
 import { Viewer360 } from '@/components/viewer-360/Viewer360';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
 import { VehicleViewEvent } from '@/components/marketing/VehicleViewEvent';
@@ -62,6 +63,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ slug: 
         <Header />
         <main id="conteudo"><InventoryDetail vehicle={stockVehicle} vehicles={publicListings.map(toCatalogVehicle)} images={publicVehicle?.images ?? []} /></main>
         <Footer />
+        <SiteChatWidget />
         <VehicleViewEvent slug={stockVehicle.slug} category={stockVehicle.category} />
         <JsonLd schema={buildVehicleSchema(stockVehicle)} />
         <JsonLd schema={buildBreadcrumbSchema(stockVehicle)} />
@@ -135,6 +137,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ slug: 
         </section>
       </main>
       <Footer />
+      <SiteChatWidget />
       <VehicleViewEvent slug={vehicle.slug} category={vehicle.category} />
     </div>
   );
