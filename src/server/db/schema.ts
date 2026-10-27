@@ -106,6 +106,26 @@ export const vehicleImages = pgTable('vehicle_images', {
   uniqueIndex('vehicle_images_one_cover_uidx').on(table.vehicleId).where(sql`${table.isCover} = true`),
 ]);
 
+// Outbox para exclusões R2: a pendência nasce na mesma transação que remove a
+// referência da foto. Repetir DeleteObject é seguro quando a resposta se perde.
+export const storageCleanupJobs = pgTable('storage_cleanup_jobs', {
+  bucket: text('bucket').notNull(),
+  storageKey: text('storage_key').notNull(),
+  reason: text('reason', { enum: ['upload_rollback', 'photo_removed', 'draft_discarded', 'orphan_scan'] }).notNull(),
+  status: text('status', { enum: ['pending', 'done'] }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  lastErrorCode: text('last_error_code'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+}, (table) => [
+  primaryKey({ columns: [table.bucket, table.storageKey] }),
+  check('storage_cleanup_status_valid', sql`${table.status} IN ('pending', 'done')`),
+  check('storage_cleanup_reason_valid', sql`${table.reason} IN ('upload_rollback', 'photo_removed', 'draft_discarded', 'orphan_scan')`),
+  check('storage_cleanup_attempts_valid', sql`${table.attempts} >= 0`),
+  index('storage_cleanup_status_created_idx').on(table.status, table.createdAt),
+]);
+
 export const vehicleAudit = pgTable('vehicle_audit', {
   id: uuid('id').primaryKey().defaultRandom(),
   vehicleId: uuid('vehicle_id').notNull().references(() => vehicles.id, { onDelete: 'restrict' }),

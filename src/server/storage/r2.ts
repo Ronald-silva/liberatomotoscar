@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getR2Config } from '@/server/env';
 
@@ -12,6 +12,17 @@ export interface PhotoStorage {
   put(vehicleId: string, body: Uint8Array, mimeType: string): Promise<StoredPhoto>;
   delete(key: string): Promise<void>;
   signedReadUrl?(key: string): Promise<string>;
+}
+
+export interface R2PhotoStorage extends PhotoStorage {
+  listPage(prefix: 'drafts/', continuationToken?: string): Promise<{
+    objects: { key: string; modifiedAt: Date | null }[];
+    nextToken?: string;
+  }>;
+}
+
+export function isR2PhotoKey(key: string): boolean {
+  return /^drafts\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.(jpg|png|webp)$/.test(key);
 }
 
 export function checkPhoto(body: Uint8Array, mimeType: string): asserts mimeType is PhotoMime {
@@ -41,7 +52,7 @@ function s3Client(cfg: Config): S3Client {
   return cached.client;
 }
 
-export function createR2Storage(): PhotoStorage {
+export function createR2Storage(): R2PhotoStorage {
   const cfg = getR2Config();
   const client = s3Client(cfg);
   return {
@@ -53,12 +64,19 @@ export function createR2Storage(): PhotoStorage {
       return { key, mimeType, sizeBytes: body.byteLength };
     },
     async delete(key) {
-      if (!/^drafts\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(key)) throw new Error('Chave de foto inválida.');
+      if (!isR2PhotoKey(key)) throw new Error('Chave de foto inválida.');
       await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }));
     },
     async signedReadUrl(key) {
-      if (!/^drafts\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(key)) throw new Error('Chave de foto inválida.');
+      if (!isR2PhotoKey(key)) throw new Error('Chave de foto inválida.');
       return getSignedUrl(client, new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { expiresIn: SIGNED_READ_SECONDS });
+    },
+    async listPage(prefix, continuationToken) {
+      const page = await client.send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix,
+        ContinuationToken: continuationToken, MaxKeys: 1000 }));
+      return { objects: (page.Contents ?? []).filter((object) => Boolean(object.Key)).map((object) => ({
+        key: object.Key!, modifiedAt: object.LastModified ?? null,
+      })), nextToken: page.NextContinuationToken };
     },
   };
 }

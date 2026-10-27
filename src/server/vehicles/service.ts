@@ -4,6 +4,7 @@ import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
 import { createR2Storage, checkPhoto, type PhotoStorage } from '@/server/storage/r2';
+import { queueR2Cleanup, queueUploadRollback, tryDeleteQueuedR2 } from '@/server/storage/cleanup';
 import { assertPublishable, assertStatusTransition, detailsInput, draftInput, idSchema, isDiscardable, priceInput, slugSchema, vehicleStatus, versionInput } from './validation';
 
 type Vehicle = typeof vehicles.$inferSelect;
@@ -258,7 +259,11 @@ export async function addPhoto(id: string, expectedVersion: number, body: Uint8A
       return { ...image, vehicleVersion: after.versionNumber };
     });
   } catch (error) {
-    try { await photoStorage.delete(saved.key); } catch { /* orphan cleanup is documented */ }
+    try { await photoStorage.delete(saved.key); }
+    catch {
+      try { await queueUploadRollback(saved.key); }
+      catch { console.error('Falha ao registrar limpeza R2 de upload rejeitado.'); }
+    }
     throw error;
   }
 }
@@ -279,6 +284,7 @@ export async function removePhoto(vehicleId: string, imageId: string, expectedVe
     if (!image) throw new VehicleNotFoundError();
     if (before.status !== 'draft' && before.status !== 'archived' && images.length === 1) throw new Error('O anúncio precisa manter uma foto.');
     await tx.delete(vehicleImages).where(eq(vehicleImages.id, imageId));
+    if (image.storageProvider === 'r2') await queueR2Cleanup(tx, image.storageKey, 'photo_removed');
     if (image.isCover && images.length > 1) {
       const replacement = images.find((item) => item.id !== imageId)!;
       await tx.update(vehicleImages).set({ isCover: true }).where(eq(vehicleImages.id, replacement.id));
@@ -289,14 +295,14 @@ export async function removePhoto(vehicleId: string, imageId: string, expectedVe
     return { ...image, vehicleVersion: after.versionNumber };
   });
   if (removed.storageProvider === 'r2') {
-    try { await (storage ?? createR2Storage()).delete(removed.storageKey); } catch { /* orphan cleanup is documented */ }
+    try { await tryDeleteQueuedR2(removed.storageKey, storage ?? createR2Storage()); }
+    catch { console.error('Falha ao processar limpeza R2 de foto removida.'); }
   }
   return removed;
 }
 
-// Exclusão lógica: o veículo e a auditoria ficam; somem as linhas de imagem e os arquivos do R2.
-// Os objetos só saem depois do commit — apagar antes deixaria um rascunho com fotos quebradas se a
-// transação desfizesse. Falha no R2 vira objeto órfão, nunca um descarte desfeito.
+// Exclusão lógica: o veículo e a auditoria ficam; as fotos R2 entram na fila
+// transacional e só são excluídas depois do commit.
 export async function discardDraft(vehicleId: string, expectedVersion: number, storage?: PhotoStorage) {
   const actor = await requireAdmin();
   idSchema.parse(vehicleId);
@@ -308,18 +314,19 @@ export async function discardDraft(vehicleId: string, expectedVersion: number, s
     if (!isDiscardable(before)) throw new Error('Só é possível excluir rascunhos que nunca foram publicados.');
     const removed = await tx.select().from(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
     await tx.delete(vehicleImages).where(eq(vehicleImages.vehicleId, vehicleId));
+    for (const image of removed) {
+      if (image.storageProvider === 'r2') await queueR2Cleanup(tx, image.storageKey, 'draft_discarded');
+    }
     const [after] = await tx.update(vehicles).set({ status: 'discarded', updatedAt: new Date(), versionNumber: sql`${vehicles.versionNumber} + 1` })
       .where(and(eq(vehicles.id, vehicleId), eq(vehicles.versionNumber, expectedVersion))).returning();
     if (!after) throw new StaleVehicleError();
     await audit(tx, after, actor.userId, 'discarded', before);
     return { removed, versionNumber: after.versionNumber };
   });
-  const r2Images = result.removed.filter((image) => image.storageProvider === 'r2');
-  if (r2Images.length > 0) {
-    const photoStorage = storage ?? createR2Storage();
-    for (const image of r2Images) {
-      try { await photoStorage.delete(image.storageKey); } catch { /* orphan cleanup is documented */ }
-    }
+  for (const image of result.removed) {
+    if (image.storageProvider !== 'r2') continue;
+    try { await tryDeleteQueuedR2(image.storageKey, storage ?? createR2Storage()); }
+    catch { console.error('Falha ao processar limpeza R2 de rascunho descartado.'); }
   }
   return { status: 'discarded' as const, versionNumber: result.versionNumber };
 }

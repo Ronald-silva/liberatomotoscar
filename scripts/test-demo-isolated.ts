@@ -68,6 +68,16 @@ async function main() {
 
   console.log(`Branch isolada verificada: ${branchId}.`);
   if (!execute && !vehicles) return;
+  if (vehicles) {
+    console.log('Aplicando migrations pendentes somente na branch isolada.');
+    const migration = spawnSync('npm', ['run', 'db:migrate'], {
+      cwd: process.cwd(), stdio: 'inherit', env: {
+        ...process.env, DATABASE_URL: pooledUrl, DATABASE_URL_DIRECT: directUrl,
+      },
+    });
+    if (migration.error) throw migration.error;
+    if (migration.status !== 0) throw new Error('Migration isolada falhou.');
+  }
   console.log(vehicles ? 'Iniciando integração do estoque.' : 'Iniciando ensaio HTTP real.');
   const child = spawnSync('npm', ['test', '--', vehicles ? 'src/server/vehicles/service.integration.test.ts' : 'src/app/api/demo-ia/route.live.test.ts'], {
     cwd: process.cwd(), stdio: 'inherit', env: {
@@ -75,7 +85,7 @@ async function main() {
       DATABASE_URL: pooledUrl,
       DATABASE_URL_DIRECT: directUrl,
       ISOLATED_NEON_TEST_BRANCH_ID: branchId,
-      ...(vehicles ? { TEST_DATABASE_URL: pooledUrl } : { RUN_LIVE_OPENROUTER: 'true' }),
+      ...(vehicles ? { TEST_DATABASE_URL: pooledUrl, R2_BUCKET: 'liberato-vehicle-integration-fake' } : { RUN_LIVE_OPENROUTER: 'true' }),
     },
   });
   if (child.error) throw child.error;

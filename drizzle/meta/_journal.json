@@ -50,6 +50,13 @@
       "when": 1793066766906,
       "tag": "0006_superb_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793103884304,
+      "tag": "0007_modern_midnight",
+      "breakpoints": true
     }
   ]
 }

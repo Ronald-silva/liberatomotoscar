@@ -7,13 +7,19 @@ vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: 'phase12
 
 import { closeDb, getDb } from '@/server/db/client';
 import { vehicleStatus } from './validation';
-import { usersTable, vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
+import { storageCleanupJobs, usersTable, vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
+import { queueOldR2Orphans, queueR2Cleanup, retryPendingR2Cleanup, tryDeleteQueuedR2 } from '@/server/storage/cleanup';
 import { addPhoto, changeVehicleStatus, countAdminVehiclesByStatus, createDraft, DiscardedVehicleError, discardDraft, getPublicVehicleBySlug, listAdminVehiclesWithCover, listPublicVehicles,
   removePhoto, setCoverPhoto, StaleVehicleError, updateVehicle, VehicleNotFoundError } from './service';
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (autorização simulada)', () => {
   beforeAll(async () => {
     if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('DATABASE_URL deve apontar para TEST_DATABASE_URL.');
+    if (process.env.R2_BUCKET !== 'liberato-vehicle-integration-fake' || !process.env.ISOLATED_NEON_TEST_BRANCH_ID) {
+      throw new Error('A integração exige branch Neon isolada e bucket R2 fictício.');
+    }
+    const [branch] = await getDb().execute(sql`SELECT current_setting('neon.branch_id', true) AS id`);
+    if (branch?.id !== process.env.ISOLATED_NEON_TEST_BRANCH_ID) throw new Error('Branch Neon real diferente da branch de teste.');
     // FK fixture only: no admin grant or login is created in the isolated database.
     await getDb().insert(usersTable).values({ id: 'phase12-audit-actor' }).onConflictDoNothing();
   });
@@ -92,6 +98,81 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
     await expect(addPhoto(draft.id, 2, Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]), 'image/png', storage)).rejects.toThrow();
     expect(storage.delete).toHaveBeenCalledWith(key);
     expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.vehicleId, draft.id))).toHaveLength(0);
+  });
+
+  it('registra compensação de upload quando o R2 falha e permite repetição', async () => {
+    const draft = await createDraft({ type: 'motorcycle' });
+    const key = `drafts/${draft.id}/${randomUUID()}.png`;
+    const storage = { put: vi.fn(async () => ({ key, mimeType: 'image/png' as const, sizeBytes: 8 })),
+      delete: vi.fn().mockRejectedValueOnce(new Error('R2 indisponível')).mockResolvedValue(undefined) };
+    await expect(addPhoto(draft.id, draft.versionNumber + 1, Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]), 'image/png', storage))
+      .rejects.toBeInstanceOf(StaleVehicleError);
+    const [pending] = await getDb().select().from(storageCleanupJobs).where(eq(storageCleanupJobs.storageKey, key));
+    expect(pending).toMatchObject({ status: 'pending', reason: 'upload_rollback', attempts: 0 });
+    expect(await tryDeleteQueuedR2(key, storage)).toBe('deleted');
+    const [done] = await getDb().select().from(storageCleanupJobs).where(eq(storageCleanupJobs.storageKey, key));
+    expect(done).toMatchObject({ status: 'done', attempts: 1 });
+    expect(storage.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('mantém foto removida na fila quando R2 falha e a limpa uma vez depois', async () => {
+    const draft = await createDraft({ type: 'car' });
+    const key = `drafts/${draft.id}/${randomUUID()}.png`;
+    const [image] = await getDb().insert(vehicleImages).values({ vehicleId: draft.id, storageKey: key,
+      storageProvider: 'r2', mimeType: 'image/png', sizeBytes: 8, position: 0, isCover: true }).returning();
+    const storage = { put: vi.fn(), delete: vi.fn().mockRejectedValueOnce(new Error('R2 indisponível')).mockResolvedValue(undefined) };
+    await removePhoto(draft.id, image.id, draft.versionNumber, storage);
+    const [pending] = await getDb().select().from(storageCleanupJobs).where(eq(storageCleanupJobs.storageKey, key));
+    expect(pending).toMatchObject({ status: 'pending', reason: 'photo_removed', attempts: 1, lastErrorCode: 'Error' });
+    expect(await getDb().select().from(vehicleImages).where(eq(vehicleImages.storageKey, key))).toHaveLength(0);
+    expect(await tryDeleteQueuedR2(key, storage)).toBe('deleted');
+    expect(await tryDeleteQueuedR2(key, storage)).toBe('already_done');
+    expect(storage.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('varre apenas órfão antigo e nunca exclui foto referenciada ou caminho legado', async () => {
+    const draft = await createDraft({ type: 'car' });
+    const orphan = `drafts/${draft.id}/${randomUUID()}.png`;
+    const referenced = `drafts/${draft.id}/${randomUUID()}.png`;
+    await getDb().insert(vehicleImages).values({ vehicleId: draft.id, storageKey: referenced,
+      storageProvider: 'legacy_public', mimeType: 'image/png', sizeBytes: 8, position: 0, isCover: true });
+    const fresh = `drafts/${draft.id}/${randomUUID()}.png`;
+    const old = new Date('2026-10-20T00:00:00Z');
+    const storage = { put: vi.fn(), delete: vi.fn(async () => {}), listPage: vi.fn(async () => ({ objects: [
+      { key: orphan, modifiedAt: old }, { key: referenced, modifiedAt: old },
+      { key: fresh, modifiedAt: new Date('2026-10-27T11:00:00Z') },
+      { key: '/fotos/legado.png', modifiedAt: old },
+    ] })) };
+    const result = await queueOldR2Orphans(storage, { now: new Date('2026-10-27T12:00:00Z') });
+    expect(result).toMatchObject({ scanned: 4, queued: 1, skippedRecent: 1, skippedInvalid: 1 });
+    expect(await tryDeleteQueuedR2(orphan, storage)).toBe('deleted');
+    expect(storage.delete).toHaveBeenCalledWith(orphan);
+    expect(storage.delete).not.toHaveBeenCalledWith(referenced);
+    expect(storage.delete).not.toHaveBeenCalledWith(fresh);
+  });
+
+  it('recusa excluir objeto que ainda tem referência, mesmo se houver pendência', async () => {
+    const draft = await createDraft({ type: 'car' });
+    const key = `drafts/${draft.id}/${randomUUID()}.png`;
+    await getDb().insert(vehicleImages).values({ vehicleId: draft.id, storageKey: key,
+      storageProvider: 'r2', mimeType: 'image/png', sizeBytes: 8, position: 0, isCover: true });
+    await getDb().transaction((tx) => queueR2Cleanup(tx, key, 'orphan_scan'));
+    const storage = { put: vi.fn(), delete: vi.fn(async () => {}) };
+    expect(await tryDeleteQueuedR2(key, storage)).toBe('still_referenced');
+    expect(storage.delete).not.toHaveBeenCalled();
+    const [job] = await getDb().select().from(storageCleanupJobs).where(eq(storageCleanupJobs.storageKey, key));
+    expect(job).toMatchObject({ status: 'pending', lastErrorCode: 'still_referenced' });
+  });
+
+  it('a rotina repetível processa pendências do bucket corrente', async () => {
+    const key = `drafts/${randomUUID()}/${randomUUID()}.png`;
+    await getDb().transaction((tx) => queueR2Cleanup(tx, key, 'orphan_scan'));
+    const storage = { put: vi.fn(), delete: vi.fn(async () => {}) };
+    const result = await retryPendingR2Cleanup(storage, 1000);
+    expect(result.deleted).toBeGreaterThanOrEqual(1);
+    expect(storage.delete).toHaveBeenCalledWith(key);
+    const [job] = await getDb().select().from(storageCleanupJobs).where(eq(storageCleanupJobs.storageKey, key));
+    expect(job.status).toBe('done');
   });
 
   describe('discardDraft', () => {
