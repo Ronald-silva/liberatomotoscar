@@ -19,6 +19,8 @@ flowchart LR
 
 P0 reutiliza agora uma projeção segura de estoque e flag de desligamento, sem esperar o P1 completo. P1 melhora consistência antes de divulgar IA ao público. P3 antecipa apenas a política de privacidade e o desenho de handoff necessários para P0; persistência e painel de modo continuam na fase própria.
 
+**Onde entra o Chatwoot:** a demo P0 usa interface e orquestração implementadas no próprio site, com AI SDK, modelo via OpenRouter e ferramentas de estoque; ela não usa Chatwoot nem treina um modelo novo. O Chatwoot Community Edition está previsto para avaliação na P4 como inbox de operadores no canal WhatsApp oficial. Seu piloto, infraestrutura separada, integração com o agente e decisão final estão detalhados em `05-PLANO-WHATSAPP-CRM.md`, seções “Escolha condicionada”, “Arquitetura e dados” e “Implementação e testes”. O Chatwoot ainda não está instalado nem integrado; hoje o handoff da demo é apenas um link manual para WhatsApp. A escolha entre Chatwoot e inbox própria permanece pendente de piloto e custo operacional.
+
 | Fase / produto | Entregas e dependências | Aceite verificável | Complexidade / esforço condicional |
 | --- | --- | --- | --- |
 | **P0 — MVP demonstrável** | Rota no site restrita a admin; LLM real, tools de estoque, filtros, qualificação efêmera, resumo e link humano. Depende de chave, estoque real conferido, deploy correto. | Casos de `02` aprovados com modelo real; nenhum vendido/ilustrativo recomendado; teto de custo e fallback comprovados. | Média; 1–2 dias úteis se pré-requisitos prontos. Alto risco de credencial/deploy para 27/10. |
