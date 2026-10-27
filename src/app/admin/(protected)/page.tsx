@@ -38,6 +38,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </form>
       </header>
       <h1 id="admin-title" className={styles.heading}>Estoque</h1>
+      {process.env.DEMO_AI_ENABLED === 'true' && <p><Link className={`${styles.button} ${styles.buttonSecondary}`} href="/demo-ia">Abrir demonstração de IA</Link></p>}
       <StatusFilter counts={counts} active={status} />
       {vehicles.length === 0 ? <div className={styles.empty}>
         <p className={styles.description}>{status

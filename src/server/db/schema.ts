@@ -121,3 +121,17 @@ export const vehicleAudit = pgTable('vehicle_audit', {
   index('vehicle_audit_vehicle_time_idx').on(table.vehicleId, table.occurredAt),
   index('vehicle_audit_actor_time_idx').on(table.actorUserId, table.occurredAt),
 ]);
+
+// Controle da demonstração restrita: somente contadores, nunca mensagens do comprador.
+export const demoAiUsage = pgTable('demo_ai_usage', {
+  adminUserId: text('admin_user_id').notNull().references(() => usersTable.id, { onDelete: 'cascade' }),
+  dayUtc: text('day_utc').notNull(),
+  requests: integer('requests').notNull().default(0),
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.adminUserId, table.dayUtc] }),
+  check('demo_ai_usage_day_format', sql`${table.dayUtc} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
+  check('demo_ai_usage_nonnegative', sql`${table.requests} >= 0 AND ${table.inputTokens} >= 0 AND ${table.outputTokens} >= 0`),
+]);

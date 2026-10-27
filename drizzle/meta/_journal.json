@@ -43,6 +43,13 @@
       "when": 1792942000000,
       "tag": "0005_vehicle_status_discarded",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793066766906,
+      "tag": "0006_superb_thing",
+      "breakpoints": true
     }
   ]
 }
