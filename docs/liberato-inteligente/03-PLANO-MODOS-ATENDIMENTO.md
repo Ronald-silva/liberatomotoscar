@@ -1,6 +1,6 @@
 # P3 — modos de atendimento e transferência
 
-**Objetivo:** controlar por canal exatamente um modo `disabled | deterministic | ai`, com histórico preservado e suspensão quando um vendedor assume. Planejar P3 após P2 na prioridade comercial; antecipar apenas uma flag de P0 para desligar a demo imediatamente. **Não implementado.** Complexidade média; 3–6 dias úteis condicionais após UX e política de dados aprovadas.
+**Objetivo:** controlar por canal exatamente um modo `disabled | deterministic | ai`, com histórico preservado e suspensão quando um vendedor assume. Planejar P3 após P2 na prioridade comercial; antecipar apenas uma flag de P0 para desligar a demo imediatamente. **Implementado localmente em 27/10/2026 para o canal `site` (`SITE_CHAT_ACCESS=off` por padrão até aprovação de privacidade e migração no banco compartilhado).** Complexidade média; 3–6 dias úteis condicionais após UX e política de dados aprovadas.
 
 ## Escopo e exclusões
 

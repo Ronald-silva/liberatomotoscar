@@ -155,3 +155,121 @@ export const demoAiUsage = pgTable('demo_ai_usage', {
   check('demo_ai_usage_day_format', sql`${table.dayUtc} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
   check('demo_ai_usage_nonnegative', sql`${table.requests} >= 0 AND ${table.inputTokens} >= 0 AND ${table.outputTokens} >= 0`),
 ]);
+
+// P3: configuração do atendimento. WhatsApp fica reservado no esquema até P4.
+export const channelSettings = pgTable('channel_settings', {
+  channel: text('channel', { enum: ['site', 'whatsapp'] }).primaryKey(),
+  mode: text('mode', { enum: ['disabled', 'deterministic', 'ai'] }).notNull().default('disabled'),
+  version: integer('version').notNull().default(1),
+  updatedBy: text('updated_by').references(() => usersTable.id, { onDelete: 'restrict' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('channel_settings_channel_valid', sql`${table.channel} IN ('site', 'whatsapp')`),
+  check('channel_settings_mode_valid', sql`${table.mode} IN ('disabled', 'deterministic', 'ai')`),
+  check('channel_settings_version_valid', sql`${table.version} >= 1`),
+]);
+
+export const channelSettingsAudit = pgTable('channel_settings_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  channel: text('channel', { enum: ['site', 'whatsapp'] }).notNull(),
+  actorUserId: text('actor_user_id').notNull().references(() => usersTable.id, { onDelete: 'restrict' }),
+  beforeMode: text('before_mode', { enum: ['disabled', 'deterministic', 'ai'] }).notNull(),
+  afterMode: text('after_mode', { enum: ['disabled', 'deterministic', 'ai'] }).notNull(),
+  beforeVersion: integer('before_version').notNull(),
+  afterVersion: integer('after_version').notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('channel_settings_audit_channel_valid', sql`${table.channel} IN ('site', 'whatsapp')`),
+  check('channel_settings_audit_modes_valid', sql`${table.beforeMode} IN ('disabled', 'deterministic', 'ai') AND ${table.afterMode} IN ('disabled', 'deterministic', 'ai') AND ${table.beforeMode} <> ${table.afterMode}`),
+  check('channel_settings_audit_versions_valid', sql`${table.beforeVersion} >= 1 AND ${table.afterVersion} = ${table.beforeVersion} + 1`),
+  index('channel_settings_audit_channel_time_idx').on(table.channel, table.occurredAt),
+]);
+
+// P3: conversas persistidas. O visitante só tem um token opaco; o banco guarda o hash.
+// `owner` decide quem responde: `human` tem precedência sobre o modo do canal.
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  channel: text('channel', { enum: ['site', 'whatsapp'] }).notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  owner: text('owner', { enum: ['automation', 'human'] }).notNull().default('automation'),
+  status: text('status', { enum: ['open', 'closed'] }).notNull().default('open'),
+  assignedTo: text('assigned_to').references(() => usersTable.id, { onDelete: 'restrict' }),
+  // Interesses citados literalmente pelo comprador (lead_interests do plano), sem inferência.
+  facts: jsonb('facts').$type<{ field: string; quote: string }[]>().notNull().default([]),
+  visitorTurns: integer('visitor_turns').notNull().default(0),
+  // Reserva de turno (compare-and-swap): impede duas respostas automáticas simultâneas.
+  turnLockedUntil: timestamp('turn_locked_until', { withTimezone: true }),
+  handoffRequestedAt: timestamp('handoff_requested_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  closedBy: text('closed_by').references(() => usersTable.id, { onDelete: 'restrict' }),
+}, (table) => [
+  check('conversations_channel_valid', sql`${table.channel} IN ('site', 'whatsapp')`),
+  check('conversations_owner_valid', sql`${table.owner} IN ('automation', 'human')`),
+  check('conversations_status_valid', sql`${table.status} IN ('open', 'closed')`),
+  check('conversations_closed_consistent', sql`(${table.status} = 'closed') = (${table.closedAt} IS NOT NULL)`),
+  check('conversations_turns_valid', sql`${table.visitorTurns} >= 0`),
+  index('conversations_channel_status_last_idx').on(table.channel, table.status, table.lastMessageAt),
+  index('conversations_expires_idx').on(table.expiresAt),
+]);
+
+export const conversationMessages = pgTable('conversation_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  sender: text('sender', { enum: ['visitor', 'bot', 'ai', 'human', 'system'] }).notNull(),
+  body: text('body').notNull(),
+  // Cartões de veículos já verificados no banco no momento da resposta.
+  cards: jsonb('cards').$type<{ id: string; title: string; year: number | null; priceCents: number; href: string }[]>(),
+  authorUserId: text('author_user_id').references(() => usersTable.id, { onDelete: 'restrict' }),
+  // Idempotência: o mesmo envio do navegador (repetido por rede) gera uma única mensagem.
+  clientMessageId: uuid('client_message_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('conversation_messages_sender_valid', sql`${table.sender} IN ('visitor', 'bot', 'ai', 'human', 'system')`),
+  check('conversation_messages_body_valid', sql`length(${table.body}) BETWEEN 1 AND 2000`),
+  check('conversation_messages_author_valid', sql`(${table.sender} = 'human') = (${table.authorUserId} IS NOT NULL)`),
+  index('conversation_messages_conversation_time_idx').on(table.conversationId, table.createdAt),
+  uniqueIndex('conversation_messages_client_uidx').on(table.conversationId, table.clientMessageId)
+    .where(sql`${table.clientMessageId} IS NOT NULL`),
+]);
+
+export const handoffs = pgTable('handoffs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  event: text('event', { enum: ['requested', 'assumed', 'released', 'closed'] }).notNull(),
+  reason: text('reason', { enum: ['visitor_request', 'financing', 'trade_in', 'ai_suggested', 'operator'] }).notNull(),
+  actorUserId: text('actor_user_id').references(() => usersTable.id, { onDelete: 'restrict' }),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('handoffs_event_valid', sql`${table.event} IN ('requested', 'assumed', 'released', 'closed')`),
+  check('handoffs_reason_valid', sql`${table.reason} IN ('visitor_request', 'financing', 'trade_in', 'ai_suggested', 'operator')`),
+  check('handoffs_actor_valid', sql`${table.event} = 'requested' OR ${table.actorUserId} IS NOT NULL`),
+  index('handoffs_conversation_time_idx').on(table.conversationId, table.occurredAt),
+]);
+
+// Contadores do atendimento público: somente números, nunca texto do comprador.
+export const attendanceUsage = pgTable('attendance_usage', {
+  channel: text('channel', { enum: ['site', 'whatsapp'] }).notNull(),
+  dayUtc: text('day_utc').notNull(),
+  aiRequests: integer('ai_requests').notNull().default(0),
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.channel, table.dayUtc] }),
+  check('attendance_usage_day_format', sql`${table.dayUtc} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
+  check('attendance_usage_nonnegative', sql`${table.aiRequests} >= 0 AND ${table.inputTokens} >= 0 AND ${table.outputTokens} >= 0`),
+]);
+
+// Limite distribuído por janela fixa. A chave é um HMAC do IP: o endereço não é guardado.
+export const attendanceRateLimits = pgTable('attendance_rate_limits', {
+  bucketKey: text('bucket_key').notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  hits: integer('hits').notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.bucketKey, table.windowStart] }),
+  check('attendance_rate_limits_hits_valid', sql`${table.hits} >= 0`),
+  index('attendance_rate_limits_window_idx').on(table.windowStart),
+]);

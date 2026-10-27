@@ -30,6 +30,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [publishedNow, setPublishedNow] = useState(false);
   const [editingField, setEditingField] = useState(false);
+  const [openingArt, setOpeningArt] = useState(false);
   const router = useRouter();
   const name = [draft.fields.brand, draft.fields.model].filter(Boolean).join(' ');
   const title = isNew && (!draft.fields.brand || !draft.fields.model)
@@ -74,6 +75,13 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
     if (state.version !== undefined) { setPublishedNow(true); router.refresh(); }
   }
 
+  async function openArt() {
+    setOpeningArt(true);
+    try {
+      if (await draft.saveBeforeAction()) router.push(`/admin/veiculos/${vehicleId}/arte`);
+    } finally { setOpeningArt(false); }
+  }
+
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <div className={styles.listPanel}>
       <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">Voltar ao estoque</Link>
@@ -94,6 +102,8 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
         <h2 id="fotos-title" className={styles.subheading}>{isNew ? <span className={styles.step}>2</span> : null}Fotos</h2>
         <PhotoGallery vehicleId={vehicleId} draft={draft} photos={photos} />
         <PhotoUpload vehicleId={vehicleId} draft={draft} />
+        <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={openingArt}
+          onClick={() => void openArt()}>{openingArt ? 'Salvando anúncio…' : 'Criar arte'}</button>
       </section>
 
       {canPublish && !publishedNow ? <section aria-labelledby="conferir-title">

@@ -1,0 +1,218 @@
+import { SITE_URL, STORE } from '@/data/store';
+import { runDemoAgent, type DemoAnswer } from '@/server/ai/demo-agent';
+import type { DemoSession } from '@/server/ai/demo-session';
+import * as repository from './conversation-repository';
+import type { AutomatedReply, ConversationRow, HandoffReason, LeadFact, MessageRow } from './conversation-repository';
+import { deterministicAnswer, deterministicChoices, deterministicMenuText, handoffReasonByChoice,
+  routeDeterministicText, type DeterministicChoice } from './deterministic';
+import { recordSiteAiTokens, reserveSiteAiRequest } from './limits';
+import { readSiteSetting, type AttendanceMode } from './settings';
+
+export class SiteChatError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string) {
+    super(message);
+    this.name = 'SiteChatError';
+  }
+}
+
+export type SiteChatMessage = Pick<MessageRow, 'id' | 'sender' | 'body'> & {
+  cards: NonNullable<MessageRow['cards']>;
+  createdAt: string;
+};
+
+export type SiteChatView = {
+  mode: AttendanceMode;
+  conversation: null | {
+    protocol: string;
+    owner: ConversationRow['owner'];
+    status: ConversationRow['status'];
+    handoffRequested: boolean;
+    turnsLeft: number;
+  };
+  messages: SiteChatMessage[];
+  choices: typeof deterministicChoices;
+  handoffUrl: string;
+};
+
+export type SiteTurnInput = { message?: string; choice?: DeterministicChoice; clientMessageId: string };
+
+const factLabels: Record<string, string> = {
+  category: 'Categoria', model: 'Modelo', budget: 'Orçamento', payment: 'Pagamento', trade_in: 'Troca',
+  timeline: 'Prazo', visit: 'Visita', negotiation: 'Negociação', purpose: 'Finalidade',
+};
+
+export const siteChatDeps = {
+  readSetting: readSiteSetting,
+  findByToken: repository.findConversationByToken,
+  create: repository.createSiteConversation,
+  appendVisitor: repository.appendVisitorMessage,
+  reserveTurn: repository.reserveAutomatedTurn,
+  releaseTurn: repository.releaseAutomatedTurn,
+  commit: repository.commitAutomatedReply,
+  readConversation: repository.readConversation,
+  listMessages: repository.listConversationMessages,
+  deterministic: (choice: DeterministicChoice) => deterministicAnswer(choice),
+  runAgent: (session: DemoSession, message: string, signal?: AbortSignal) => runDemoAgent(session, message, undefined, signal),
+  reserveAi: () => reserveSiteAiRequest(),
+  recordTokens: recordSiteAiTokens,
+};
+export type SiteChatDeps = typeof siteChatDeps;
+
+export function protocolOf(conversationId: string) {
+  return conversationId.replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+export function siteHandoffUrl(conversation: Pick<ConversationRow, 'id' | 'facts'> | null) {
+  const lines = ['Olá, vim pelo atendimento do site da Liberato Motos Car.'];
+  if (conversation) {
+    lines.push(`Protocolo: ${protocolOf(conversation.id)}`);
+    if (conversation.facts.length) {
+      lines.push(`O que informei: ${conversation.facts.map((fact) => `${factLabels[fact.field] ?? fact.field}: “${fact.quote}”`).join('; ')}.`);
+    }
+  }
+  lines.push(SITE_URL);
+  return `https://wa.me/${STORE.whatsappNumber}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
+function toView(mode: AttendanceMode, conversation: ConversationRow | null, messages: MessageRow[]): SiteChatView {
+  return {
+    mode,
+    conversation: conversation ? {
+      protocol: protocolOf(conversation.id),
+      owner: conversation.owner,
+      status: conversation.status,
+      handoffRequested: Boolean(conversation.handoffRequestedAt) || conversation.owner === 'human',
+      turnsLeft: Math.max(0, repository.MAX_VISITOR_TURNS - conversation.visitorTurns),
+    } : null,
+    messages: messages.map((message) => ({ id: message.id, sender: message.sender, body: message.body,
+      cards: message.cards ?? [], createdAt: message.createdAt.toISOString() })),
+    choices: deterministicChoices,
+    handoffUrl: siteHandoffUrl(conversation),
+  };
+}
+
+async function currentView(deps: SiteChatDeps, mode: AttendanceMode, conversationId: string) {
+  const [conversation, messages] = await Promise.all([deps.readConversation(conversationId), deps.listMessages(conversationId)]);
+  return toView(mode, conversation, messages);
+}
+
+/** Leitura para o widget (inclusive polling quando um vendedor assume). */
+export async function getSiteChatView(token: string | null, deps: SiteChatDeps = siteChatDeps) {
+  const setting = await deps.readSetting();
+  const conversation = token ? await deps.findByToken(token) : null;
+  if (!conversation) return toView(setting.mode, null, []);
+  return toView(setting.mode, conversation, await deps.listMessages(conversation.id));
+}
+
+/** Monta o histórico do agente com pares visitante → resposta automática já persistidos. */
+export function buildAgentSession(conversation: ConversationRow, messages: MessageRow[]): DemoSession {
+  const turns: DemoSession['turns'] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const current = messages[index];
+    const next = messages[index + 1];
+    if (current.sender === 'visitor' && next && (next.sender === 'ai' || next.sender === 'bot')) {
+      turns.push({ user: current.body.slice(0, 1000), assistant: next.body.slice(0, 500) });
+      index += 1;
+    }
+  }
+  return {
+    v: 2, sessionId: conversation.id, adminUserId: 'site', expiresAt: conversation.expiresAt.getTime(),
+    handoffRequested: false, facts: conversation.facts as DemoSession['facts'], turns: turns.slice(-8),
+  };
+}
+
+function aiHandoffReason(answer: DemoAnswer): HandoffReason | null {
+  if (!answer.handoffRequested) return null;
+  if (answer.lead.facts.some((fact) => fact.field === 'trade_in')) return 'trade_in';
+  if (answer.lead.facts.some((fact) => fact.field === 'payment')) return 'financing';
+  return 'ai_suggested';
+}
+
+async function choiceReply(deps: SiteChatDeps, choice: DeterministicChoice): Promise<AutomatedReply> {
+  const answer = await deps.deterministic(choice);
+  return {
+    sender: 'bot', body: answer.text, cards: answer.cards,
+    handoffReason: answer.handoffRequested ? handoffReasonByChoice[choice as keyof typeof handoffReasonByChoice] : null,
+  };
+}
+
+async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, 'disabled'>, conversation: ConversationRow,
+  body: string, choice: DeterministicChoice | undefined, signal?: AbortSignal): Promise<AutomatedReply> {
+  // Botões do menu nunca chamam o modelo, em nenhum modo.
+  if (choice) return choiceReply(deps, choice);
+  const routed = routeDeterministicText(body);
+  if (mode === 'deterministic') {
+    return routed ? choiceReply(deps, routed) : { sender: 'bot', body: deterministicMenuText, cards: [] };
+  }
+  // Pedido explícito de pessoa não gasta chamada de IA.
+  if (routed === 'human') return choiceReply(deps, 'human');
+
+  const reservation = await deps.reserveAi();
+  if (!reservation) {
+    return { sender: 'bot', cards: [],
+      body: 'O assistente atingiu o limite de atendimentos automáticos de hoje. Você pode chamar um vendedor pelo botão abaixo ou pelo WhatsApp.' };
+  }
+  const messages = await deps.listMessages(conversation.id, 40);
+  // A mensagem atual já foi gravada; o agente a recebe separadamente.
+  const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
+  const answer = await deps.runAgent(buildAgentSession(conversation, history), body, signal);
+  await deps.recordTokens(reservation.dayUtc, answer.usage.inputTokens, answer.usage.outputTokens)
+    .catch(() => console.error('Falha ao registrar tokens do atendimento do site.'));
+  return {
+    sender: 'ai', body: answer.answer,
+    cards: answer.cards.map(({ id, title, year, priceCents, href }) => ({ id, title, year, priceCents, href })),
+    facts: answer.lead.facts as LeadFact[],
+    handoffReason: aiHandoffReason(answer),
+  };
+}
+
+/**
+ * Um turno do visitante: grava a mensagem uma vez, reserva a resposta automática por
+ * compare-and-swap e só a publica se a automação ainda for dona da conversa.
+ */
+export async function handleSiteTurn(token: string | null, input: SiteTurnInput, deps: SiteChatDeps = siteChatDeps,
+  signal?: AbortSignal): Promise<{ token: string | null; view: SiteChatView }> {
+  const choice = input.choice;
+  const body = choice ? deterministicChoices.find((item) => item.id === choice)!.label : input.message?.trim() ?? '';
+  if (!body || body.length > 1000) throw new SiteChatError('Escreva uma mensagem de até 1.000 caracteres.', 400, 'invalid_message');
+
+  const setting = await deps.readSetting();
+  let conversation = token ? await deps.findByToken(token) : null;
+  // Desativado: nenhuma resposta automática. Uma conversa já assumida por vendedor continua.
+  if (setting.mode === 'disabled' && conversation?.owner !== 'human') {
+    throw new SiteChatError('O atendimento automático está desativado. Fale com a loja pelo WhatsApp.', 409, 'disabled');
+  }
+  let newToken: string | null = null;
+  if (!conversation) {
+    const created = await deps.create();
+    conversation = created.conversation;
+    newToken = created.token;
+  }
+  if (conversation.status === 'closed') throw new SiteChatError('Esta conversa foi encerrada. Inicie uma nova conversa.', 409, 'closed');
+  if (conversation.visitorTurns >= repository.MAX_VISITOR_TURNS) {
+    throw new SiteChatError('Esta conversa chegou ao limite de mensagens. Continue pelo WhatsApp.', 429, 'turn_limit');
+  }
+
+  const appended = await deps.appendVisitor(conversation.id, body, input.clientMessageId);
+  const finish = async () => ({ token: newToken, view: await currentView(deps, setting.mode, conversation.id) });
+  if (appended.duplicate || conversation.owner === 'human' || setting.mode === 'disabled') return finish();
+
+  const reserved = await deps.reserveTurn(conversation.id);
+  if (!reserved) return finish();
+
+  let reply: AutomatedReply;
+  try {
+    reply = await generateReply(deps, setting.mode, reserved, body, choice, signal);
+  } catch (error) {
+    await deps.releaseTurn(conversation.id).catch(() => undefined);
+    throw error;
+  }
+  // Troca de modo vale no próximo turno, mas desativar impede qualquer nova emissão.
+  const latest = await deps.readSetting();
+  if (latest.mode === 'disabled') {
+    await deps.releaseTurn(conversation.id).catch(() => undefined);
+    return finish();
+  }
+  await deps.commit(conversation.id, reply);
+  return finish();
+}
