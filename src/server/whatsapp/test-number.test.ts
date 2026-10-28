@@ -55,6 +55,8 @@ describe('Registro do número de teste da Meta', () => {
         encryptionKeyHex: KEY,
         fetchImpl: fetchMock as unknown as typeof fetch,
         listTenants: async () => [],
+        webhookVerifyToken: 'verify-token-de-teste',
+        webhookUrl: 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp',
         upsertTenant: async (row) => {
           saved = row;
           return { id: 'id', ...row };
@@ -62,7 +64,17 @@ describe('Registro do número de teste da Meta', () => {
       },
     );
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'https://graph.facebook.com/v21.0/9876543210987/subscribed_apps',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          override_callback_uri: 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp',
+          verify_token: 'verify-token-de-teste',
+        }),
+      }),
+    );
     expect(result.tenantId).toBe(TEST_TENANT_ID);
     expect(result.displayPhoneNumber).toBe('+1 555 012 3456');
     expect(saved!.coexistenceEnabled).toBe(false);
@@ -81,6 +93,22 @@ describe('Registro do número de teste da Meta', () => {
         { encryptionKeyHex: KEY, fetchImpl: fetchMock as unknown as typeof fetch, upsertTenant, listTenants: async () => [] },
       ),
     ).rejects.toThrow('HTTP 401');
+    expect(upsertTenant).not.toHaveBeenCalled();
+  });
+
+  it('não registra o número se a Meta recusar o callback exclusivo da Dayse', async () => {
+    const upsertTenant = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/phone_numbers?')) return new Response(JSON.stringify({ data: [{ id: '1234567890123' }] }));
+      if (url.includes('/subscribed_apps') && init?.body) return new Response('{}', { status: 403 });
+      if (url.includes('/subscribed_apps')) return new Response(JSON.stringify({ success: true }));
+      return new Response(JSON.stringify({ display_phone_number: '+1 555 012 3456' }));
+    });
+    await expect(registerMetaTestNumber(
+      { phoneNumberId: '1234567890123', wabaId: '9876543210987', accessToken: TOKEN },
+      { fetchImpl: fetchMock as unknown as typeof fetch, upsertTenant, listTenants: async () => [], webhookVerifyToken: 'verify-token' },
+    )).rejects.toThrow('direcionar o webhook');
     expect(upsertTenant).not.toHaveBeenCalled();
   });
 

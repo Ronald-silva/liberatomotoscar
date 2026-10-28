@@ -17,10 +17,9 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber }: { webhookU
       <p className={attendanceStyles.current}>
         Em developers.facebook.com → seu app → <strong>WhatsApp → API Setup</strong>, copie os três dados abaixo e
         cadastre o seu celular em “To”. Use apenas os IDs do número de teste, sem informar os dados da loja.
-        Em <strong>WhatsApp → Configuration</strong>, configure o callback
-        <strong> {webhookUrl}</strong> com o token de verificação
-        do servidor e assine o campo <strong>messages</strong>. O token temporário da Meta expira; quando isso
-        acontecer, gere outro em API Setup e registre novamente aqui.
+        O cadastro direciona somente a conta de teste para <strong>{webhookUrl}</strong>.
+        O callback global do app atende outros projetos e não deve ser alterado para este teste.
+        O token temporário da Meta expira; quando isso acontecer, gere outro em API Setup e registre novamente aqui.
       </p>
       <form action={action} className={attendanceStyles.form}>
         <div className={attendanceStyles.fieldGrid}>

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { SITE_URL } from '@/data/store';
 import {
   countInbox,
   getInboxConversation,
@@ -11,7 +10,7 @@ import {
 import { protocolOf } from '@/server/attendance/site-chat';
 import { readAdminSiteSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
-import { TEST_TENANT_ID } from '@/server/whatsapp/test-number';
+import { TEST_TENANT_ID, TEST_WEBHOOK_URL } from '@/server/whatsapp/test-number';
 import { InboxOperatorControls } from './InboxOperatorControls';
 import { MetaTestNumberForm } from './MetaTestNumberForm';
 import { SiteModeForm } from './SiteModeForm';
@@ -132,7 +131,7 @@ export default async function AttendancePage({
         />
 
         <MetaTestNumberForm
-          webhookUrl={new URL('/api/webhooks/whatsapp', SITE_URL).toString()}
+          webhookUrl={process.env.WHATSAPP_WEBHOOK_CALLBACK_URL || TEST_WEBHOOK_URL}
           currentTestNumber={tenants.find((tenant) => tenant.tenantId === TEST_TENANT_ID && tenant.isActive)?.displayPhoneNumber ?? null}
         />
 

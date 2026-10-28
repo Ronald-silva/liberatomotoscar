@@ -10,9 +10,12 @@ export type RegisterTestNumberInput = {
 
 export type RegisterTestNumberDeps = Pick<EmbeddedSignupDeps, 'apiVersion' | 'encryptionKeyHex' | 'fetchImpl' | 'upsertTenant'> & {
   listTenants?: typeof listWhatsappTenants;
+  webhookUrl?: string;
+  webhookVerifyToken?: string;
 };
 
 export const TEST_TENANT_ID = 'liberato-motos-car-teste';
+export const TEST_WEBHOOK_URL = 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp';
 
 /**
  * Registra o número de teste gratuito da Meta (WhatsApp → API Setup) para validar a Dayse
@@ -62,8 +65,16 @@ export async function registerMetaTestNumber(input: RegisterTestNumberInput, dep
     throw new Error('O número informado não pertence à conta do WhatsApp Business indicada. Confira os IDs em API Setup.');
   }
 
-  // 2. Inscreve o app nos webhooks da WABA de teste
-  const subRes = await fetchFn(`https://graph.facebook.com/${version}/${wabaId}/subscribed_apps`, {
+  // O callback global deste app atende o SalesNet. A WABA de teste precisa apontar
+  // especificamente para a Dayse, sem alterar os demais clientes do app.
+  const webhookUrl = deps.webhookUrl || process.env.WHATSAPP_WEBHOOK_CALLBACK_URL || TEST_WEBHOOK_URL;
+  const webhookVerifyToken = deps.webhookVerifyToken || process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN;
+  if (!webhookVerifyToken) throw new Error('Token de verificação do webhook não configurado no servidor.');
+  if (new URL(webhookUrl).protocol !== 'https:') throw new Error('O webhook de teste precisa usar HTTPS.');
+
+  // 2. Inscreve o app na WABA e configura o callback exclusivo do número de teste.
+  const subscriptionUrl = `https://graph.facebook.com/${version}/${wabaId}/subscribed_apps`;
+  const subRes = await fetchFn(subscriptionUrl, {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
   });
@@ -73,6 +84,18 @@ export async function registerMetaTestNumber(input: RegisterTestNumberInput, dep
   const subscription = (await subRes.json().catch(() => ({}))) as { success?: boolean };
   if (subscription.success !== true) {
     throw new Error('A Meta não confirmou a inscrição da conta de teste nos webhooks.');
+  }
+  const overrideRes = await fetchFn(subscriptionUrl, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ override_callback_uri: webhookUrl, verify_token: webhookVerifyToken }),
+  });
+  if (!overrideRes.ok) {
+    throw new Error(`Falha ao direcionar o webhook da conta de teste para a Dayse (HTTP ${overrideRes.status}).`);
+  }
+  const override = (await overrideRes.json().catch(() => ({}))) as { success?: boolean };
+  if (override.success !== true) {
+    throw new Error('A Meta não confirmou o callback exclusivo do número de teste.');
   }
 
   // 3. Salva criptografado como tenant de teste, separado da loja real
