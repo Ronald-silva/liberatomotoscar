@@ -506,7 +506,7 @@ export async function answerFromPlatformKnowledge(
   // 2. Blocos institucionais da plataforma (Endereço, Telefone, Horário, Sobre a Loja, Venda)
   if (intents.asksAddressOrLocation) {
     paragraphs.push(
-      `📍 **Endereço da ${STORE.name}:**\nEstamos na **${STORE_STREET_ADDRESS} — bairro ${STORE.district}, ${STORE.city}/${STORE.state}, CEP ${STORE.postalCode}**.\nVocê pode traçar sua rota no Google Maps por aqui: ${MAP_URL}`,
+      `📍 **Endereço da ${STORE.name}:**\nEstamos na **${STORE_STREET_ADDRESS} — bairro ${STORE.district}, ${STORE.city}/${STORE.state}, CEP ${STORE.postalCode}**.\n${MAP_URL}`,
     );
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowUpRight, MessageCircle, RefreshCw, Send, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { ArrowUpRight, MapPin, MessageCircle, RefreshCw, Send, X } from 'lucide-react';
 import { SITE_URL, STORE } from '@/data/store';
 import type { DeterministicChoice } from '@/server/attendance/deterministic';
 import type { SiteChatView } from '@/server/attendance/site-chat';
@@ -36,6 +36,48 @@ function vehicleWhatsAppHref(title: string, priceCents: number, href: string) {
   const fullUrl = new URL(href, SITE_URL).toString();
   const text = `Olá! Vi com a Dayse no site o veículo ${title} (${brl.format(priceCents / 100)}) e quero mais informações: ${fullUrl}`;
   return `https://wa.me/${STORE.whatsappNumber}?text=${encodeURIComponent(text)}`;
+}
+
+function renderInlineBold(text: string): ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
+function renderFormattedMessage(body: string): ReactNode {
+  const tokens = body.split(/(https?:\/\/[^\s)]+)/g);
+  return tokens.map((token, idx) => {
+    if (/^https?:\/\//i.test(token)) {
+      const cleanUrl = token.replace(/[.,;!?]+$/, '');
+      const isMaps = cleanUrl.includes('google.com/maps') || cleanUrl.includes('maps.google.com');
+      const isWhatsApp = cleanUrl.includes('wa.me/');
+      const label = isMaps
+        ? 'Abrir localização no Google Maps'
+        : isWhatsApp
+          ? 'Conversar no WhatsApp'
+          : 'Abrir link';
+
+      return (
+        <span key={idx} className={styles.inlineLinkWrap}>
+          <a
+            href={cleanUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.inlineLinkButton}
+          >
+            {isMaps ? <MapPin size={13} aria-hidden="true" /> : null}
+            <span>{label}</span>
+            <ArrowUpRight size={12} aria-hidden="true" />
+          </a>
+        </span>
+      );
+    }
+    return <span key={idx}>{renderInlineBold(token)}</span>;
+  });
 }
 
 export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'admin' }) {
@@ -235,7 +277,7 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
                 }`}
               >
                 <span className={styles.who}>{senderName[msg.sender]}</span>
-                <div>{msg.body}</div>
+                <div className={styles.bubbleBody}>{renderFormattedMessage(msg.body)}</div>
                 {msg.cards.length > 0 ? (
                   <div className={styles.cards}>
                     {msg.cards.map((card) => (

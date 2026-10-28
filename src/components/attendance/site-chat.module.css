@@ -254,7 +254,9 @@
 .bubble {
   display: grid;
   gap: 0.35rem;
+  min-width: 0;
   max-width: 92%;
+  box-sizing: border-box;
   padding: 0.65rem 0.8rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px 14px 14px 4px;
@@ -262,6 +264,51 @@
   font-size: 0.82rem;
   line-height: 1.44;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.bubbleBody {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.bubbleBody strong {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.inlineLinkWrap {
+  display: block;
+  margin-top: 0.42rem;
+  max-width: 100%;
+}
+
+.inlineLinkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.38rem 0.68rem;
+  border: 1px solid rgba(224, 37, 47, 0.45);
+  border-radius: 9px;
+  background: rgba(224, 37, 47, 0.14);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: normal;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.inlineLinkButton:hover {
+  background: var(--red, #e0252f);
+  border-color: var(--red, #e0252f);
 }
 
 .bubbleVisitor {
