@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
@@ -15,11 +15,11 @@ const replyBody = z.string().trim().min(1, 'Escreva a resposta.').max(2000, 'Res
 export async function listInbox(filter: InboxFilter) {
   const admin = await requireAdmin();
   const where = filter === 'waiting'
-    ? and(eq(conversations.status, 'open'), eq(conversations.owner, 'human'), sql`${conversations.assignedTo} IS NULL`)
+    ? and(eq(conversations.status, 'open'), isNotNull(conversations.handoffRequestedAt), isNull(conversations.assignedTo))
     : filter === 'mine'
       ? and(eq(conversations.status, 'open'), eq(conversations.assignedTo, admin.userId))
       : filter === 'automation'
-        ? and(eq(conversations.status, 'open'), eq(conversations.owner, 'automation'))
+        ? and(eq(conversations.status, 'open'), eq(conversations.owner, 'automation'), isNull(conversations.handoffRequestedAt))
         : eq(conversations.status, 'closed');
   return getDb().select({
     id: conversations.id, owner: conversations.owner, status: conversations.status,
@@ -33,9 +33,9 @@ export async function listInbox(filter: InboxFilter) {
 export async function countInbox() {
   const admin = await requireAdmin();
   const [row] = await getDb().select({
-    waiting: sql<number>`count(*) filter (where ${conversations.owner} = 'human' and ${conversations.assignedTo} is null)::int`,
+    waiting: sql<number>`count(*) filter (where ${conversations.handoffRequestedAt} is not null and ${conversations.assignedTo} is null)::int`,
     mine: sql<number>`count(*) filter (where ${conversations.assignedTo} = ${admin.userId})::int`,
-    automation: sql<number>`count(*) filter (where ${conversations.owner} = 'automation')::int`,
+    automation: sql<number>`count(*) filter (where ${conversations.owner} = 'automation' and ${conversations.handoffRequestedAt} is null)::int`,
   }).from(conversations).where(eq(conversations.status, 'open'));
   return row ?? { waiting: 0, mine: 0, automation: 0 };
 }

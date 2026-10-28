@@ -12,6 +12,7 @@ import {
   extractEntryCents,
   fallbackCatalogFromStatic,
   hasInstitutionalQuestion,
+  isKnowledgeOrSpecificCatalogQuery,
 } from './knowledge';
 import { processMetaWebhookPayload } from '@/server/whatsapp/webhook-handler';
 import type { WhatsappTenantRow } from '@/server/whatsapp/embedded-signup';
@@ -94,6 +95,44 @@ describe('Dayse Alta Performance — conversa real do teste com a IA concorrente
 });
 
 describe('Dayse Alta Performance — financiamento, nome e WhatsApp', () => {
+  it('trata Honda Pop oferecida como entrada como troca, sem voltar à Fazer anterior', async () => {
+    for (const message of [
+      'Tenho uma Honda Pop pra da de entrada. Vcs aceitam?',
+      'E a Pop Honda de entrada?',
+    ]) {
+      const res = await answerFromPlatformKnowledge(message, mockSearchCatalog, {
+        recentModelOrTitle: 'Yamaha Fazer', customerName: 'Cliente',
+      });
+      expect(res.text).toContain('Sim, aceitamos seu veículo como entrada');
+      expect(res.text).toContain('Honda Pop');
+      expect(res.text).toContain('Qual é o **ano**');
+      expect(res.text).not.toContain('Yamaha Fazer');
+      expect(res.text).not.toContain('Sobre financiamento');
+      expect(res.cards).toHaveLength(0);
+      expect(res.handoffReason).toBe('trade_in');
+      expect(isKnowledgeOrSpecificCatalogQuery(message)).toBe(true);
+    }
+  });
+
+  it('prioriza a Lander publicada para viagens longas e pede dados úteis para a indicação', async () => {
+    const onlyLiveBikes: typeof searchAvailableVehicles = async (input) => ({
+      items: input.type === 'car' ? [] : [
+        { ...staticItems.find((item) => item.model === 'Fazer')!, versionNumber: 1 },
+        { ...staticItems.find((item) => item.model === 'Titan')!, versionNumber: 1 },
+        { id: '00000000-0000-4000-8000-000000000099', slug: 'yamaha-lander-250-2023', type: 'motorcycle', brand: 'Yamaha', model: 'Lander 250', version: null, year: 2023, mileageKm: 23218, color: null, priceCents: 2530000, versionNumber: 1 },
+      ],
+      checkedAt: '2026-10-28T12:00:00.000Z',
+    });
+    const message = 'Estou precisando de uma moto para viagens longas';
+    expect(isKnowledgeOrSpecificCatalogQuery(message)).toBe(true);
+    const res = await answerFromPlatformKnowledge(message, onlyLiveBikes);
+    expect(res.text).toContain('viagens longas');
+    expect(res.text).toContain('Yamaha Lander 250');
+    expect(res.text).toContain('garupa');
+    expect(res.cards.map((card) => card.title)).toEqual(['Yamaha Lander 250']);
+    expect(res.facts).toContainEqual({ field: 'purpose', quote: 'viagens longas' });
+  });
+
   it('extrai entrada em mil e em reais', () => {
     expect(extractEntryCents('dando 3 mil de entrada')).toBe(300_000);
     expect(extractEntryCents('entrada de R$ 4.000')).toBe(400_000);

@@ -180,7 +180,9 @@ export default async function AttendancePage({
                                 ? item.assignedTo
                                   ? 'Com vendedor (IA pausada)'
                                   : 'Aguardando vendedor'
-                                : 'Com a Dayse (IA ativa)'}
+                                : item.handoffRequestedAt
+                                  ? 'Aguardando vendedor (Dayse ativa)'
+                                  : 'Com a Dayse (IA ativa)'}
                           </span>
                           <span>{item.visitorTurns} msg(s)</span>
                         </div>
@@ -206,7 +208,9 @@ export default async function AttendancePage({
                                 : detail.conversation.assignedTo
                                   ? 'Com vendedor (Dayse pausada)'
                                   : 'Aguardando vendedor assumir'
-                              : 'Atendida pela Dayse'}
+                              : detail.conversation.handoffRequestedAt
+                                ? 'Aguardando vendedor (Dayse ativa)'
+                                : 'Atendida pela Dayse'}
                         </strong>
                       </p>
                     </div>

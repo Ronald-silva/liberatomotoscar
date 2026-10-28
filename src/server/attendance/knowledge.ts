@@ -325,6 +325,7 @@ export type DetectedIntents = {
   asksLowestKm: boolean;
   asksNewest: boolean;
   asksWorkOrAppUseCase: boolean;
+  asksLongDistanceUseCase: boolean;
   asksOutOfScopeProduct: string | null;
   asksSpecificAttribute: {
     mileage: boolean;
@@ -341,6 +342,7 @@ export type DetectedIntents = {
 
 export function detectMessageIntents(text: string): DetectedIntents {
   const v = normalizePlain(text);
+  const entryCents = extractEntryCents(text);
 
   const asksAddressOrLocation =
     /\b(endereco|onde fica|localiza\w*|bairro|cidade|cep|como chegar|mapa|maps|rua|elcias lopes|parangaba|fortaleza|loja fisica|ponto de referencia)\b/.test(
@@ -365,10 +367,14 @@ export function detectMessageIntents(text: string): DetectedIntents {
       v,
     );
 
+  const mentionsKnownModel = [...INVENTORY_VEHICLES.map((item) => item.model), ...KNOWN_UNLISTED_MODELS]
+    .some((model) => new RegExp(`\\b${normalizePlain(model)}\\b`).test(v));
   const asksTradeIn =
     /\b(troca|trocar|dar na troca|aceita\w* troca|aceita\w* moto|aceita\w* carro|aceita\w* uma moto|aceita\w* um carro|meu carro na troca|minha moto na troca|veiculo na troca|como entrada|dar de entrada|moto de entrada|carro de entrada)\b/.test(
       v,
-    );
+    ) || /\b(?:pra|para)\s+d(?:a|ar)\s+(?:de|como|na)\s+entrada\b/.test(v) ||
+    (/\bde entrada\b/.test(v) && entryCents === null &&
+      (mentionsKnownModel || /\b(?:tenho|meu|minha|aceita\w*)\b/.test(v)));
 
   const asksFinancing =
     /\b(financ\w*|parcel\w*|credito|simulac\w*|banco|cartao|sem entrada|dar entrada|prestac\w*)\b/.test(
@@ -402,6 +408,9 @@ export function detectMessageIntents(text: string): DetectedIntents {
       v,
     );
 
+  const asksLongDistanceUseCase =
+    /\b(viagem|viagens|viajar|viajando|estrada|rodovia|longa distancia|longas distancias)\b/.test(v);
+
   const asksOutOfScopeProduct =
     OUT_OF_SCOPE_PRODUCTS.find((item) => new RegExp(`\\b${item}\\b`).test(v)) ?? null;
 
@@ -422,7 +431,6 @@ export function detectMessageIntents(text: string): DetectedIntents {
     !isMentionedOnlyAsTradeIn('carro', v);
 
   const budget = extractBudgetCents(text);
-  const entryCents = extractEntryCents(text);
 
   const isGreetingWord = /^(oi+|ola+|bom dia|boa tarde|boa noite|tudo bem|e ai|opa|fala)(\s+dayse)?[!?.\s]*$/.test(v);
 
@@ -442,6 +450,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
     asksLowestKm,
     asksNewest,
     asksWorkOrAppUseCase,
+    asksLongDistanceUseCase,
     asksOutOfScopeProduct,
     asksSpecificAttribute,
     wantsMoto,
@@ -493,6 +502,7 @@ export function isKnowledgeOrSpecificCatalogQuery(text: string): boolean {
     intents.asksLowestKm ||
     intents.asksNewest ||
     intents.asksWorkOrAppUseCase ||
+    intents.asksLongDistanceUseCase ||
     intents.asksOutOfScopeProduct !== null ||
     intents.budget !== null ||
     intents.asksSpecificAttribute.mileage ||
@@ -557,6 +567,16 @@ export async function answerFromPlatformKnowledge(
   const v = normalizePlain(text);
   const intents = detectMessageIntents(text);
   const { items: catalog, checkedAt } = await loadFullPublishedCatalog(searchFn);
+  const mentionsTargetModel = catalog.some((item) => {
+    if (!item.model) return false;
+    const model = normalizePlain(item.model);
+    const brandAndModel = `${normalizePlain(item.brand ?? '')} ${model}`.trim();
+    return ['na', 'no', 'pela', 'pelo'].some((prefix) =>
+      v.includes(`${prefix} ${model}`) || v.includes(`${prefix} ${brandAndModel}`));
+  });
+  const tradeOnly = intents.asksTradeIn &&
+    !/\b(quero|procuro|busco|gostei|interessad\w*|comprar|escolhi|simular)\b/.test(v) &&
+    !mentionsTargetModel;
   const firstName = extractCustomerFirstName(text, context?.customerName);
   const nameGreeting = firstName ? `, **${firstName}**` : '';
 
@@ -681,6 +701,7 @@ export async function answerFromPlatformKnowledge(
 
   // 3. Análise de busca no catálogo (modelos, marcas, categorias, orçamento, finalidade de uso, ordenação)
   let matchedModels = catalog.filter((item) => {
+    if (tradeOnly) return false;
     const modelNorm = normalizePlain(item.model ?? '');
     const versionNorm = normalizePlain(item.version ?? '');
     const slugNorm = normalizePlain(item.slug.replace(/-/g, ' '));
@@ -703,6 +724,7 @@ export async function answerFromPlatformKnowledge(
     matchedModels.length === 0 &&
     (asksAnySpecificAttr || intents.asksFinancing) &&
     context?.recentModelOrTitle &&
+    !intents.asksTradeIn &&
     !intents.wantsMoto &&
     !intents.wantsCar
   ) {
@@ -724,7 +746,7 @@ export async function answerFromPlatformKnowledge(
 
   if (matchedModels.length > 0 && matchedModels[0]?.model) {
     facts.push({ field: 'model', quote: matchedModels[0].model });
-  } else if (requestedUnlistedModel) {
+  } else if (requestedUnlistedModel && !tradeOnly) {
     facts.push({ field: 'model', quote: requestedUnlistedModel });
   }
 
@@ -747,7 +769,11 @@ export async function answerFromPlatformKnowledge(
     });
   }
 
-  const hasCatalogIntent =
+  if (intents.asksLongDistanceUseCase) {
+    facts.push({ field: 'purpose', quote: 'viagens longas' });
+  }
+
+  const hasCatalogIntent = !tradeOnly && (
     matchedModels.length > 0 ||
     Boolean(requestedBrand) ||
     Boolean(requestedUnlistedModel) ||
@@ -760,11 +786,12 @@ export async function answerFromPlatformKnowledge(
     intents.asksLowestKm ||
     intents.asksNewest ||
     intents.asksWorkOrAppUseCase ||
+    intents.asksLongDistanceUseCase ||
     intents.asksSpecificAttribute.mileage ||
     intents.asksSpecificAttribute.color ||
     intents.asksSpecificAttribute.year ||
     intents.asksSpecificAttribute.price ||
-    intents.asksSpecificAttribute.engineOrSpecs;
+    intents.asksSpecificAttribute.engineOrSpecs);
 
   let selectedCards: EnrichedCatalogVehicle[] = [];
 
@@ -813,7 +840,7 @@ export async function answerFromPlatformKnowledge(
       // Filtragem geral do catálogo
       let filtered = [...catalog];
 
-      if ((intents.wantsMoto || (intents.asksWorkOrAppUseCase && !intents.wantsCar)) && !intents.wantsCar) {
+      if ((intents.wantsMoto || intents.asksLongDistanceUseCase || (intents.asksWorkOrAppUseCase && !intents.wantsCar)) && !intents.wantsCar) {
         filtered = filtered.filter((item) => item.type === 'motorcycle');
       } else if (intents.wantsCar && !intents.wantsMoto) {
         filtered = filtered.filter((item) => item.type === 'car');
@@ -876,7 +903,15 @@ export async function answerFromPlatformKnowledge(
         );
       } else if (filtered.length > 0) {
         // Consultoria Especialista para Uber Moto / 99 / Entregas / Melhor Custo-Benefício
-        if (intents.asksWorkOrAppUseCase && !intents.wantsCar && !intents.asksCheapest && !intents.asksLowestKm) {
+        if (intents.asksLongDistanceUseCase && !intents.wantsCar) {
+          selectedCards = filtered.filter((item) =>
+            /\b(lander|crosser|xre|tenere|sahara|versys|v-strom)\b/.test(normalizePlain(item.model ?? '')) ||
+            /\b(trail|touring|adventure)\b/.test(normalizePlain(item.categoryLabel)),
+          ).slice(0, 3);
+          paragraphs.push(selectedCards.length > 0
+            ? `Para **viagens longas**${nameGreeting}, eu começaria avaliando estas motos de perfil trail publicadas no nosso estoque:\n${selectedCards.map((item) => formatVehicleBullet(item, false)).join('\n')}\n\nAntes de decidir, vale conferir revisão, pneus e conforto para sua altura e para garupa. Você costuma viajar sozinho ou acompanhado? Qual é sua faixa de orçamento?`
+            : `Para **viagens longas**${nameGreeting}, não encontrei agora uma moto de perfil trail ou touring publicada no nosso estoque. Posso pedir ao vendedor para conferir novas opções. Você viaja sozinho ou com garupa e qual é sua faixa de orçamento?`);
+        } else if (intents.asksWorkOrAppUseCase && !intents.wantsCar && !intents.asksCheapest && !intents.asksLowestKm) {
           // Prioriza as 150cc Street (Fazer, Fan, Titan) que são as campeãs de Uber/99 pelo consumo, manutenção e conforto para garupa
           const street150 = filtered.filter((item) =>
             /\b(fazer|fan|titan)\b/.test(normalizePlain(item.model ?? '')),
@@ -998,9 +1033,18 @@ export async function answerFromPlatformKnowledge(
   if (intents.asksTradeIn) {
     facts.push({ field: 'trade_in', quote: text.trim().slice(0, 100) });
     const hasYearOrSpecificTrade = /\b(19\d{2}|20\d{2})\b/.test(v);
+    const offeredModel = tradeOnly
+      ? [...catalog, ...INVENTORY_VEHICLES].find((item) => item.model &&
+          new RegExp(`\\b${normalizePlain(item.model)}\\b`).test(v))
+      : null;
+    const offeredVehicleLabel = offeredModel
+      ? [offeredModel.brand, offeredModel.model].filter(Boolean).join(' ')
+      : null;
     const followUpTradeQuestion = hasYearOrSpecificTrade
       ? 'Já registrei os dados do seu veículo para o nosso avaliador! Qual moto ou carro do nosso estoque você quer colocar na negociação, ou prefere passar aqui na loja hoje?'
-      : 'Me conta: **qual é o modelo e o ano** da sua moto ou carro? Assim já te explico como funciona a avaliação e deixo adiantado para a equipe!';
+      : offeredVehicleLabel
+        ? `Entendi que você tem uma **${offeredVehicleLabel}**. Qual é o **ano** dela? Se souber, me diga também a quilometragem aproximada para adiantar a avaliação.`
+        : 'Me conta: **qual é o modelo e o ano** da sua moto ou carro? Assim já te explico como funciona a avaliação e deixo adiantado para a equipe!';
     paragraphs.push(
       `🔄 **Sim, aceitamos seu veículo como entrada${nameGreeting}!** 😊\nAqui na **${STORE.name}** nós fazemos **compra, venda, troca e financiamento** — analisamos sua moto ou carro usado como entrada na negociação (tanto para abater no valor à vista quanto para reduzir as parcelas do financiamento).\n\nBasta trazer para avaliação aqui na loja na **${STORE_STREET_ADDRESS} — ${STORE.district}, ${STORE.city}/${STORE.state}** ou enviar os dados pelo WhatsApp **${STORE.phoneDisplay}**.\n${
         !intents.asksAddressOrLocation ? MAP_URL : ''

@@ -119,13 +119,16 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
     };
   }, [access]);
 
+  const conversationOwner = view?.conversation?.owner;
+  const conversationStatus = view?.conversation?.status;
+  const handoffRequested = view?.conversation?.handoffRequested;
   useEffect(() => {
-    if (!open || view?.conversation?.owner !== 'human' || view.conversation.status !== 'open') return;
+    if (!open || conversationStatus !== 'open' || (conversationOwner !== 'human' && !handoffRequested)) return;
     const timer = window.setInterval(() => {
       void loadView();
     }, 6_000);
     return () => window.clearInterval(timer);
-  }, [open, view?.conversation?.owner, view?.conversation?.status, loadView]);
+  }, [open, conversationOwner, handoffRequested, conversationStatus, loadView]);
 
   useEffect(() => {
     if (open && (view?.messages.length || busy)) {

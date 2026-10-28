@@ -1,5 +1,6 @@
 import { SITE_URL, STORE } from '@/data/store';
 import { searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
+import { detectMessageIntents } from './knowledge';
 
 export type DeterministicChoice = 'motorcycles' | 'cars' | 'financing' | 'trade_in' | 'human';
 export const deterministicChoices: { id: DeterministicChoice; label: string }[] = [
@@ -29,8 +30,9 @@ function plain(text: string) {
 export function routeDeterministicText(text: string): DeterministicChoice | null {
   const value = plain(text);
   if (/\b(vendedor|vendedora|atendente|humano|pessoa|alguem)\b/.test(value)) return 'human';
-  if (/\b(financ\w*|parcel\w*|credito|entrada)\b/.test(value)) return 'financing';
-  if (/\b(troca|trocar|minha moto|meu carro)\b/.test(value)) return 'trade_in';
+  const intents = detectMessageIntents(text);
+  if (intents.asksTradeIn) return 'trade_in';
+  if (intents.asksFinancing) return 'financing';
   const wantsMoto = /\b(moto|motos|motocicleta\w*)\b/.test(value);
   const wantsCar = /\b(carro|carros|automove\w*)\b/.test(value);
   if (wantsMoto && !wantsCar) return 'motorcycles';

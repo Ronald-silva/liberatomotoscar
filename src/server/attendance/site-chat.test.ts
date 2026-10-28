@@ -6,6 +6,7 @@ vi.mock('@/server/authz', () => ({
 }));
 
 import type { ConversationRow, MessageRow } from './conversation-repository';
+import { handoffPausesAutomation } from './conversation-repository';
 import {
   buildAgentSession,
   getSiteChatView,
@@ -76,7 +77,9 @@ function makeDeps(overrides: Partial<SiteChatDeps> = {}): SiteChatDeps {
       });
       storedMessages.push(msg);
       if (reply.handoffReason) {
-        storedConversation = { ...storedConversation, owner: 'human', handoffRequestedAt: now };
+        storedConversation = { ...storedConversation,
+          owner: handoffPausesAutomation(reply.handoffReason) ? 'human' : 'automation',
+          handoffRequestedAt: now };
       }
       if (reply.facts) {
         storedConversation = { ...storedConversation, facts: reply.facts };
@@ -204,6 +207,22 @@ describe('orquestração de atendimento do site (P3)', () => {
     expect(deps.reserveAi).not.toHaveBeenCalled();
     expect(result.view.conversation?.owner).toBe('human');
     expect(result.view.conversation?.handoffRequested).toBe(true);
+  });
+
+  it('mantém a Dayse ativa após solicitar avaliação de troca até um vendedor assumir', async () => {
+    const deps = makeDeps();
+    const first = await handleSiteTurn('token', {
+      choice: 'trade_in', clientMessageId: '11111111-1111-4111-8111-111111111111',
+    }, deps);
+    expect(first.view.conversation).toMatchObject({ owner: 'automation', handoffRequested: true });
+    const second = await handleSiteTurn('token', {
+      message: 'Minha Honda Pop é 2018', clientMessageId: '22222222-2222-4222-8222-222222222222',
+    }, deps);
+    expect(second.view.messages).toHaveLength(4);
+    expect(second.view.messages.at(-1)?.sender).toBe('bot');
+    expect(second.view.conversation?.owner).toBe('automation');
+    expect(handoffPausesAutomation('visitor_request')).toBe(true);
+    expect(handoffPausesAutomation('financing')).toBe(false);
   });
 
   it('suspende respostas automáticas quando a conversa pertence a um vendedor humano', async () => {

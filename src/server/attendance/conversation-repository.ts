@@ -96,6 +96,11 @@ export type AutomatedReply = {
   handoffReason?: HandoffReason | null;
 };
 
+/** Troca e financiamento entram na fila do vendedor enquanto a Dayse coleta os dados que faltam. */
+export function handoffPausesAutomation(reason: HandoffReason | null | undefined): boolean {
+  return reason !== null && reason !== undefined && reason !== 'trade_in' && reason !== 'financing';
+}
+
 /**
  * Confirma a resposta reservada. Se um vendedor assumiu ou a conversa foi encerrada
  * durante a geração, a resposta é descartada: o humano tem precedência.
@@ -113,12 +118,20 @@ export async function commitAutomatedReply(conversationId: string, reply: Automa
       cards: reply.cards.length ? reply.cards : null, createdAt: now,
     }).returning();
     const handoff = Boolean(reply.handoffReason);
+    const firstHandoffRequest = handoff && !current.handoffRequestedAt;
+    const facts = reply.facts?.length
+      ? [...current.facts.filter((old) => !reply.facts!.some((next) => next.field === old.field)), ...reply.facts].slice(-7)
+      : current.facts;
     await tx.update(conversations).set({
       turnLockedUntil: null, lastMessageAt: now,
-      ...(reply.facts ? { facts: reply.facts.slice(-7) } : {}),
-      ...(handoff ? { owner: 'human' as const, handoffRequestedAt: now, expiresAt: retentionFrom(now, true) } : {}),
+      facts,
+      ...(handoff ? {
+        owner: handoffPausesAutomation(reply.handoffReason) ? 'human' as const : 'automation' as const,
+        handoffRequestedAt: current.handoffRequestedAt ?? now,
+        expiresAt: retentionFrom(now, true),
+      } : {}),
     }).where(eq(conversations.id, conversationId));
-    if (handoff) {
+    if (firstHandoffRequest) {
       await tx.insert(handoffs).values({ conversationId, event: 'requested', reason: reply.handoffReason!, occurredAt: now });
     }
     return message;
