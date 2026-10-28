@@ -3,11 +3,30 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 const ALGORITHM = 'aes-256-gcm';
 
 function resolveEncryptionKey(explicitHexKey?: string): Buffer {
-  const hex = explicitHexKey ?? process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY ?? '';
-  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+  if (explicitHexKey !== undefined) {
+    if (!/^[0-9a-fA-F]{64}$/.test(explicitHexKey)) {
+      throw new Error('WHATSAPP_TOKEN_ENCRYPTION_KEY deve conter 64 caracteres hexadecimais (32 bytes).');
+    }
+    return Buffer.from(explicitHexKey, 'hex');
+  }
+
+  const hex = process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY?.trim() ?? '';
+  if (/^[0-9a-fA-F]{64}$/.test(hex)) {
+    return Buffer.from(hex, 'hex');
+  }
+
+  const fallbackSeed =
+    hex ||
+    process.env.META_APP_SECRET?.trim() ||
+    process.env.WHATSAPP_APP_SECRET?.trim() ||
+    process.env.ADMIN_SESSION_SECRET?.trim() ||
+    '';
+
+  if (!fallbackSeed) {
     throw new Error('WHATSAPP_TOKEN_ENCRYPTION_KEY deve conter 64 caracteres hexadecimais (32 bytes).');
   }
-  return Buffer.from(hex, 'hex');
+
+  return createHash('sha256').update(`whatsapp-token-aes256:${fallbackSeed}`).digest();
 }
 
 /** Criptografa o access_token da WABA em repouso no formato iv:authTag:ciphertext (hex). */
