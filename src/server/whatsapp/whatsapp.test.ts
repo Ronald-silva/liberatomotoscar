@@ -326,4 +326,19 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/,
     );
   });
+
+  it('registra apenas códigos da Meta quando o envio falha, sem expor o telefone do destinatário', async () => {
+    const recipient = '5585988887777';
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      error: { code: 131030, message: 'Recipient phone number not in allowed list', error_data: { details: recipient } },
+    }), { status: 400 }));
+    const error = await sendWhatsAppTextMessage({
+      phoneNumberId: '1234567890123', accessToken: 'TOKEN_DE_TESTE', to: recipient, body: 'Olá!',
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    }).catch((cause: Error) => cause);
+    expect(error).toBeInstanceOf(Error);
+    const message = error instanceof Error ? error.message : '';
+    expect(message).toContain('HTTP 400, código Meta 131030');
+    expect(message).not.toContain(recipient);
+  });
 });

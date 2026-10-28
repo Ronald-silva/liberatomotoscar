@@ -37,8 +37,12 @@ export async function sendWhatsAppTextMessage(params: SendWhatsAppTextParams): P
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    throw new Error(`Falha ao enviar mensagem WhatsApp (${response.status}): ${errorText.slice(0, 300)}`);
+    const data = (await response.json().catch(() => ({}))) as {
+      error?: { code?: number; error_subcode?: number };
+    };
+    const metaCode = Number.isInteger(data.error?.code) ? `, código Meta ${data.error?.code}` : '';
+    const metaSubcode = Number.isInteger(data.error?.error_subcode) ? `, subcódigo ${data.error?.error_subcode}` : '';
+    throw new Error(`Falha ao enviar mensagem WhatsApp (HTTP ${response.status}${metaCode}${metaSubcode}).`);
   }
 
   const data = (await response.json()) as { messages?: Array<{ id?: string }> };
