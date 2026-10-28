@@ -8,6 +8,36 @@ import { conversations } from '@/server/db/schema';
 import { decryptAccessToken, deterministicUuidFromWaMessageId } from './crypto';
 import { findActiveTenantByPhoneNumberId, type WhatsappTenantRow } from './embedded-signup';
 import { formatDayseWhatsAppReply, sendWhatsAppTextMessage } from './outbound';
+import { TEST_TENANT_ID } from './test-number';
+
+type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPhoneNumberId' | 'isActive'> & {
+  encryptedAccessToken?: string;
+  accessToken?: string;
+};
+
+/** O número de teste pode usar as credenciais da Vercel mesmo sem cadastro na tabela de tenants. */
+export async function resolveWebhookTenant(
+  phoneNumberId: string,
+  findDbTenant: (id: string) => Promise<WhatsappTenantRow | null> = findActiveTenantByPhoneNumberId,
+  eventWabaId?: string,
+): Promise<WebhookTenant | null> {
+  const dbTenant = await findDbTenant(phoneNumberId);
+  if (dbTenant && dbTenant.tenantId !== TEST_TENANT_ID) return dbTenant;
+
+  const envPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+  const envWabaId = process.env.WHATSAPP_WABA_ID?.trim() || eventWabaId;
+  const envAccessToken = process.env.WHATSAPP_TOKEN?.trim();
+  if (envPhoneNumberId === phoneNumberId && envWabaId && envAccessToken) {
+    return {
+      tenantId: TEST_TENANT_ID,
+      wabaId: envWabaId,
+      whatsappPhoneNumberId: envPhoneNumberId,
+      isActive: true,
+      accessToken: envAccessToken,
+    };
+  }
+  return dbTenant;
+}
 
 export type MetaWebhookPayload = {
   object?: string;
@@ -106,11 +136,11 @@ async function pauseAutomationOnSellerEcho(tenantId: string, customerWaId: strin
 }
 
 export type WebhookHandlerDeps = {
-  findTenant?: (phoneNumberId: string) => Promise<WhatsappTenantRow | null>;
+  findTenant?: (phoneNumberId: string, eventWabaId?: string) => Promise<WebhookTenant | null>;
   decryptToken?: (encrypted: string) => string;
   pauseOnSellerEcho?: (tenantId: string, customerWaId: string) => Promise<void>;
   runAgentTurn?: (params: {
-    tenant: WhatsappTenantRow;
+    tenant: WebhookTenant;
     customerWaId: string;
     customerName?: string | null;
     waMessageId: string;
@@ -125,7 +155,7 @@ export type WebhookHandlerDeps = {
 };
 
 async function defaultRunAgentTurn(params: {
-  tenant: WhatsappTenantRow;
+  tenant: WebhookTenant;
   customerWaId: string;
   customerName?: string | null;
   waMessageId: string;
@@ -163,7 +193,7 @@ export async function processMetaWebhookPayload(
     return { processedMessages: 0, pausedConversations: 0 };
   }
 
-  const findTenant = deps.findTenant ?? findActiveTenantByPhoneNumberId;
+  const findTenant = deps.findTenant ?? ((id: string, wabaId?: string) => resolveWebhookTenant(id, findActiveTenantByPhoneNumberId, wabaId));
   const decrypt = deps.decryptToken ?? ((enc: string) => decryptAccessToken(enc));
   const pauseEcho = deps.pauseOnSellerEcho ?? pauseAutomationOnSellerEcho;
   const runAgent = deps.runAgentTurn ?? defaultRunAgentTurn;
@@ -178,8 +208,15 @@ export async function processMetaWebhookPayload(
       const phoneNumberId = value?.metadata?.phone_number_id;
       if (!phoneNumberId) continue;
 
-      const tenant = await findTenant(phoneNumberId);
-      if (!tenant || !tenant.isActive) continue;
+      const tenant = await findTenant(phoneNumberId, entry.id);
+      if (!tenant || !tenant.isActive) {
+        if (value?.messages?.length) console.warn('Webhook WhatsApp: número sem credenciais ativas; nenhuma resposta enviada.');
+        continue;
+      }
+      if (entry.id && entry.id !== tenant.wabaId) {
+        if (value?.messages?.length) console.warn('Webhook WhatsApp: WABA do evento diferente da conta configurada; nenhuma resposta enviada.');
+        continue;
+      }
 
       // 1. Modo Coexistência: vendedor respondeu pelo WhatsApp Business do celular
       if (change.field === 'smb_message_echoes' && value?.message_echoes?.length) {
@@ -228,14 +265,18 @@ export async function processMetaWebhookPayload(
         });
 
         if (replyBody) {
-          const accessToken = decrypt(tenant.encryptedAccessToken);
-          await sendOutbound({
+          const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
+          if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
+          const sent = await sendOutbound({
             phoneNumberId: tenant.whatsappPhoneNumberId,
             accessToken,
             to: incoming.from,
             body: replyBody,
           });
+          if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta da Dayse.');
           processedMessages += 1;
+        } else {
+          console.info('Webhook WhatsApp: conversa sem resposta automática (modo desativado, vendedor ativo ou mensagem duplicada).');
         }
       }
     }

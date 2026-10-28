@@ -14,7 +14,8 @@ import {
 } from './crypto';
 import { completeEmbeddedSignup, type WhatsappTenantRow } from './embedded-signup';
 import { formatDayseWhatsAppReply, sendWhatsAppTextMessage } from './outbound';
-import { processMetaWebhookPayload, whatsappConversationToken } from './webhook-handler';
+import { processMetaWebhookPayload, resolveWebhookTenant, whatsappConversationToken } from './webhook-handler';
+import { TEST_TENANT_ID } from './test-number';
 
 const TEST_HEX_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const TEST_APP_SECRET = 'ronaldigital-meta-secret-123';
@@ -230,6 +231,75 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
     expect(pauseOnSellerEcho).toHaveBeenCalledWith('liberato-motos-car', '5585988887777');
   });
 
+  it('usa as credenciais do número de teste da Vercel quando o webhook não encontra tenant no banco', async () => {
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', '1234567890123');
+    vi.stubEnv('WHATSAPP_WABA_ID', '');
+    vi.stubEnv('WHATSAPP_TOKEN', 'TOKEN_DE_TESTE');
+    try {
+      const tenant = await resolveWebhookTenant('1234567890123', async () => null, '9876543210987');
+      expect(tenant).toMatchObject({
+        tenantId: TEST_TENANT_ID,
+        wabaId: '9876543210987',
+        accessToken: 'TOKEN_DE_TESTE',
+      });
+
+      const sendOutbound = vi.fn(async () => ({ messageId: 'wamid.sent.1' }));
+      const result = await processMetaWebhookPayload({
+        object: 'whatsapp_business_account',
+        entry: [{ id: '9876543210987', changes: [{ field: 'messages', value: {
+          metadata: { phone_number_id: '1234567890123' },
+          messages: [{ id: 'wamid.in.1', from: '5585988887777', timestamp: '1', type: 'text', text: { body: 'Boa tarde' } }],
+        } }] }],
+      }, {
+        findTenant: (id, wabaId) => resolveWebhookTenant(id, async () => null, wabaId),
+        runAgentTurn: async () => 'Boa tarde! Sou a Dayse.',
+        sendOutbound,
+      });
+      expect(result.processedMessages).toBe(1);
+      expect(sendOutbound).toHaveBeenCalledWith({
+        phoneNumberId: '1234567890123',
+        accessToken: 'TOKEN_DE_TESTE',
+        to: '5585988887777',
+        body: 'Boa tarde! Sou a Dayse.',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('não substitui a credencial de um número real pelo token de teste da Vercel', async () => {
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', '1234567890123');
+    vi.stubEnv('WHATSAPP_WABA_ID', '9876543210987');
+    vi.stubEnv('WHATSAPP_TOKEN', 'TOKEN_DE_TESTE');
+    try {
+      const realTenant = {
+        tenantId: 'liberato-motos-car', wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',
+        isActive: true, encryptedAccessToken: 'encrypted',
+      } as WhatsappTenantRow;
+      expect(await resolveWebhookTenant('1234567890123', async () => realTenant)).toBe(realTenant);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('não contabiliza o envio quando a Meta não devolve ID da mensagem', async () => {
+    const tenant = {
+      tenantId: TEST_TENANT_ID, wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',
+      isActive: true, accessToken: 'TOKEN_DE_TESTE',
+    };
+    await expect(processMetaWebhookPayload({
+      object: 'whatsapp_business_account',
+      entry: [{ id: '9876543210987', changes: [{ field: 'messages', value: {
+        metadata: { phone_number_id: '1234567890123' },
+        messages: [{ id: 'wamid.in.2', from: '5585988887777', timestamp: '1', type: 'text', text: { body: 'Oi' } }],
+      } }] }],
+    }, {
+      findTenant: async () => tenant,
+      runAgentTurn: async () => 'Olá!',
+      sendOutbound: async () => ({ messageId: null }),
+    })).rejects.toThrow('não confirmou o envio');
+  });
+
   it('envia mensagem via Meta Cloud API usando phone_number_id e access_token dinâmicos', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ messages: [{ id: 'wamid.sent.99' }] }), { status: 200 }));
     const res = await sendWhatsAppTextMessage({
@@ -240,6 +310,17 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
       fetchImpl: fetchMock as unknown as typeof fetch,
     });
     expect(res.messageId).toBe('wamid.sent.99');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://graph.facebook.com/v21.0/phone_liberato_1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { Authorization: 'Bearer TOKEN_DINAMICO', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp', recipient_type: 'individual', to: '5585988887777', type: 'text',
+          text: { preview_url: true, body: 'Olá! Aqui é a Dayse.' },
+        }),
+      }),
+    );
     expect(whatsappConversationToken('liberato-motos-car', '5585988887777')).toHaveLength(43);
     expect(deterministicUuidFromWaMessageId('wamid.123')).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/,
