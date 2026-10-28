@@ -64,7 +64,7 @@ export async function appendVisitorMessage(conversationId: string, body: string,
     await tx.update(conversations).set({
       visitorTurns: sql`${conversations.visitorTurns} + 1`, lastMessageAt: now,
       // Conversa com pedido de contato mantém o prazo maior já definido.
-      expiresAt: sql`greatest(${conversations.expiresAt}, ${retentionFrom(now, false)})`,
+      expiresAt: sql`greatest(${conversations.expiresAt}, ${sql.param(retentionFrom(now, false), conversations.expiresAt)})`,
     }).where(eq(conversations.id, conversationId));
     return { duplicate: false as const, message };
   });
@@ -146,7 +146,7 @@ export async function assumeConversationAs(conversationId: string, actorUserId: 
     }
     // Assumir cancela qualquer reserva de turno: resposta automática em curso será descartada.
     const [row] = await tx.update(conversations).set({ owner: 'human', assignedTo: actorUserId, turnLockedUntil: null,
-      expiresAt: sql`greatest(${conversations.expiresAt}, ${retentionFrom(now, true)})` })
+      expiresAt: sql`greatest(${conversations.expiresAt}, ${sql.param(retentionFrom(now, true), conversations.expiresAt)})` })
       .where(eq(conversations.id, conversationId)).returning();
     await tx.insert(handoffs).values({ conversationId, event: 'assumed', reason: 'operator', actorUserId, occurredAt: now });
     return row;
