@@ -5,6 +5,11 @@ import * as repository from './conversation-repository';
 import type { AutomatedReply, ConversationRow, HandoffReason, LeadFact, MessageRow } from './conversation-repository';
 import { deterministicAnswer, deterministicChoices, deterministicMenuText, handoffReasonByChoice,
   routeDeterministicText, type DeterministicChoice } from './deterministic';
+import {
+  answerFromPlatformKnowledge,
+  hasInstitutionalQuestion,
+  isKnowledgeOrSpecificCatalogQuery,
+} from './knowledge';
 import { recordSiteAiTokens, reserveSiteAiRequest } from './limits';
 import { readSiteSetting, type AttendanceMode } from './settings';
 
@@ -137,25 +142,86 @@ async function choiceReply(deps: SiteChatDeps, choice: DeterministicChoice): Pro
   };
 }
 
+function extractRecentModelContext(conversation: ConversationRow | null, history: MessageRow[]): string | null {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const msg = history[i];
+    if (msg?.cards && msg.cards.length > 0 && msg.cards[0]?.title) {
+      return msg.cards[0].title;
+    }
+  }
+  const modelFact = conversation?.facts?.find((f) => f.field === 'model');
+  return modelFact?.quote ?? null;
+}
+
+async function smartKnowledgeOrChoiceReply(
+  deps: SiteChatDeps,
+  body: string,
+  routed: DeterministicChoice | null,
+  recentModelOrTitle: string | null = null,
+): Promise<AutomatedReply> {
+  if (isKnowledgeOrSpecificCatalogQuery(body)) {
+    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+    if (kb.matched) {
+      return {
+        sender: 'bot',
+        body: kb.text,
+        cards: kb.cards,
+        facts: kb.facts.length ? kb.facts : undefined,
+        handoffReason: kb.handoffReason,
+      };
+    }
+  }
+  if (routed) return choiceReply(deps, routed);
+  const kbFallback = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+  if (kbFallback.matched) {
+    return {
+      sender: 'bot',
+      body: kbFallback.text,
+      cards: kbFallback.cards,
+      facts: kbFallback.facts.length ? kbFallback.facts : undefined,
+      handoffReason: kbFallback.handoffReason,
+    };
+  }
+  return { sender: 'bot', body: deterministicMenuText, cards: [] };
+}
+
 async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, 'disabled'>, conversation: ConversationRow,
   body: string, choice: DeterministicChoice | undefined, signal?: AbortSignal): Promise<AutomatedReply> {
   // Botões do menu nunca chamam o modelo, em nenhum modo.
   if (choice) return choiceReply(deps, choice);
   const routed = routeDeterministicText(body);
-  if (mode === 'deterministic') {
-    return routed ? choiceReply(deps, routed) : { sender: 'bot', body: deterministicMenuText, cards: [] };
-  }
   // Pedido explícito de pessoa não gasta chamada de IA.
   if (routed === 'human') return choiceReply(deps, 'human');
 
+  const messages = await deps.listMessages(conversation.id, 40).catch(() => []);
+  const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
+  const recentModelOrTitle = extractRecentModelContext(conversation, history);
+
+  if (mode === 'deterministic') {
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle);
+  }
+
+  const isDefaultAgent = deps.runAgent === siteChatDeps.runAgent;
+
+  // Perguntas institucionais da plataforma (endereço, localização, telefone, horário, avaliação, venda)
+  // e consultas diretas à base de conhecimento/catálogo em produção respondem com 100% de precisão.
+  if (hasInstitutionalQuestion(body) || (isDefaultAgent && isKnowledgeOrSpecificCatalogQuery(body))) {
+    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+    if (kb.matched) {
+      return {
+        sender: 'ai',
+        body: kb.text,
+        cards: kb.cards,
+        facts: kb.facts.length ? kb.facts : undefined,
+        handoffReason: kb.handoffReason,
+      };
+    }
+  }
+
   const reservation = await deps.reserveAi();
   if (!reservation) {
-    return { sender: 'bot', cards: [],
-      body: 'O assistente atingiu o limite de atendimentos automáticos de hoje. Você pode chamar um vendedor pelo botão abaixo ou pelo WhatsApp.' };
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle);
   }
-  const messages = await deps.listMessages(conversation.id, 40);
-  // A mensagem atual já foi gravada; o agente a recebe separadamente.
-  const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
   try {
     const answer = await deps.runAgent(buildAgentSession(conversation, history), body, signal);
     await deps.recordTokens(reservation.dayUtc, answer.usage.inputTokens, answer.usage.outputTokens)
@@ -167,8 +233,8 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
       handoffReason: aiHandoffReason(answer),
     };
   } catch (error) {
-    console.warn('Provedor IA indisponível no turno do site; usando busca determinística da Dayse:', error instanceof Error ? error.message : 'erro');
-    return routed ? choiceReply(deps, routed) : { sender: 'bot', body: deterministicMenuText, cards: [] };
+    console.warn('Provedor IA indisponível no turno do site; usando base de conhecimento da Dayse:', error instanceof Error ? error.message : 'erro');
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle);
   }
 }
 
@@ -245,9 +311,9 @@ export async function handleSiteTurn(token: string | null, input: SiteTurnInput,
       closedBy: null,
     };
     const routed = choice ?? routeDeterministicText(body);
-    const reply = routed
-      ? await choiceReply(deps, routed)
-      : { sender: 'bot' as const, body: deterministicMenuText, cards: [] };
+    const reply = choice
+      ? await choiceReply(deps, choice)
+      : await smartKnowledgeOrChoiceReply(deps, body, routed);
     return {
       token: null,
       view: toView(setting.mode, null, [
