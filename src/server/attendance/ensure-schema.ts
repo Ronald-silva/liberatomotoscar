@@ -124,7 +124,7 @@ export function ensureAttendanceTables(): Promise<void> {
         await db.execute(sql`
           UPDATE "channel_settings"
             SET "mode" = 'ai'
-            WHERE "channel" = 'site' AND "updated_by" IS NULL AND "mode" = 'disabled'
+            WHERE "channel" = 'site' AND "mode" = 'disabled'
         `);
       } catch (error) {
         ensuredPromise = null;

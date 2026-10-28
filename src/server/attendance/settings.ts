@@ -16,14 +16,17 @@ export function defaultSiteMode(): AttendanceMode {
   return process.env.OPENROUTER_API_KEY?.trim() ? 'ai' : 'deterministic';
 }
 
-// Sem linha no banco, o canal inicia ativo (IA quando configurada, ou Chatbot determinístico).
+// Sem linha no banco (ou se ficou 'disabled' de versão anterior), o canal permanece ativo (IA quando configurada, ou Chatbot determinístico).
 export async function readSiteSetting() {
   try {
     await ensureAttendanceTables();
     const [row] = await getDb().select().from(channelSettings)
       .where(eq(channelSettings.channel, 'site')).limit(1);
-    return row ?? { channel: 'site' as const, mode: defaultSiteMode(), version: 1,
-      updatedBy: null, updatedAt: null };
+    if (!row || row.mode === 'disabled') {
+      return { channel: 'site' as const, mode: defaultSiteMode(), version: row?.version ?? 1,
+        updatedBy: row?.updatedBy ?? null, updatedAt: row?.updatedAt ?? null };
+    }
+    return row;
   } catch {
     return { channel: 'site' as const, mode: defaultSiteMode(), version: 1,
       updatedBy: null, updatedAt: null };

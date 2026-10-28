@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { AccessDeniedError, requireAdmin } from '@/server/authz';
-import { getAuthSecret } from '@/server/env';
 import { DemoProviderError } from '@/server/ai/provider';
 import { consumeRateLimit, rateLimitKey } from '@/server/attendance/limits';
 import { getSiteChatView, handleSiteTurn, SiteChatError } from '@/server/attendance/site-chat';
@@ -68,7 +67,8 @@ function clientAddress(request: Request) {
 }
 
 async function limited(request: Request, scope: string, max: number) {
-  const key = rateLimitKey(scope, clientAddress(request), getAuthSecret());
+  const secret = process.env.AUTH_SECRET?.trim() || 'liberato-rate-limit-fallback-secret-key';
+  const key = rateLimitKey(scope, clientAddress(request), secret);
   return !(await consumeRateLimit(key, max, 60_000));
 }
 

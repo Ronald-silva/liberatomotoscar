@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   assumeInboxConversation: vi.fn(),
   releaseInboxConversation: vi.fn(),
   closeInboxConversation: vi.fn(),
+  deleteInboxConversation: vi.fn(),
   replyToInboxConversation: vi.fn(),
   revalidatePath: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock('@/server/attendance/inbox', () => ({
   assumeInboxConversation: mocks.assumeInboxConversation,
   releaseInboxConversation: mocks.releaseInboxConversation,
   closeInboxConversation: mocks.closeInboxConversation,
+  deleteInboxConversation: mocks.deleteInboxConversation,
   replyToInboxConversation: mocks.replyToInboxConversation,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
@@ -87,6 +89,13 @@ it('executa ações do operador na conversa (assumir, responder, devolver e ence
   const closed = await operateInboxConversation({ message: null, error: false }, closeForm);
   expect(mocks.closeInboxConversation).toHaveBeenCalledWith(convId);
   expect(closed.error).toBe(false);
+
+  const deleteForm = new FormData();
+  deleteForm.set('conversationId', convId);
+  deleteForm.set('intent', 'delete');
+  const deleted = await operateInboxConversation({ message: null, error: false }, deleteForm);
+  expect(mocks.deleteInboxConversation).toHaveBeenCalledWith(convId);
+  expect(deleted.error).toBe(false);
 });
 
 it('define todas as classes referenciadas por attendanceStyles em attendance.module.css', () => {
