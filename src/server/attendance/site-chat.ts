@@ -99,9 +99,10 @@ async function currentView(deps: SiteChatDeps, mode: AttendanceMode, conversatio
 /** Leitura para o widget (inclusive polling quando um vendedor assume). */
 export async function getSiteChatView(token: string | null, deps: SiteChatDeps = siteChatDeps) {
   const setting = await deps.readSetting();
-  const conversation = token ? await deps.findByToken(token) : null;
+  const conversation = token ? await deps.findByToken(token).catch(() => null) : null;
   if (!conversation) return toView(setting.mode, null, []);
-  return toView(setting.mode, conversation, await deps.listMessages(conversation.id));
+  const messages = await deps.listMessages(conversation.id).catch(() => []);
+  return toView(setting.mode, conversation, messages);
 }
 
 /** Monta o histórico do agente com pares visitante → resposta automática já persistidos. */
@@ -155,15 +156,20 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   const messages = await deps.listMessages(conversation.id, 40);
   // A mensagem atual já foi gravada; o agente a recebe separadamente.
   const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
-  const answer = await deps.runAgent(buildAgentSession(conversation, history), body, signal);
-  await deps.recordTokens(reservation.dayUtc, answer.usage.inputTokens, answer.usage.outputTokens)
-    .catch(() => console.error('Falha ao registrar tokens do atendimento do site.'));
-  return {
-    sender: 'ai', body: answer.answer,
-    cards: answer.cards.map(({ id, title, year, priceCents, href }) => ({ id, title, year, priceCents, href })),
-    facts: answer.lead.facts as LeadFact[],
-    handoffReason: aiHandoffReason(answer),
-  };
+  try {
+    const answer = await deps.runAgent(buildAgentSession(conversation, history), body, signal);
+    await deps.recordTokens(reservation.dayUtc, answer.usage.inputTokens, answer.usage.outputTokens)
+      .catch(() => console.error('Falha ao registrar tokens do atendimento do site.'));
+    return {
+      sender: 'ai', body: answer.answer,
+      cards: answer.cards.map(({ id, title, year, priceCents, href }) => ({ id, title, year, priceCents, href })),
+      facts: answer.lead.facts as LeadFact[],
+      handoffReason: aiHandoffReason(answer),
+    };
+  } catch (error) {
+    console.warn('Provedor IA indisponível no turno do site; usando busca determinística da Dayse:', error instanceof Error ? error.message : 'erro');
+    return routed ? choiceReply(deps, routed) : { sender: 'bot', body: deterministicMenuText, cards: [] };
+  }
 }
 
 /**
@@ -177,42 +183,95 @@ export async function handleSiteTurn(token: string | null, input: SiteTurnInput,
   if (!body || body.length > 1000) throw new SiteChatError('Escreva uma mensagem de até 1.000 caracteres.', 400, 'invalid_message');
 
   const setting = await deps.readSetting();
-  let conversation = token ? await deps.findByToken(token) : null;
+  let conversation = token ? await deps.findByToken(token).catch(() => null) : null;
   // Desativado: nenhuma resposta automática. Uma conversa já assumida por vendedor continua.
   if (setting.mode === 'disabled' && conversation?.owner !== 'human') {
     throw new SiteChatError('O atendimento automático está desativado. Fale com a loja pelo WhatsApp.', 409, 'disabled');
   }
-  let newToken: string | null = null;
-  if (!conversation) {
-    const created = await deps.create();
-    conversation = created.conversation;
-    newToken = created.token;
-  }
-  if (conversation.status === 'closed') throw new SiteChatError('Esta conversa foi encerrada. Inicie uma nova conversa.', 409, 'closed');
-  if (conversation.visitorTurns >= repository.MAX_VISITOR_TURNS) {
-    throw new SiteChatError('Esta conversa chegou ao limite de mensagens. Continue pelo WhatsApp.', 429, 'turn_limit');
-  }
-
-  const appended = await deps.appendVisitor(conversation.id, body, input.clientMessageId);
-  const finish = async () => ({ token: newToken, view: await currentView(deps, setting.mode, conversation.id) });
-  if (appended.duplicate || conversation.owner === 'human' || setting.mode === 'disabled') return finish();
-
-  const reserved = await deps.reserveTurn(conversation.id);
-  if (!reserved) return finish();
-
-  let reply: AutomatedReply;
   try {
-    reply = await generateReply(deps, setting.mode, reserved, body, choice, signal);
-  } catch (error) {
-    await deps.releaseTurn(conversation.id).catch(() => undefined);
-    throw error;
-  }
-  // Troca de modo vale no próximo turno, mas desativar impede qualquer nova emissão.
-  const latest = await deps.readSetting();
-  if (latest.mode === 'disabled') {
-    await deps.releaseTurn(conversation.id).catch(() => undefined);
+    let newToken: string | null = null;
+    if (!conversation) {
+      const created = await deps.create();
+      conversation = created.conversation;
+      newToken = created.token;
+    }
+    if (conversation.status === 'closed') throw new SiteChatError('Esta conversa foi encerrada. Inicie uma nova conversa.', 409, 'closed');
+    if (conversation.visitorTurns >= repository.MAX_VISITOR_TURNS) {
+      throw new SiteChatError('Esta conversa chegou ao limite de mensagens. Continue pelo WhatsApp.', 429, 'turn_limit');
+    }
+
+    const activeConversation = conversation;
+    const appended = await deps.appendVisitor(activeConversation.id, body, input.clientMessageId);
+    const finish = async () => ({ token: newToken, view: await currentView(deps, setting.mode, activeConversation.id) });
+    if (appended.duplicate || activeConversation.owner === 'human' || setting.mode === 'disabled') return finish();
+
+    const reserved = await deps.reserveTurn(activeConversation.id);
+    if (!reserved) return finish();
+
+    let reply: AutomatedReply;
+    try {
+      reply = await generateReply(deps, setting.mode, reserved, body, choice, signal);
+    } catch (error) {
+      await deps.releaseTurn(activeConversation.id).catch(() => undefined);
+      throw error;
+    }
+    // Troca de modo vale no próximo turno, mas desativar impede qualquer nova emissão.
+    const latest = await deps.readSetting();
+    if (latest.mode === 'disabled') {
+      await deps.releaseTurn(activeConversation.id).catch(() => undefined);
+      return finish();
+    }
+    await deps.commit(activeConversation.id, reply);
     return finish();
+  } catch (error) {
+    if (error instanceof SiteChatError) throw error;
+    console.warn('Persistência de conversa indisponível; respondendo em modo resiliente:', error instanceof Error ? error.message : 'erro');
+    const now = new Date();
+    const fallbackConv: ConversationRow = conversation ?? {
+      id: '00000000-0000-4000-8000-000000000000',
+      channel: 'site',
+      tokenHash: '',
+      owner: 'automation',
+      status: 'open',
+      assignedTo: null,
+      facts: [],
+      visitorTurns: 1,
+      turnLockedUntil: null,
+      handoffRequestedAt: null,
+      createdAt: now,
+      lastMessageAt: now,
+      expiresAt: new Date(now.getTime() + 86_400_000),
+      closedAt: null,
+      closedBy: null,
+    };
+    const routed = choice ?? routeDeterministicText(body);
+    const reply = routed
+      ? await choiceReply(deps, routed)
+      : { sender: 'bot' as const, body: deterministicMenuText, cards: [] };
+    return {
+      token: null,
+      view: toView(setting.mode, null, [
+        {
+          id: input.clientMessageId,
+          conversationId: fallbackConv.id,
+          sender: 'visitor',
+          body,
+          cards: null,
+          authorUserId: null,
+          clientMessageId: input.clientMessageId,
+          createdAt: now,
+        },
+        {
+          id: `${input.clientMessageId}-reply`,
+          conversationId: fallbackConv.id,
+          sender: reply.sender,
+          body: reply.body,
+          cards: reply.cards,
+          authorUserId: null,
+          clientMessageId: null,
+          createdAt: now,
+        },
+      ]),
+    };
   }
-  await deps.commit(conversation.id, reply);
-  return finish();
 }

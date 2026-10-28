@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { getDb } from '@/server/db/client';
 import { attendanceRateLimits, attendanceUsage } from '@/server/db/schema';
+import { ensureAttendanceTables } from './ensure-schema';
 
 export class AttendanceLimitError extends Error {
   constructor(message = 'Muitas mensagens em pouco tempo. Aguarde um instante e tente novamente.') {
@@ -19,16 +20,22 @@ export function siteAiDailyLimit() {
 export async function reserveSiteAiRequest(now = new Date(), limit = siteAiDailyLimit()) {
   const dayUtc = now.toISOString().slice(0, 10);
   if (limit <= 0) return null;
-  const [row] = await getDb().insert(attendanceUsage).values({ channel: 'site', dayUtc, aiRequests: 1, updatedAt: now })
-    .onConflictDoUpdate({
-      target: [attendanceUsage.channel, attendanceUsage.dayUtc],
-      set: { aiRequests: sql`${attendanceUsage.aiRequests} + 1`, updatedAt: now },
-      setWhere: lt(attendanceUsage.aiRequests, limit),
-    }).returning({ aiRequests: attendanceUsage.aiRequests });
-  return row ? { dayUtc } : null;
+  try {
+    await ensureAttendanceTables();
+    const [row] = await getDb().insert(attendanceUsage).values({ channel: 'site', dayUtc, aiRequests: 1, updatedAt: now })
+      .onConflictDoUpdate({
+        target: [attendanceUsage.channel, attendanceUsage.dayUtc],
+        set: { aiRequests: sql`${attendanceUsage.aiRequests} + 1`, updatedAt: now },
+        setWhere: lt(attendanceUsage.aiRequests, limit),
+      }).returning({ aiRequests: attendanceUsage.aiRequests });
+    return row ? { dayUtc } : null;
+  } catch {
+    return { dayUtc };
+  }
 }
 
 export async function recordSiteAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {
+  await ensureAttendanceTables();
   await getDb().update(attendanceUsage).set({
     inputTokens: sql`${attendanceUsage.inputTokens} + ${Math.max(0, Math.floor(inputTokens))}`,
     outputTokens: sql`${attendanceUsage.outputTokens} + ${Math.max(0, Math.floor(outputTokens))}`,
@@ -45,12 +52,17 @@ export function rateLimitKey(scope: string, clientAddress: string, secret: strin
  * Devolve `false` quando o limite da janela foi atingido.
  */
 export async function consumeRateLimit(bucketKey: string, max: number, windowMs: number, now = new Date()) {
-  const windowStart = new Date(Math.floor(now.getTime() / windowMs) * windowMs);
-  const [row] = await getDb().insert(attendanceRateLimits).values({ bucketKey, windowStart, hits: 1 })
-    .onConflictDoUpdate({
-      target: [attendanceRateLimits.bucketKey, attendanceRateLimits.windowStart],
-      set: { hits: sql`${attendanceRateLimits.hits} + 1` },
-      setWhere: lt(attendanceRateLimits.hits, max),
-    }).returning({ hits: attendanceRateLimits.hits });
-  return Boolean(row);
+  try {
+    await ensureAttendanceTables();
+    const windowStart = new Date(Math.floor(now.getTime() / windowMs) * windowMs);
+    const [row] = await getDb().insert(attendanceRateLimits).values({ bucketKey, windowStart, hits: 1 })
+      .onConflictDoUpdate({
+        target: [attendanceRateLimits.bucketKey, attendanceRateLimits.windowStart],
+        set: { hits: sql`${attendanceRateLimits.hits} + 1` },
+        setWhere: lt(attendanceRateLimits.hits, max),
+      }).returning({ hits: attendanceRateLimits.hits });
+    return Boolean(row);
+  } catch {
+    return true;
+  }
 }

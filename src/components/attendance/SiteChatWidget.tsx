@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { STORE } from '@/data/store';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { ArrowUpRight, MessageCircle, RefreshCw, Send, X } from 'lucide-react';
+import { SITE_URL, STORE } from '@/data/store';
 import type { DeterministicChoice } from '@/server/attendance/deterministic';
 import type { SiteChatView } from '@/server/attendance/site-chat';
 import styles from './site-chat.module.css';
@@ -10,17 +11,32 @@ const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 
 const senderName = {
   visitor: 'Você',
-  bot: 'Atendimento Liberato',
-  ai: 'Assistente Liberato (IA)',
-  human: 'Vendedor Liberato',
+  bot: 'Dayse · Liberato',
+  ai: 'Dayse · Liberato',
+  human: 'Consultor Liberato',
   system: 'Sistema',
 } as const;
 
 const modeSubtitle = {
-  disabled: 'Atendimento pelo WhatsApp',
-  deterministic: 'Menu rápido de estoque',
-  ai: 'Assistente com inteligência artificial',
+  disabled: 'Atendimento direto com a loja',
+  deterministic: 'Consultora Digital · Estoque ao vivo',
+  ai: 'Consultora Digital · Estoque ao vivo',
 } as const;
+
+const quickPrompts: { label: string; choice?: DeterministicChoice; message?: string }[] = [
+  { label: '🏍️ Ver motos', choice: 'motorcycles' },
+  { label: '🚗 Ver carros', choice: 'cars' },
+  { label: '🎯 Até R$ 15 mil', message: 'Quero ver motos até 15 mil' },
+  { label: '🔄 Avaliar troca', choice: 'trade_in' },
+  { label: '💳 Financiamento', choice: 'financing' },
+  { label: '👤 Falar c/ vendedor', choice: 'human' },
+];
+
+function vehicleWhatsAppHref(title: string, priceCents: number, href: string) {
+  const fullUrl = new URL(href, SITE_URL).toString();
+  const text = `Olá! Vi com a Dayse no site o veículo ${title} (${brl.format(priceCents / 100)}) e quero mais informações: ${fullUrl}`;
+  return `https://wa.me/${STORE.whatsappNumber}?text=${encodeURIComponent(text)}`;
+}
 
 export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'admin' }) {
   const [allowed, setAllowed] = useState(access === 'public');
@@ -29,6 +45,7 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
   const loadView = useCallback(async () => {
     try {
@@ -68,15 +85,13 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
     return () => window.clearInterval(timer);
   }, [open, view?.conversation?.owner, view?.conversation?.status, loadView]);
 
-  if (!allowed) return null;
-
-  function toggleOpen() {
-    const next = !open;
-    setOpen(next);
-    if (next && !view) {
-      void loadView();
+  useEffect(() => {
+    if (open && (view?.messages.length || busy)) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-  }
+  }, [open, view?.messages.length, busy]);
+
+  if (!allowed) return null;
 
   async function sendPayload(payload: { message?: string; choice?: DeterministicChoice }) {
     if (busy) return;
@@ -99,6 +114,14 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
       setError(cause instanceof Error ? cause.message : 'Não consegui responder agora.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  function toggleOpen() {
+    const next = !open;
+    setOpen(next);
+    if (next && !view) {
+      void loadView();
     }
   }
 
@@ -125,57 +148,80 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
     ? (view.mode !== 'disabled' || view.conversation?.owner === 'human') &&
       view.conversation?.status !== 'closed' &&
       (view.conversation?.turnsLeft ?? 1) > 0
-    : false;
+    : true;
 
   const handoffHref = view?.handoffUrl ?? `https://wa.me/${STORE.whatsappNumber}`;
+  const showQuickChips =
+    !view || (view.mode !== 'disabled' && view.conversation?.owner !== 'human' && view.conversation?.status !== 'closed');
 
   return (
     <div className={styles.launcherWrap}>
       {open ? (
         <section className={styles.dialog} aria-labelledby="site-chat-title">
           <header className={styles.header}>
-            <div>
-              <h2 id="site-chat-title" className={styles.headerTitle}>Atendimento Liberato</h2>
-              <span className={styles.headerSub}>
-                {view?.conversation?.owner === 'human'
-                  ? `Protocolo #${view.conversation.protocol} · Vendedor acionado`
-                  : view
-                    ? modeSubtitle[view.mode]
-                    : 'Carregando atendimento…'}
+            <div className={styles.headerIdentity}>
+              <span className={styles.avatarBadge} aria-hidden="true">
+                D
+                <span className={styles.onlineDot} />
               </span>
+              <div className={styles.headerText}>
+                <h2 id="site-chat-title" className={styles.headerTitle}>
+                  Dayse · Liberato Motos Car
+                </h2>
+                <span className={styles.headerSub}>
+                  {view?.conversation?.owner === 'human'
+                    ? `Protocolo #${view.conversation.protocol} · Vendedor online`
+                    : view
+                      ? modeSubtitle[view.mode]
+                      : 'Consultora Digital · Estoque ao vivo'}
+                </span>
+              </div>
             </div>
             <div className={styles.headerActions}>
               {view?.conversation ? (
-                <button type="button" className={styles.closeButton} onClick={() => void resetConversation()} disabled={busy}>
-                  Nova
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={() => void resetConversation()}
+                  disabled={busy}
+                  title="Reiniciar conversa"
+                  aria-label="Reiniciar conversa"
+                >
+                  <RefreshCw size={13} aria-hidden="true" />
                 </button>
               ) : null}
-              <button type="button" className={styles.closeButton} onClick={() => setOpen(false)}>
-                Fechar
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => setOpen(false)}
+                aria-label="Minimizar chat da Dayse"
+              >
+                <X size={15} aria-hidden="true" />
               </button>
             </div>
           </header>
 
-          <p className={styles.privacy}>
-            Aviso de privacidade: não envie documentos nem senhas. O atendimento pode usar respostas automáticas ou IA e guarda a conversa temporariamente para suporte da loja.
-          </p>
-
           <div className={styles.stream} aria-live="polite">
-            {view && view.mode !== 'disabled' && view.conversation?.owner !== 'human' && view.conversation?.status !== 'closed' ? (
-              <div className={styles.choiceRow} role="group" aria-label="Opções rápidas de atendimento">
-                {view.choices.map((choice) => (
-                  <button
-                    key={choice.id}
-                    type="button"
-                    className={styles.choiceButton}
-                    disabled={busy || !canSend}
-                    onClick={() => void sendPayload({ choice: choice.id })}
-                  >
-                    {choice.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            <div className={styles.welcomeBox}>
+              <p className={styles.welcomeCopy}>
+                Olá! Sou a <strong>Dayse</strong> 👋 Consulto as motos e carros disponíveis no estoque da loja em Fortaleza ou avalio sua troca agora mesmo.
+              </p>
+              {showQuickChips ? (
+                <div className={styles.choiceGrid} role="group" aria-label="Atalhos rápidos da Dayse">
+                  {quickPrompts.map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      className={styles.choiceButton}
+                      disabled={busy || !canSend}
+                      onClick={() => void sendPayload({ choice: item.choice, message: item.message })}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
 
             {view?.messages.map((msg) => (
               <div
@@ -194,18 +240,39 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
                   <div className={styles.cards}>
                     {msg.cards.map((card) => (
                       <article key={card.id} className={styles.card}>
-                        <strong>{card.title}</strong>
-                        <span>
-                          {card.year ? `${card.year} · ` : ''}
-                          {brl.format(card.priceCents / 100)}
-                        </span>
-                        <a href={card.href}>Ver anúncio</a>
+                        <div className={styles.cardTop}>
+                          <span className={styles.cardBadge}>● Em estoque</span>
+                          {card.year ? <span className={styles.cardYear}>{card.year}</span> : null}
+                        </div>
+                        <strong className={styles.cardTitle}>{card.title}</strong>
+                        <span className={styles.cardPrice}>{brl.format(card.priceCents / 100)}</span>
+                        <div className={styles.cardActions}>
+                          <a className={styles.cardPrimaryLink} href={card.href}>
+                            Ver veículo <ArrowUpRight size={12} aria-hidden="true" />
+                          </a>
+                          <a
+                            className={styles.cardSecondaryLink}
+                            href={vehicleWhatsAppHref(card.title, card.priceCents, card.href)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            WhatsApp
+                          </a>
+                        </div>
                       </article>
                     ))}
                   </div>
                 ) : null}
               </div>
             ))}
+
+            {busy ? (
+              <div className={styles.typingBubble}>
+                <span className={styles.pulseDot} aria-hidden="true" />
+                Dayse está consultando o estoque…
+              </div>
+            ) : null}
+            <div ref={endRef} />
           </div>
 
           <div className={styles.footer}>
@@ -219,29 +286,43 @@ export function SiteChatWidget({ access = 'public' }: { access?: 'public' | 'adm
                   onChange={(event) => setDraft(event.target.value)}
                   maxLength={1000}
                   disabled={busy}
-                  aria-label="Mensagem para o atendimento"
-                  placeholder="Digite sua dúvida…"
+                  aria-label="Pergunte para a Dayse sobre motos, carros, faixa de preço ou troca"
+                  placeholder="Digite sua dúvida ou modelo…"
                 />
-                <button type="submit" className={styles.sendButton} disabled={busy || !draft.trim()}>
-                  {busy ? '…' : 'Enviar'}
+                <button
+                  type="submit"
+                  className={styles.sendButton}
+                  disabled={busy || !draft.trim()}
+                  aria-label="Enviar mensagem"
+                >
+                  <Send size={14} aria-hidden="true" />
                 </button>
               </form>
             ) : null}
-            <a className={styles.handoffLink} href={handoffHref} target="_blank" rel="noopener noreferrer">
-              Continuar com vendedor no WhatsApp
-            </a>
+            <div className={styles.footerBottom}>
+              <span className={styles.privacyHint}>Estoque verificado ao vivo</span>
+              <a className={styles.handoffLink} href={handoffHref} target="_blank" rel="noopener noreferrer">
+                Chamar no WhatsApp <ArrowUpRight size={12} aria-hidden="true" />
+              </a>
+            </div>
           </div>
         </section>
-      ) : null}
-
-      <button
-        type="button"
-        className={styles.launcherButton}
-        aria-expanded={open}
-        onClick={toggleOpen}
-      >
-        {open ? 'Ocultar atendimento' : 'Atendimento online'}
-      </button>
+      ) : (
+        <button
+          type="button"
+          className={styles.launcherButton}
+          aria-expanded={open}
+          aria-label="Abrir chat com a Dayse, consultora da Liberato Motos Car"
+          onClick={toggleOpen}
+        >
+          <span className={styles.launcherAvatar} aria-hidden="true">
+            D
+            <span className={styles.onlineDot} />
+          </span>
+          <span className={styles.launcherLabel}>Dayse · Atendimento</span>
+          <MessageCircle size={15} className={styles.launcherIcon} aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

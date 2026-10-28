@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, asc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import { getDb } from '@/server/db/client';
 import { attendanceRateLimits, conversationMessages, conversations, handoffs } from '@/server/db/schema';
+import { ensureAttendanceTables } from './ensure-schema';
 
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof conversationMessages.$inferSelect;
@@ -29,6 +30,7 @@ function retentionFrom(now: Date, lead: boolean) {
 }
 
 export async function createSiteConversation(now = new Date()) {
+  await ensureAttendanceTables();
   const token = newConversationToken();
   const [row] = await getDb().insert(conversations).values({
     channel: 'site', tokenHash: hashConversationToken(token),
@@ -39,6 +41,7 @@ export async function createSiteConversation(now = new Date()) {
 
 export async function findConversationByToken(token: string, now = new Date()) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  await ensureAttendanceTables();
   const [row] = await getDb().select().from(conversations)
     .where(and(eq(conversations.tokenHash, hashConversationToken(token)), gt(conversations.expiresAt, now))).limit(1);
   return row ?? null;

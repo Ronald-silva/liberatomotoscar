@@ -12,7 +12,7 @@ export const deterministicChoices: { id: DeterministicChoice; label: string }[] 
 
 type SearchCatalog = typeof searchAvailableVehicles;
 
-export const deterministicMenuText = 'Posso mostrar motos ou carros publicados, explicar como funciona financiamento e troca, ou chamar um vendedor. Escolha uma opção abaixo.';
+export const deterministicMenuText = 'Olá! Eu sou a Dayse, consultora virtual da Liberato Motos Car. Posso mostrar motos ou carros publicados no estoque agora, orientar sobre financiamento e troca ou chamar nossa equipe. Escolha uma opção abaixo ou digite o que procura.';
 
 export const handoffReasonByChoice = {
   financing: 'financing', trade_in: 'trade_in', human: 'visitor_request',
