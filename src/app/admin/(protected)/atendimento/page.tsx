@@ -81,12 +81,28 @@ export default async function AttendancePage({
     { id: 'closed', label: 'Encerradas' },
   ];
 
-  const metaAppId = (process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID ?? '1727047121923909').trim();
-  const metaConfigId = (
-    process.env.META_EMBEDDED_SIGNUP_CONFIG_ID ??
-    process.env.NEXT_PUBLIC_META_CONFIG_ID ??
-    '1590518199231570'
-  ).trim();
+  const rawAppId = (
+    process.env.META_APP_ID ||
+    process.env.NEXT_PUBLIC_META_APP_ID ||
+    process.env.WHATSAPP_APP_ID ||
+    ''
+  )
+    .replace(/['"\s]/g, '')
+    .trim();
+  const metaAppId =
+    !rawAppId || rawAppId === '172704712193909' || !/^\d{15,20}$/.test(rawAppId)
+      ? '1727047121923909'
+      : rawAppId;
+
+  const rawConfigId = (
+    process.env.META_EMBEDDED_SIGNUP_CONFIG_ID ||
+    process.env.NEXT_PUBLIC_META_CONFIG_ID ||
+    process.env.META_CONFIG_ID ||
+    ''
+  )
+    .replace(/['"\s]/g, '')
+    .trim();
+  const metaConfigId = !/^\d{10,25}$/.test(rawConfigId) ? '1590518199231570' : rawConfigId;
 
   return (
     <main id="conteudo" className={attendanceStyles.screen}>

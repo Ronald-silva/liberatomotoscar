@@ -28,8 +28,27 @@ declare global {
   }
 }
 
-const DEFAULT_META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1727047121923909';
-const DEFAULT_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1590518199231570';
+const OFFICIAL_META_APP_ID = '1727047121923909';
+const OFFICIAL_CONFIG_ID = '1590518199231570';
+
+function sanitizeAppId(value?: string): string {
+  const clean = (value ?? '').replace(/['"\s]/g, '').trim();
+  if (!clean || clean === '172704712193909' || !/^\d{15,20}$/.test(clean)) {
+    return OFFICIAL_META_APP_ID;
+  }
+  return clean;
+}
+
+function sanitizeConfigId(value?: string): string {
+  const clean = (value ?? '').replace(/['"\s]/g, '').trim();
+  if (!/^\d{10,25}$/.test(clean)) {
+    return OFFICIAL_CONFIG_ID;
+  }
+  return clean;
+}
+
+const DEFAULT_META_APP_ID = sanitizeAppId(process.env.NEXT_PUBLIC_META_APP_ID);
+const DEFAULT_CONFIG_ID = sanitizeConfigId(process.env.NEXT_PUBLIC_META_CONFIG_ID);
 
 function WhatsAppLogo({ size = 20 }: { size?: number }) {
   return (
@@ -85,9 +104,10 @@ export function WhatsAppOnboardingCard({
   }, []);
 
   async function ensureFacebookSdk(): Promise<void> {
+    const validAppId = sanitizeAppId(metaAppId);
     if (window.FB) {
       window.FB.init({
-        appId: metaAppId,
+        appId: validAppId,
         autoLogAppEvents: true,
         xfbml: false,
         version: 'v21.0',
@@ -97,7 +117,7 @@ export function WhatsAppOnboardingCard({
     await new Promise<void>((resolve, reject) => {
       window.fbAsyncInit = () => {
         window.FB?.init({
-          appId: metaAppId,
+          appId: validAppId,
           autoLogAppEvents: true,
           xfbml: false,
           version: 'v21.0',
@@ -160,7 +180,7 @@ export function WhatsAppOnboardingCard({
       await ensureFacebookSdk();
 
       const loginOptions: Record<string, unknown> = {
-        config_id: metaConfigId || DEFAULT_CONFIG_ID,
+        config_id: sanitizeConfigId(metaConfigId),
         response_type: 'code',
         override_default_response_type: true,
         extras: {

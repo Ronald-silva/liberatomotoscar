@@ -162,9 +162,27 @@ export async function completeEmbeddedSignup(
   input: CompleteEmbeddedSignupInput,
   deps: EmbeddedSignupDeps = {},
 ) {
-  const appId = deps.appId ?? process.env.META_APP_ID ?? '1727047121923909';
-  const appSecret = deps.appSecret ?? process.env.META_APP_SECRET ?? process.env.WHATSAPP_APP_SECRET;
-  const version = deps.apiVersion ?? process.env.META_GRAPH_API_VERSION ?? 'v21.0';
+  const rawAppId = (
+    deps.appId ||
+    process.env.META_APP_ID ||
+    process.env.NEXT_PUBLIC_META_APP_ID ||
+    process.env.WHATSAPP_APP_ID ||
+    ''
+  )
+    .replace(/['"\s]/g, '')
+    .trim();
+  const appId =
+    !rawAppId || rawAppId === '172704712193909' || !/^\d{15,20}$/.test(rawAppId)
+      ? '1727047121923909'
+      : rawAppId;
+  const appSecret = (
+    deps.appSecret ||
+    process.env.META_APP_SECRET ||
+    process.env.WHATSAPP_APP_SECRET ||
+    process.env.FACEBOOK_APP_SECRET ||
+    ''
+  ).trim();
+  const version = (deps.apiVersion || process.env.META_GRAPH_API_VERSION || 'v21.0').trim();
   const fetchFn = deps.fetchImpl ?? fetch;
   const upsert = deps.upsertTenant ?? defaultUpsertTenant;
 
