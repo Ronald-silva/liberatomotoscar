@@ -7,36 +7,33 @@ import {
   listInbox,
   type InboxFilter,
 } from '@/server/attendance/inbox';
-import { listAdminSiteModeChanges, readAdminSiteSetting } from '@/server/attendance/settings';
 import { protocolOf } from '@/server/attendance/site-chat';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { InboxOperatorControls } from './InboxOperatorControls';
-import { SiteModeForm } from './SiteModeForm';
 import { WhatsAppOnboardingCard } from './WhatsAppOnboardingCard';
 import attendanceStyles from './attendance.module.css';
 
-export const metadata: Metadata = { title: 'Atendimento do site', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Atendimento · Dayse', robots: { index: false, follow: false } };
 
-const names = { disabled: 'Desativado', deterministic: 'Chatbot', ai: 'IA' } as const;
 const senderLabels = {
-  visitor: 'Visitante',
-  bot: 'Chatbot',
-  ai: 'IA',
+  visitor: 'Cliente',
+  bot: 'Dayse',
+  ai: 'Dayse (IA)',
   human: 'Vendedor',
   system: 'Sistema',
 } as const;
 const eventLabels = {
-  requested: 'Transferência solicitada',
-  assumed: 'Conversa assumida por vendedor',
-  released: 'Conversa devolvida para automação',
+  requested: 'Cliente pediu vendedor',
+  assumed: 'Vendedor assumiu a conversa (IA pausada)',
+  released: 'Conversa devolvida para a Dayse',
   closed: 'Conversa encerrada',
 } as const;
 const reasonLabels = {
-  visitor_request: 'pedido do visitante',
+  visitor_request: 'pedido do cliente',
   financing: 'financiamento',
   trade_in: 'veículo na troca',
-  ai_suggested: 'sugestão da IA',
-  operator: 'ação do operador',
+  ai_suggested: 'encaminhamento da Dayse',
+  operator: 'ação do vendedor',
 } as const;
 const factLabels: Record<string, string> = {
   category: 'Categoria',
@@ -66,9 +63,7 @@ export default async function AttendancePage({
   const rawConversation = Array.isArray(resolved.conversa) ? resolved.conversa[0] : resolved.conversa;
   const filter: InboxFilter = inboxFilterSchema.parse(rawFilter);
 
-  const [setting, changes, counts, list, tenants] = await Promise.all([
-    readAdminSiteSetting(),
-    listAdminSiteModeChanges(),
+  const [counts, list, tenants] = await Promise.all([
     countInbox().catch(() => ({ waiting: 0, mine: 0, automation: 0 })),
     listInbox(filter).catch(() => []),
     listWhatsappTenants().catch(() => []),
@@ -81,8 +76,8 @@ export default async function AttendancePage({
 
   const tabs: { id: InboxFilter; label: string }[] = [
     { id: 'waiting', label: `Aguardando vendedor (${counts.waiting})` },
-    { id: 'mine', label: `Comigo (${counts.mine})` },
-    { id: 'automation', label: `Em automação (${counts.automation})` },
+    { id: 'mine', label: `Minhas conversas (${counts.mine})` },
+    { id: 'automation', label: `Com a Dayse (${counts.automation})` },
     { id: 'closed', label: 'Encerradas' },
   ];
 
@@ -90,17 +85,16 @@ export default async function AttendancePage({
     <main id="conteudo" className={attendanceStyles.screen}>
       <div className={attendanceStyles.panel}>
         <Link href="/admin" className={attendanceStyles.back}>Voltar ao painel</Link>
-        <h1>Atendimento do site</h1>
+        <h1>Atendimento · Dayse</h1>
         <p className={attendanceStyles.intro}>
-          Escolha como o site deverá responder quando o atendimento público for liberado. Quando um vendedor assume uma conversa, a automação daquela conversa é suspensa imediatamente.
+          A Dayse atende os clientes automaticamente com base no estoque publicado. Para pausar a IA em qualquer conversa, basta clicar em <strong>Assumir conversa</strong> (ou responder direto pelo celular da loja no WhatsApp).
         </p>
-        <SiteModeForm mode={setting.mode} version={setting.version} />
 
         <WhatsAppOnboardingCard initialTenants={tenants} />
 
         <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
           <div className={attendanceStyles.inboxHeader}>
-            <h2 id="inbox-title">Fila de conversas do site</h2>
+            <h2 id="inbox-title">Conversas</h2>
           </div>
           <nav aria-label="Filtros da fila de atendimento" className={attendanceStyles.filterNav}>
             {tabs.map((tab) => (
@@ -115,7 +109,7 @@ export default async function AttendancePage({
           </nav>
 
           {list.length === 0 && !detail ? (
-            <p className={attendanceStyles.current}>Nenhuma conversa neste filtro.</p>
+            <p className={attendanceStyles.current}>Nenhuma conversa neste filtro no momento.</p>
           ) : (
             <div className={attendanceStyles.inboxGrid}>
               <ul className={attendanceStyles.conversationList} aria-label="Conversas filtradas">
@@ -128,7 +122,7 @@ export default async function AttendancePage({
                         className={`${attendanceStyles.conversationLink} ${isSelected ? attendanceStyles.conversationLinkActive : ''}`}
                       >
                         <div className={attendanceStyles.conversationMeta}>
-                          <strong>Protocolo #{protocolOf(item.id)}</strong>
+                          <strong>Atendimento #{protocolOf(item.id)}</strong>
                           <time dateTime={item.lastMessageAt.toISOString()}>
                             {dateFormatter.format(item.lastMessageAt)}
                           </time>
@@ -139,9 +133,9 @@ export default async function AttendancePage({
                               ? 'Encerrada'
                               : item.owner === 'human'
                                 ? item.assignedTo
-                                  ? 'Em atendimento humano'
+                                  ? 'Com vendedor (IA pausada)'
                                   : 'Aguardando vendedor'
-                                : 'Em automação'}
+                                : 'Com a Dayse (IA ativa)'}
                           </span>
                           <span>{item.visitorTurns} msg(s)</span>
                         </div>
@@ -155,24 +149,26 @@ export default async function AttendancePage({
                 <article className={attendanceStyles.conversationDetail} aria-label={`Conversa ${protocolOf(detail.conversation.id)}`}>
                   <header className={attendanceStyles.detailHeader}>
                     <div>
-                      <h3>Protocolo #{protocolOf(detail.conversation.id)}</h3>
+                      <h3>Atendimento #{protocolOf(detail.conversation.id)}</h3>
                       <p className={attendanceStyles.current}>
-                        Estado: <strong>{detail.conversation.status === 'closed' ? 'Encerrada' : 'Aberta'}</strong> · Responsável:{' '}
+                        Status:{' '}
                         <strong>
-                          {detail.conversation.owner === 'human'
-                            ? detail.conversation.assignedTo === detail.viewerUserId
-                              ? 'Você (vendedor)'
-                              : detail.conversation.assignedTo
-                                ? 'Outro vendedor'
-                                : 'Fila humana (aguardando assumir)'
-                            : 'Automação'}
+                          {detail.conversation.status === 'closed'
+                            ? 'Encerrada'
+                            : detail.conversation.owner === 'human'
+                              ? detail.conversation.assignedTo === detail.viewerUserId
+                                ? 'Com você (Dayse pausada)'
+                                : detail.conversation.assignedTo
+                                  ? 'Com vendedor (Dayse pausada)'
+                                  : 'Aguardando vendedor assumir'
+                              : 'Atendida pela Dayse'}
                         </strong>
                       </p>
                     </div>
                   </header>
 
                   {detail.conversation.facts.length > 0 ? (
-                    <ul className={attendanceStyles.factList} aria-label="Interesses informados pelo visitante">
+                    <ul className={attendanceStyles.factList} aria-label="Interesses informados pelo cliente">
                       {detail.conversation.facts.map((fact, idx) => (
                         <li key={`${fact.field}-${idx}`} className={attendanceStyles.factChip}>
                           <strong>{factLabels[fact.field] ?? fact.field}:</strong> “{fact.quote}”
@@ -228,24 +224,6 @@ export default async function AttendancePage({
                 </article>
               ) : null}
             </div>
-          )}
-        </section>
-
-        <section aria-labelledby="mode-history-title" className={attendanceStyles.history}>
-          <h2 id="mode-history-title">Últimas alterações de modo</h2>
-          {changes.length ? (
-            <ol>
-              {changes.map((change) => (
-                <li key={change.id}>
-                  <span>{names[change.beforeMode]} → {names[change.afterMode]}</span>
-                  <time dateTime={change.occurredAt.toISOString()}>
-                    {dateFormatter.format(change.occurredAt)}
-                  </time>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p>Nenhuma alteração registrada. O canal começa desativado.</p>
           )}
         </section>
       </div>

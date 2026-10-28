@@ -78,7 +78,15 @@
 .fieldGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--attendance-space-2); }
 .fieldLabel { display: grid; gap: 0.35rem; font-size: 0.875rem; font-weight: 600; color: var(--attendance-muted); }
 .tenantList { display: grid; gap: var(--attendance-space-1); margin: var(--attendance-space-2) 0 0; padding: 0; list-style: none; }
-.tenantItem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--attendance-space-2); padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 12px; background: var(--attendance-bg); font-size: 0.875rem; }
+.tenantItem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--attendance-space-2); padding: var(--attendance-space-2); border: 1px solid rgba(37, 211, 102, 0.35); border-radius: 12px; background: rgba(37, 211, 102, 0.08); font-size: 0.9rem; }
+.whatsappCard { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--attendance-space-3); margin-top: var(--attendance-space-3); padding: var(--attendance-space-3); border: 1px solid rgba(37, 211, 102, 0.32); border-radius: var(--attendance-radius); background: linear-gradient(145deg, rgba(18, 38, 29, 0.85), rgba(15, 22, 28, 0.96)); }
+.whatsappCardInfo { display: grid; gap: 0.4rem; max-width: 54ch; }
+.whatsappCardTitle { display: inline-flex; align-items: center; gap: 0.55rem; margin: 0; font-size: 1.2rem; font-weight: 800; color: #fff; }
+.whatsappBadgeIcon { width: 34px; height: 34px; flex: 0 0 34px; display: inline-grid; place-items: center; border-radius: 999px; background: #25d366; color: #071a10; }
+.whatsappConnectBtn { display: inline-flex; align-items: center; justify-content: center; gap: 0.65rem; min-height: 50px; padding: 0.75rem 1.35rem; border: 0; border-radius: 999px; background: #25d366; color: #061c10; font: inherit; font-size: 0.98rem; font-weight: 800; letter-spacing: -0.01em; box-shadow: 0 10px 26px rgba(37, 211, 102, 0.28); cursor: pointer; transition: transform 150ms ease, filter 150ms ease, box-shadow 150ms ease; }
+.whatsappConnectBtn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); box-shadow: 0 14px 30px rgba(37, 211, 102, 0.38); }
+.whatsappConnectBtn:disabled { opacity: 0.65; cursor: wait; }
+.whatsappConnectBtn:focus-visible { outline: 3px solid #ffffff; outline-offset: 3px; }
 .eventList { display: grid; gap: 0.35rem; margin: 0; padding: var(--attendance-space-2) 0 0; border-top: 1px solid var(--attendance-line); list-style: none; font-size: 0.875rem; color: var(--attendance-muted); }
 
 @media (max-width: 780px) {

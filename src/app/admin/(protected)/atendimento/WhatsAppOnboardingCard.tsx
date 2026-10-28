@@ -31,6 +31,20 @@ declare global {
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '172704712193909';
 const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
 
+function WhatsAppLogo({ size = 20 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91C21.95 6.45 17.5 2 12.04 2zm5.82 14.01c-.24.68-1.41 1.3-1.95 1.38-.5.08-1.13.11-1.83-.11-.42-.13-.97-.31-1.67-.61-2.94-1.27-4.86-4.25-5.01-4.45-.15-.2-1.2-1.59-1.2-3.04 0-1.45.76-2.16 1.03-2.46.27-.3.59-.37.79-.37.2 0 .4 0 .57.01.18.01.43-.07.67.51.24.59.82 2.01.89 2.16.07.15.12.32.02.52-.1.2-.15.32-.3.5-.15.17-.31.39-.44.52-.15.15-.3.31-.13.61.17.3.76 1.26 1.64 2.04 1.13 1 2.08 1.31 2.38 1.46.3.15.47.12.64-.07.17-.2.74-.86.94-1.16.2-.3.4-.25.67-.15.27.1 1.73.82 2.03.97.3.15.5.22.57.35.07.12.07.72-.17 1.4z" />
+    </svg>
+  );
+}
+
 export function WhatsAppOnboardingCard({ initialTenants }: { initialTenants: ConnectedTenant[] }) {
   const router = useRouter();
   const [tenants, setTenants] = useState<ConnectedTenant[]>(initialTenants);
@@ -162,48 +176,42 @@ export function WhatsAppOnboardingCard({ initialTenants }: { initialTenants: Con
   const activeConnection = tenants[0] ?? null;
 
   return (
-    <section aria-labelledby="whatsapp-onboarding-title" className={attendanceStyles.inboxSection}>
-      <div className={attendanceStyles.inboxHeader}>
-        <h2 id="whatsapp-onboarding-title">WhatsApp da Loja (Dayse)</h2>
-      </div>
-      <p className={attendanceStyles.intro}>
-        Conecte o WhatsApp Business da Liberato Motos Car em 1 clique. O aplicativo no celular da loja continuará funcionando normalmente e, sempre que um vendedor responder pelo aparelho, a Dayse pausa sozinha naquela conversa.
-      </p>
-
-      <div className={attendanceStyles.choices}>
+    <section aria-labelledby="whatsapp-onboarding-title" className={attendanceStyles.whatsappCard}>
+      <div className={attendanceStyles.whatsappCardInfo}>
+        <h2 id="whatsapp-onboarding-title" className={attendanceStyles.whatsappCardTitle}>
+          <span className={attendanceStyles.whatsappBadgeIcon}>
+            <WhatsAppLogo size={20} />
+          </span>
+          WhatsApp da Loja · Dayse
+        </h2>
         {activeConnection ? (
-          <div className={attendanceStyles.tenantItem}>
-            <div>
-              <strong className={attendanceStyles.success}>● WhatsApp Conectado</strong> ·{' '}
-              <strong>{activeConnection.tenantName}</strong>{' '}
-              {activeConnection.displayPhoneNumber ? `(${activeConnection.displayPhoneNumber})` : ''}
-            </div>
-            <div>Celular da loja + Dayse ativos</div>
-          </div>
+          <p className={attendanceStyles.current}>
+            <strong className={attendanceStyles.success}>● Conectado</strong> ·{' '}
+            <strong>{activeConnection.tenantName}</strong>{' '}
+            {activeConnection.displayPhoneNumber ? `(${activeConnection.displayPhoneNumber})` : ''} — Celular da loja e Dayse funcionando juntos.
+          </p>
         ) : (
           <p className={attendanceStyles.current}>
-            Status: <strong>Ainda não conectado</strong>. Clique no botão abaixo para abrir a janela oficial da Meta e conectar o WhatsApp da loja.
+            Conecte o WhatsApp Business da loja em 1 clique. O aplicativo no celular continua funcionando normalmente e, quando você responder pelo aparelho, a Dayse pausa sozinha.
           </p>
         )}
-
-        <div className={attendanceStyles.operatorButtons}>
-          <button
-            type="button"
-            className={attendanceStyles.submit}
-            disabled={busy}
-            onClick={() => void handleOneClickConnect()}
-          >
-            {busy
-              ? 'Conectando WhatsApp da loja…'
-              : activeConnection
-                ? 'Reconectar WhatsApp da Loja'
-                : 'Conectar WhatsApp da Loja'}
-          </button>
-        </div>
-
         {statusMessage ? <p className={attendanceStyles.success}>{statusMessage}</p> : null}
         {errorMessage ? <p className={attendanceStyles.error}>{errorMessage}</p> : null}
       </div>
+
+      <button
+        type="button"
+        className={attendanceStyles.whatsappConnectBtn}
+        disabled={busy}
+        onClick={() => void handleOneClickConnect()}
+      >
+        <WhatsAppLogo size={20} />
+        {busy
+          ? 'Conectando ao WhatsApp…'
+          : activeConnection
+            ? 'Reconectar WhatsApp'
+            : 'Conectar com WhatsApp'}
+      </button>
     </section>
   );
 }
