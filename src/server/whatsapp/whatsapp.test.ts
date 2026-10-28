@@ -13,7 +13,7 @@ import {
   verifyMetaWebhookSignature,
 } from './crypto';
 import { completeEmbeddedSignup, type WhatsappTenantRow } from './embedded-signup';
-import { formatDayseWhatsAppReply, sendWhatsAppTextMessage } from './outbound';
+import { formatDayseWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
 import { processMetaWebhookPayload, resolveWebhookTenant, whatsappConversationToken } from './webhook-handler';
 import { TEST_TENANT_ID } from './test-number';
 
@@ -265,6 +265,28 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('inclui o nono dígito no destinatário brasileiro quando o webhook o omite', async () => {
+    expect(normalizeWhatsAppRecipient('558591234567')).toBe('5585991234567');
+    expect(normalizeWhatsAppRecipient('5585991234567')).toBe('5585991234567');
+    expect(normalizeWhatsAppRecipient('558532345678')).toBe('558532345678');
+    expect(normalizeWhatsAppRecipient('15551234567')).toBe('15551234567');
+
+    const sendOutbound = vi.fn(async () => ({ messageId: 'wamid.sent.br' }));
+    await processMetaWebhookPayload({
+      object: 'whatsapp_business_account',
+      entry: [{ id: 'waba_test', changes: [{ field: 'messages', value: {
+        metadata: { phone_number_id: 'phone_test' },
+        contacts: [{ wa_id: '558591234567', profile: { name: 'Cliente' } }],
+        messages: [{ id: 'wamid.in.br', from: '558591234567', timestamp: '1', type: 'text', text: { body: 'Oi' } }],
+      } }] }],
+    }, {
+      findTenant: async () => ({ tenantId: TEST_TENANT_ID, wabaId: 'waba_test', whatsappPhoneNumberId: 'phone_test', isActive: true, accessToken: 'TOKEN' }),
+      runAgentTurn: async () => 'Olá!',
+      sendOutbound,
+    });
+    expect(sendOutbound).toHaveBeenCalledWith(expect.objectContaining({ to: '5585991234567' }));
   });
 
   it('não substitui a credencial de um número real pelo token de teste da Vercel', async () => {

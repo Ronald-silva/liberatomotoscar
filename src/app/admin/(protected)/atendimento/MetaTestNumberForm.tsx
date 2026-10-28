@@ -19,7 +19,8 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber }: { webhookU
         cadastre o seu celular em “To”. Use apenas os IDs do número de teste, sem informar os dados da loja.
         O cadastro direciona somente a conta de teste para <strong>{webhookUrl}</strong>.
         O callback global do app atende outros projetos e não deve ser alterado para este teste.
-        O token temporário da Meta expira; quando isso acontecer, gere outro em API Setup e registre novamente aqui.
+        O token temporário da Meta expira. Para renová-lo, gere outro em API Setup, preencha novamente os mesmos IDs
+        e salve o novo token aqui.
       </p>
       <form action={action} className={attendanceStyles.form}>
         <div className={attendanceStyles.fieldGrid}>
@@ -37,7 +38,7 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber }: { webhookU
           <input name="accessToken" type="password" required className={attendanceStyles.textInput} autoComplete="off" />
         </label>
         <button type="submit" className={attendanceStyles.submit} disabled={pending}>
-          {pending ? 'Conectando…' : 'Conectar número de teste'}
+          {pending ? 'Salvando…' : currentTestNumber ? 'Atualizar token do número de teste' : 'Conectar número de teste'}
         </button>
         {state.message ? (
           <p role="status" aria-live="polite" className={state.error ? attendanceStyles.error : attendanceStyles.success}>

@@ -7,7 +7,7 @@ import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
 import { decryptAccessToken, deterministicUuidFromWaMessageId } from './crypto';
 import { findActiveTenantByPhoneNumberId, type WhatsappTenantRow } from './embedded-signup';
-import { formatDayseWhatsAppReply, sendWhatsAppTextMessage } from './outbound';
+import { formatDayseWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
 import { TEST_TENANT_ID } from './test-number';
 
 type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPhoneNumberId' | 'isActive'> & {
@@ -270,7 +270,7 @@ export async function processMetaWebhookPayload(
           const sent = await sendOutbound({
             phoneNumberId: tenant.whatsappPhoneNumberId,
             accessToken,
-            to: incoming.from,
+            to: normalizeWhatsAppRecipient(incoming.from),
             body: replyBody,
           });
           if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta da Dayse.');

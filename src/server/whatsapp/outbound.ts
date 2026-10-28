@@ -12,6 +12,16 @@ export type SendWhatsAppTextParams = {
   fetchImpl?: typeof fetch;
 };
 
+/** A Meta pode entregar o wa_id brasileiro sem o nono dígito, embora o número autorizado o inclua. */
+export function normalizeWhatsAppRecipient(waId: string): string {
+  const digits = waId.replace(/\D/g, '');
+  // +55, DDD de 2 dígitos e celular antigo de 8 dígitos (iniciado em 6–9).
+  if (/^55\d{2}[6-9]\d{7}$/.test(digits)) {
+    return `${digits.slice(0, 4)}9${digits.slice(4)}`;
+  }
+  return digits;
+}
+
 /** Dispara mensagem de texto via Meta WhatsApp Cloud API usando as credenciais dinâmicas do tenant. */
 export async function sendWhatsAppTextMessage(params: SendWhatsAppTextParams): Promise<{ messageId: string | null }> {
   const version = params.apiVersion ?? process.env.META_GRAPH_API_VERSION ?? 'v21.0';
