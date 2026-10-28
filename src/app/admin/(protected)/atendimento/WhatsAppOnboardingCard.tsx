@@ -28,8 +28,8 @@ declare global {
   }
 }
 
-const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '172704712193909';
-const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
+const DEFAULT_META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '1727047121923909';
+const DEFAULT_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1590518199231570';
 
 function WhatsAppLogo({ size = 20 }: { size?: number }) {
   return (
@@ -45,7 +45,15 @@ function WhatsAppLogo({ size = 20 }: { size?: number }) {
   );
 }
 
-export function WhatsAppOnboardingCard({ initialTenants }: { initialTenants: ConnectedTenant[] }) {
+export function WhatsAppOnboardingCard({
+  initialTenants,
+  metaAppId = DEFAULT_META_APP_ID,
+  metaConfigId = DEFAULT_CONFIG_ID,
+}: {
+  initialTenants: ConnectedTenant[];
+  metaAppId?: string;
+  metaConfigId?: string;
+}) {
   const router = useRouter();
   const [tenants, setTenants] = useState<ConnectedTenant[]>(initialTenants);
   const [busy, setBusy] = useState(false);
@@ -77,21 +85,28 @@ export function WhatsAppOnboardingCard({ initialTenants }: { initialTenants: Con
   }, []);
 
   async function ensureFacebookSdk(): Promise<void> {
-    if (window.FB) return;
+    if (window.FB) {
+      window.FB.init({
+        appId: metaAppId,
+        autoLogAppEvents: true,
+        xfbml: false,
+        version: 'v21.0',
+      });
+      return;
+    }
     await new Promise<void>((resolve, reject) => {
       window.fbAsyncInit = () => {
         window.FB?.init({
-          appId: META_APP_ID,
+          appId: metaAppId,
           autoLogAppEvents: true,
-          xfbml: true,
+          xfbml: false,
           version: 'v21.0',
         });
         resolve();
       };
       const existing = document.getElementById('facebook-jssdk');
       if (existing) {
-        resolve();
-        return;
+        existing.remove();
       }
       const script = document.createElement('script');
       script.id = 'facebook-jssdk';
@@ -145,20 +160,13 @@ export function WhatsAppOnboardingCard({ initialTenants }: { initialTenants: Con
       await ensureFacebookSdk();
 
       const loginOptions: Record<string, unknown> = {
+        config_id: metaConfigId || DEFAULT_CONFIG_ID,
         response_type: 'code',
         override_default_response_type: true,
         extras: {
-          setup: {},
-          featureType: 'whatsapp_business_app_onboarding',
-          sessionInfoVersion: '3',
+          version: 'v4',
         },
       };
-
-      if (META_CONFIG_ID) {
-        loginOptions.config_id = META_CONFIG_ID;
-      } else {
-        loginOptions.scope = 'whatsapp_business_management,whatsapp_business_messaging';
-      }
 
       window.FB?.login((response) => {
         const code = response.authResponse?.code;

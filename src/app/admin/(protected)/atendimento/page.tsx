@@ -81,6 +81,13 @@ export default async function AttendancePage({
     { id: 'closed', label: 'Encerradas' },
   ];
 
+  const metaAppId = (process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID ?? '1727047121923909').trim();
+  const metaConfigId = (
+    process.env.META_EMBEDDED_SIGNUP_CONFIG_ID ??
+    process.env.NEXT_PUBLIC_META_CONFIG_ID ??
+    '1590518199231570'
+  ).trim();
+
   return (
     <main id="conteudo" className={attendanceStyles.screen}>
       <div className={attendanceStyles.panel}>
@@ -90,7 +97,11 @@ export default async function AttendancePage({
           A Dayse atende os clientes automaticamente com base no estoque publicado. Para pausar a IA em qualquer conversa, basta clicar em <strong>Assumir conversa</strong> (ou responder direto pelo celular da loja no WhatsApp).
         </p>
 
-        <WhatsAppOnboardingCard initialTenants={tenants} />
+        <WhatsAppOnboardingCard
+          initialTenants={tenants}
+          metaAppId={metaAppId}
+          metaConfigId={metaConfigId}
+        />
 
         <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
           <div className={attendanceStyles.inboxHeader}>

@@ -162,7 +162,7 @@ export async function completeEmbeddedSignup(
   input: CompleteEmbeddedSignupInput,
   deps: EmbeddedSignupDeps = {},
 ) {
-  const appId = deps.appId ?? process.env.META_APP_ID ?? '172704712193909';
+  const appId = deps.appId ?? process.env.META_APP_ID ?? '1727047121923909';
   const appSecret = deps.appSecret ?? process.env.META_APP_SECRET ?? process.env.WHATSAPP_APP_SECRET;
   const version = deps.apiVersion ?? process.env.META_GRAPH_API_VERSION ?? 'v21.0';
   const fetchFn = deps.fetchImpl ?? fetch;
