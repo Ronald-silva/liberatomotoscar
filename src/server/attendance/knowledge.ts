@@ -222,7 +222,8 @@ function isMentionedOnlyAsTradeIn(termNormalized: string, messageNormalized: str
   const before = messageNormalized.slice(Math.max(0, index - 45), index);
   const after = messageNormalized.slice(index + termNormalized.length, index + termNormalized.length + 55);
   return (
-    /\b(tenho|possuo|meu|minha|dar|entregar|ofereco)\b/.test(before) &&
+    (/\b(tenho|possuo|meu|minha|dar|entregar|ofereco)\b/.test(before) ||
+      /^\s*(que eu tenho|que tenho|que possuo)\b/.test(after)) &&
     /\b(troca|trocar|entrada|negocio)\b/.test(after)
   );
 }
@@ -234,6 +235,63 @@ const KNOWN_UNLISTED_MODELS = [
   'argo', 'cronos', 'uno', 'palio', 'siena', 'onix', 'prisma', 'tracker', 's10', 'montana',
   'hb20', 'creta', 'compass', 'renegade', 'kicks', 'sandero', 'logan', 'kwid', 'duster',
 ];
+
+const OUT_OF_SCOPE_PRODUCTS = [
+  'cama box', 'cama', 'colchao', 'sofa', 'geladeira', 'fogao', 'microondas', 'armario',
+  'guarda-roupa', 'guarda roupa', 'mesa', 'cadeira', 'televisao', 'smart tv', 'iphone',
+  'notebook', 'computador', 'impressora', 'camisa', 'calca', 'sapato', 'tenis', 'pizza',
+  'hamburguer', 'lanche', 'acai', 'cerveja', 'refrigerante', 'apartamento', 'terreno',
+  'bicicleta', 'patinete', 'ar-condicionado', 'ar condicionado', 'maquina de lavar',
+  'ventilador', 'liquidificador', 'airfryer', 'panela',
+];
+
+/** Extrai o primeiro nome do cliente a partir do perfil do WhatsApp ou de apresentação na mensagem. */
+export function extractCustomerFirstName(text: string, contextName?: string | null): string | null {
+  if (contextName && contextName.trim()) {
+    const clean = contextName
+      .replace(/[^\p{L}\s'-]/gu, '')
+      .trim()
+      .split(/\s+/)[0];
+    if (clean && clean.length >= 2) {
+      return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+    }
+  }
+  const introMatch = text.match(
+    /\b(?:meu nome e|meu nome é|me chamo|aqui e o|aqui é o|aqui e a|aqui é a|sou o|sou a)\s+([A-ZÀ-Úa-zà-ú]{2,20})\b/i,
+  );
+  if (introMatch && introMatch[1]) {
+    const raw = introMatch[1].trim();
+    const stopWords = new Set(['cliente', 'comprador', 'interessado', 'vendedor', 'dayse', 'hoje', 'aqui']);
+    if (!stopWords.has(normalizePlain(raw))) {
+      return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+    }
+  }
+  return null;
+}
+
+/** Extrai valor de entrada oferecida pelo cliente (ex: "dando 3 mil de entrada", "entrada de R$ 4.000"). */
+export function extractEntryCents(text: string): number | null {
+  const v = normalizePlain(text);
+  if (!v.includes('entrada')) return null;
+
+  const milMatch = v.match(
+    /\b(?:dando|com|tenho|de|uma)?\s*(?:entrada\s+de\s+)?(?:r\$\s*)?(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:mil|k)(?:\s+de\s+entrada)?\b/,
+  );
+  if (milMatch && milMatch[1]) {
+    const num = Number.parseFloat(milMatch[1].replace(',', '.'));
+    if (num > 0 && num < 500) return Math.round(num * 1000 * 100);
+  }
+
+  const fullMatch = v.match(
+    /\b(?:entrada\s+de\s+|(?:dando|com|tenho)\s+)(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+|\d{3,6})(?:,\d{2})?(?:\s+de\s+entrada)?\b/,
+  );
+  if (fullMatch && fullMatch[1]) {
+    const digits = Number.parseInt(fullMatch[1].replace(/\./g, ''), 10);
+    if (digits >= 500 && digits <= 300_000) return digits * 100;
+  }
+
+  return null;
+}
 
 const KNOWN_BRANDS = [
   { canonical: 'Honda', aliases: ['honda'] },
@@ -266,6 +324,8 @@ export type DetectedIntents = {
   asksMostExpensive: boolean;
   asksLowestKm: boolean;
   asksNewest: boolean;
+  asksWorkOrAppUseCase: boolean;
+  asksOutOfScopeProduct: string | null;
   asksSpecificAttribute: {
     mileage: boolean;
     color: boolean;
@@ -276,6 +336,7 @@ export type DetectedIntents = {
   wantsMoto: boolean;
   wantsCar: boolean;
   budget: { maxPriceCents: number; quote: string } | null;
+  entryCents: number | null;
 };
 
 export function detectMessageIntents(text: string): DetectedIntents {
@@ -305,14 +366,14 @@ export function detectMessageIntents(text: string): DetectedIntents {
     );
 
   const asksTradeIn =
-    /\b(troca|trocar|dar na troca|aceita\w* troca|aceita\w* moto|aceita\w* carro|meu carro na troca|minha moto na troca|veiculo na troca|como entrada)\b/.test(
+    /\b(troca|trocar|dar na troca|aceita\w* troca|aceita\w* moto|aceita\w* carro|aceita\w* uma moto|aceita\w* um carro|meu carro na troca|minha moto na troca|veiculo na troca|como entrada|dar de entrada|moto de entrada|carro de entrada)\b/.test(
       v,
     );
 
   const asksFinancing =
     /\b(financ\w*|parcel\w*|credito|simulac\w*|banco|cartao|sem entrada|dar entrada|prestac\w*)\b/.test(
       v,
-    );
+    ) || (/\bentrada\b/.test(v) && !asksTradeIn);
 
   const asksHuman =
     /\b(falar com vendedor|falar com atendente|chamar vendedor|atendente humano|falar com uma pessoa|atendimento humano|quero um vendedor)\b/.test(
@@ -336,6 +397,14 @@ export function detectMessageIntents(text: string): DetectedIntents {
   const asksNewest =
     /\b(mais nov\w*|ano mais recente|mais recente)\b/.test(v);
 
+  const asksWorkOrAppUseCase =
+    /\b(uber|99|aplicativo|app|ifood|entreg\w*|motoboy|frete|custo beneficio|custo-beneficio|melhor custo|economica|para rodar|rodar na|rodar no|para trabalhar)\b/.test(
+      v,
+    );
+
+  const asksOutOfScopeProduct =
+    OUT_OF_SCOPE_PRODUCTS.find((item) => new RegExp(`\\b${item}\\b`).test(v)) ?? null;
+
   const asksSpecificAttribute = {
     mileage: /\b(km|quilometragem|rodad\w*|quantos km)\b/.test(v),
     color: /\b(cor|cores|branc\w*|pret\w*|vermelh\w*|cinza|prata|azul)\b/.test(v),
@@ -353,6 +422,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
     !isMentionedOnlyAsTradeIn('carro', v);
 
   const budget = extractBudgetCents(text);
+  const entryCents = extractEntryCents(text);
 
   const isGreetingWord = /^(oi+|ola+|bom dia|boa tarde|boa noite|tudo bem|e ai|opa|fala)(\s+dayse)?[!?.\s]*$/.test(v);
 
@@ -371,10 +441,13 @@ export function detectMessageIntents(text: string): DetectedIntents {
     asksMostExpensive,
     asksLowestKm,
     asksNewest,
+    asksWorkOrAppUseCase,
+    asksOutOfScopeProduct,
     asksSpecificAttribute,
     wantsMoto,
     wantsCar,
     budget,
+    entryCents,
   };
 }
 
@@ -411,12 +484,16 @@ export function isKnowledgeOrSpecificCatalogQuery(text: string): boolean {
     intents.asksHoursOrVisit ||
     intents.asksAboutStoreOrTrust ||
     intents.asksToSellVehicle ||
+    intents.asksTradeIn ||
+    intents.asksFinancing ||
     intents.asksGreetingOnly ||
     intents.asksAllInventory ||
     intents.asksCheapest ||
     intents.asksMostExpensive ||
     intents.asksLowestKm ||
     intents.asksNewest ||
+    intents.asksWorkOrAppUseCase ||
+    intents.asksOutOfScopeProduct !== null ||
     intents.budget !== null ||
     intents.asksSpecificAttribute.mileage ||
     intents.asksSpecificAttribute.color ||
@@ -449,7 +526,7 @@ export function isKnowledgeOrSpecificCatalogQuery(text: string): boolean {
   return false;
 }
 
-/** Verifica se a mensagem pergunta sobre dados institucionais da loja (endereço, telefone, horário, avaliação, venda). */
+/** Verifica se a mensagem pergunta sobre dados institucionais da loja (endereço, telefone, horário, avaliação, venda ou item fora do nicho). */
 export function hasInstitutionalQuestion(text: string): boolean {
   const v = normalizePlain(text);
   if (v.startsWith('[midia_whatsapp:')) return true;
@@ -460,24 +537,28 @@ export function hasInstitutionalQuestion(text: string): boolean {
     intents.asksHoursOrVisit ||
     intents.asksAboutStoreOrTrust ||
     intents.asksToSellVehicle ||
-    intents.asksGreetingOnly
+    intents.asksGreetingOnly ||
+    intents.asksOutOfScopeProduct !== null
   );
 }
 
 /**
- * Motor principal de conhecimento da Dayse:
+ * Motor principal de conhecimento e consultoria automotiva da Dayse:
  * Responde com precisão sobre toda a base da plataforma (endereço, bairro, CEP, Google Maps,
- * telefone/WhatsApp, avaliação no Google, horário, compra, venda, troca, financiamento)
- * e cruza em tempo real com os veículos publicados no catálogo.
+ * telefone/WhatsApp, avaliação no Google, horário, compra, venda, troca, financiamento),
+ * aplica consultoria especialista por perfil de uso (Uber, 99, entregas, trabalho, custo-benefício),
+ * blinda o domínio automotivo contra produtos fora do nicho e cruza em tempo real com o catálogo.
  */
 export async function answerFromPlatformKnowledge(
   text: string,
   searchFn: typeof searchAvailableVehicles = searchAvailableVehicles,
-  context?: { recentModelOrTitle?: string | null },
+  context?: { recentModelOrTitle?: string | null; customerName?: string | null },
 ): Promise<KnowledgeReply> {
   const v = normalizePlain(text);
   const intents = detectMessageIntents(text);
   const { items: catalog, checkedAt } = await loadFullPublishedCatalog(searchFn);
+  const firstName = extractCustomerFirstName(text, context?.customerName);
+  const nameGreeting = firstName ? `, **${firstName}**` : '';
 
   const paragraphs: string[] = [];
   const facts: LeadFact[] = [];
@@ -490,7 +571,7 @@ export async function answerFromPlatformKnowledge(
     return {
       matched: true,
       isInstitutionalOnly: false,
-      text: `🎧 **Recebi seu áudio!**\nNosso consultor da **${STORE.name}** já consegue ouvi-lo diretamente no WhatsApp da loja e vai te responder em instantes.\n\nSe quiser que eu já te adiante fotos, preços ou ficha técnica de algum veículo do estoque agora mesmo, pode digitar o nome do modelo ou valor aqui embaixo!`,
+      text: `🎧 **Recebi seu áudio${nameGreeting}!**\nNosso consultor da **${STORE.name}** já consegue ouvi-lo diretamente no WhatsApp da loja e vai te responder em instantes.\n\nSe quiser que eu já te adiante fotos, preços ou ficha técnica de algum veículo do estoque agora mesmo, pode digitar o nome do modelo ou valor aqui embaixo!`,
       cards: [],
       facts,
       handoffRequested: true,
@@ -507,16 +588,23 @@ export async function answerFromPlatformKnowledge(
       quote: captionRaw ? `Enviou foto/vídeo: ${captionRaw.slice(0, 80)}` : 'Enviou fotos/vídeo do veículo para avaliação',
     });
     paragraphs.push(
-      `📸 **Recebi as imagens/mídia do seu veículo!**\nComo a avaliação visual de troca e análise de documentos são feitas com todo cuidado pelo nosso avaliador, já destaquei sua conversa para a equipe da **${STORE.name}** conferir as fotos no aparelho da loja.\n\nPara agilizar sua avaliação, me confirme por texto:\n• **Marca, modelo e ano** do seu veículo\n• **Quilometragem aproximada**\n• Qual moto ou carro do nosso estoque você tem interesse na troca`,
+      `📸 **Recebi as imagens/mídia do seu veículo${nameGreeting}!**\nComo a avaliação visual de troca e análise de documentos são feitas com todo cuidado pelo nosso avaliador, já destaquei sua conversa para a equipe da **${STORE.name}** conferir as fotos no aparelho da loja.\n\nPara agilizar sua avaliação, me confirme por texto:\n• **Marca, modelo e ano** do seu veículo\n• **Quilometragem aproximada**\n• Qual moto ou carro do nosso estoque você tem interesse na troca`,
     );
     handoffRequested = true;
     handoffReason = 'trade_in';
   }
 
-  // 1. Saudação pura
+  // 1. Saudação pura (espelhando Bom dia / Boa tarde / Boa noite + nome do cliente)
   if (intents.asksGreetingOnly) {
     const motosCount = catalog.filter((i) => i.type === 'motorcycle').length;
     const carsCount = catalog.filter((i) => i.type === 'car').length;
+    const periodGreeting = v.includes('bom dia')
+      ? 'Bom dia'
+      : v.includes('boa tarde')
+        ? 'Boa tarde'
+        : v.includes('boa noite')
+          ? 'Boa noite'
+          : 'Olá';
     const stockSummary =
       catalog.length > 0
         ? `Hoje temos **${catalog.length} veículos publicados** na vitrine (${motosCount} motos e ${carsCount} carros).`
@@ -524,7 +612,26 @@ export async function answerFromPlatformKnowledge(
     return {
       matched: true,
       isInstitutionalOnly: true,
-      text: `Olá! Tudo ótimo por aqui! Eu sou a **Dayse**, consultora virtual da **${STORE.name}** na ${STORE.district} (${STORE.city}/${STORE.state}). ${stockSummary}\n\nPosso te informar nosso endereço, WhatsApp, detalhes de qualquer moto ou carro do catálogo, faixa de preço ou condições de troca e financiamento. Como posso te ajudar hoje?`,
+      text: `${periodGreeting}${nameGreeting}! Tudo ótimo por aqui! Eu sou a **Dayse**, consultora virtual da **${STORE.name}** na ${STORE.district} (${STORE.city}/${STORE.state}). ${stockSummary}\n\nPosso te indicar a melhor opção pelo seu perfil (trabalho, Uber/99, dia a dia ou família), simular entrada/financiamento, avaliar seu usado na troca ou enviar nossa localização. Como posso te ajudar hoje?`,
+      cards: [],
+      facts: [],
+      handoffRequested: false,
+      handoffReason: null,
+      handoffUrl: null,
+      checkedAt,
+    };
+  }
+
+  // 1.5 Blindagem de Domínio Automotivo (Anti-"Cama Box" / itens fora do nicho de concessionária)
+  if (intents.asksOutOfScopeProduct && !intents.wantsMoto && !intents.wantsCar) {
+    const motos = catalog.filter((i) => i.type === 'motorcycle').sort((a, b) => a.priceCents - b.priceCents);
+    const cheapestMoto = motos[0];
+    return {
+      matched: true,
+      isInstitutionalOnly: true,
+      text: `Haha, **${intents.asksOutOfScopeProduct}** eu vou ficar te devendo${nameGreeting}! 😄 Aqui na **${STORE.name}** nós somos uma concessionária especializada exclusivamente em **motos e carros seminovos** — trabalhamos com **compra, venda, troca e financiamento** na ${STORE.district} (${STORE.city}/${STORE.state}).\n\nMas se estiver pensando em pegar uma **moto econômica para rodar no dia a dia/aplicativo**${
+        cheapestMoto ? ` (temos opções a partir de **${formatPrice(cheapestMoto.priceBRL)}**)` : ''
+      } ou um **carro/utilitário**, me conta o que você procura que eu separo as melhores opções do nosso pátio agora mesmo!`,
       cards: [],
       facts: [],
       handoffRequested: false,
@@ -572,7 +679,7 @@ export async function answerFromPlatformKnowledge(
     handoffReason = 'visitor_request';
   }
 
-  // 3. Análise de busca no catálogo (modelos, marcas, categorias, orçamento, ordenação)
+  // 3. Análise de busca no catálogo (modelos, marcas, categorias, orçamento, finalidade de uso, ordenação)
   let matchedModels = catalog.filter((item) => {
     const modelNorm = normalizePlain(item.model ?? '');
     const versionNorm = normalizePlain(item.version ?? '');
@@ -594,7 +701,7 @@ export async function answerFromPlatformKnowledge(
 
   if (
     matchedModels.length === 0 &&
-    asksAnySpecificAttr &&
+    (asksAnySpecificAttr || intents.asksFinancing) &&
     context?.recentModelOrTitle &&
     !intents.wantsMoto &&
     !intents.wantsCar
@@ -631,8 +738,13 @@ export async function answerFromPlatformKnowledge(
     facts.push({ field: 'budget', quote: intents.budget.quote });
   }
 
-  if (/\b(trabalh\w*|entreg\w*|app|uber|99|motoboy|frete|carga|transporte|dia a dia|rodar)\b/.test(v)) {
-    facts.push({ field: 'purpose', quote: 'uso profissional / rotina' });
+  if (intents.asksWorkOrAppUseCase) {
+    facts.push({
+      field: 'purpose',
+      quote: /\b(uber|99|aplicativo|app|ifood|entreg\w*|motoboy)\b/.test(v)
+        ? 'Uber / aplicativo / entregas'
+        : 'uso profissional / melhor custo-benefício',
+    });
   }
 
   const hasCatalogIntent =
@@ -647,6 +759,7 @@ export async function answerFromPlatformKnowledge(
     intents.asksMostExpensive ||
     intents.asksLowestKm ||
     intents.asksNewest ||
+    intents.asksWorkOrAppUseCase ||
     intents.asksSpecificAttribute.mileage ||
     intents.asksSpecificAttribute.color ||
     intents.asksSpecificAttribute.year ||
@@ -700,7 +813,7 @@ export async function answerFromPlatformKnowledge(
       // Filtragem geral do catálogo
       let filtered = [...catalog];
 
-      if (intents.wantsMoto && !intents.wantsCar) {
+      if ((intents.wantsMoto || (intents.asksWorkOrAppUseCase && !intents.wantsCar)) && !intents.wantsCar) {
         filtered = filtered.filter((item) => item.type === 'motorcycle');
       } else if (intents.wantsCar && !intents.wantsMoto) {
         filtered = filtered.filter((item) => item.type === 'car');
@@ -762,38 +875,81 @@ export async function answerFromPlatformKnowledge(
           }`,
         );
       } else if (filtered.length > 0) {
-        selectedCards = filtered.slice(0, 3);
-        const listToDescribe = intents.asksAllInventory ? filtered : selectedCards;
-        const lines = listToDescribe.map((item) =>
-          formatVehicleBullet(item, listToDescribe.length <= 2 || intents.asksSpecificAttribute.engineOrSpecs),
-        );
+        // Consultoria Especialista para Uber Moto / 99 / Entregas / Melhor Custo-Benefício
+        if (intents.asksWorkOrAppUseCase && !intents.wantsCar && !intents.asksCheapest && !intents.asksLowestKm) {
+          // Prioriza as 150cc Street (Fazer, Fan, Titan) que são as campeãs de Uber/99 pelo consumo, manutenção e conforto para garupa
+          const street150 = filtered.filter((item) =>
+            /\b(fazer|fan|titan)\b/.test(normalizePlain(item.model ?? '')),
+          );
+          selectedCards = (street150.length >= 2 ? street150 : filtered).slice(0, 3);
+          const lines = selectedCards.map((item) => formatVehicleBullet(item, false));
+          const crosser = catalog.find((item) => normalizePlain(item.model ?? '').includes('crosser'));
+          const pop = catalog.find((item) => normalizePlain(item.model ?? '').includes('pop'));
+          const extraTips: string[] = [];
+          if (crosser && !selectedCards.some((c) => c.id === crosser.id)) {
+            extraTips.push(
+              `suspensão mais alta para ruas irregulares com a **${crosser.title}** (${formatPrice(crosser.priceBRL)})`,
+            );
+          }
+          if (pop && !selectedCards.some((c) => c.id === pop.id)) {
+            extraTips.push(
+              `estado de zero km com a **${pop.title}** de apenas **${formatKilometers(pop.mileageKm ?? 660)}** (${formatPrice(pop.priceBRL)})`,
+            );
+          }
 
-        if (intents.asksCheapest) {
-          const cheapest = filtered[0]!;
           paragraphs.push(
-            `A opção de **menor valor** nessa busca hoje é **${cheapest.title}** por **${formatPrice(cheapest.priceBRL)}**${
-              cheapest.year ? ` (ano ${cheapest.year})` : ''
-            }${cheapest.mileageKm ? `, com ${formatKilometers(cheapest.mileageKm)}` : ''}.\n\nConfira as opções ordenadas pelo menor preço:\n${lines.join('\n')}`,
+            `Para rodar na **Uber Moto, 99, entregas ou trabalho diário** com o melhor custo-benefício${nameGreeting}, o que mais compensa são as **150cc Street (Honda e Yamaha)**: fazem na faixa de **35 a 40 km/l**, têm manutenção barata, peças fáceis e aguentam rodar o dia inteiro com conforto.\n\nSeparei as **${selectedCards.length} melhores opções em custo-benefício** disponíveis hoje no nosso catálogo:\n${lines.join('\n')}${
+              extraTips.length > 0 ? `\n\n💡 *Outras opções no pátio:* se preferir ${extraTips.join(', ou ')}.` : ''
+            }${
+              !intents.asksTradeIn && !intents.asksFinancing
+                ? '\n\nVocê pretende comprar à vista, financiar ou colocar alguma moto como entrada?'
+                : ''
+            }`,
           );
-        } else if (intents.asksLowestKm) {
-          const lowestKm = filtered[0]!;
+        } else if (intents.asksWorkOrAppUseCase && intents.wantsCar) {
+          selectedCards = filtered.slice(0, 3);
+          const lines = selectedCards.map((item) => formatVehicleBullet(item, true));
           paragraphs.push(
-            `A opção com **menor quilometragem** informada no anúncio é **${lowestKm.title}** com **${
-              lowestKm.mileageKm !== null ? formatKilometers(lowestKm.mileageKm) : 'km sob consulta'
-            }** por **${formatPrice(lowestKm.priceBRL)}**.\n\nVeja os detalhes:\n${lines.join('\n')}`,
-          );
-        } else if (intents.asksAllInventory) {
-          const motosCount = catalog.filter((i) => i.type === 'motorcycle').length;
-          const carsCount = catalog.filter((i) => i.type === 'car').length;
-          paragraphs.push(
-            `Atualmente temos **${catalog.length} veículos publicados** no catálogo da **${STORE.name}** (${motosCount} motos e ${carsCount} carros):\n${lines.join('\n')}`,
+            `Para **trabalho, carga ou rotina profissional**${nameGreeting}, nossas picapes utilitárias entregam robustez mecânica e excelente capacidade de caçamba:\n${lines.join('\n')}${
+              !intents.asksTradeIn && !intents.asksFinancing
+                ? '\n\nVocê pretende negociar à vista, financiar ou dar algum veículo como entrada?'
+                : ''
+            }`,
           );
         } else {
-          paragraphs.push(
-            `Encontrei **${filtered.length} ${
-              filtered.length === 1 ? 'opção publicada' : 'opções publicadas'
-            }** no estoque da **${STORE.name}**:\n${lines.join('\n')}`,
+          selectedCards = filtered.slice(0, 3);
+          const listToDescribe = intents.asksAllInventory ? filtered : selectedCards;
+          const lines = listToDescribe.map((item) =>
+            formatVehicleBullet(item, listToDescribe.length <= 2 || intents.asksSpecificAttribute.engineOrSpecs),
           );
+
+          if (intents.asksCheapest) {
+            const cheapest = filtered[0]!;
+            paragraphs.push(
+              `A opção de **menor valor** nessa busca hoje é **${cheapest.title}** por **${formatPrice(cheapest.priceBRL)}**${
+                cheapest.year ? ` (ano ${cheapest.year})` : ''
+              }${cheapest.mileageKm ? `, com ${formatKilometers(cheapest.mileageKm)}` : ''}.\n\nConfira as opções ordenadas pelo menor preço:\n${lines.join('\n')}`,
+            );
+          } else if (intents.asksLowestKm) {
+            const lowestKm = filtered[0]!;
+            paragraphs.push(
+              `A opção com **menor quilometragem** informada no anúncio é **${lowestKm.title}** com **${
+                lowestKm.mileageKm !== null ? formatKilometers(lowestKm.mileageKm) : 'km sob consulta'
+              }** por **${formatPrice(lowestKm.priceBRL)}**.\n\nVeja os detalhes:\n${lines.join('\n')}`,
+            );
+          } else if (intents.asksAllInventory) {
+            const motosCount = catalog.filter((i) => i.type === 'motorcycle').length;
+            const carsCount = catalog.filter((i) => i.type === 'car').length;
+            paragraphs.push(
+              `Atualmente temos **${catalog.length} veículos publicados** no catálogo da **${STORE.name}** (${motosCount} motos e ${carsCount} carros):\n${lines.join('\n')}`,
+            );
+          } else {
+            paragraphs.push(
+              `Encontrei **${filtered.length} ${
+                filtered.length === 1 ? 'opção publicada' : 'opções publicadas'
+              }** no estoque da **${STORE.name}**:\n${lines.join('\n')}`,
+            );
+          }
         }
       } else {
         // Nenhum veículo bateu com o filtro (ex: orçamento abaixo do mínimo ou marca não disponível)
@@ -841,8 +997,14 @@ export async function answerFromPlatformKnowledge(
   // 4. Troca e Financiamento (podem vir isolados ou combinados com busca de veículo)
   if (intents.asksTradeIn) {
     facts.push({ field: 'trade_in', quote: text.trim().slice(0, 100) });
+    const hasYearOrSpecificTrade = /\b(19\d{2}|20\d{2})\b/.test(v);
+    const followUpTradeQuestion = hasYearOrSpecificTrade
+      ? 'Já registrei os dados do seu veículo para o nosso avaliador! Qual moto ou carro do nosso estoque você quer colocar na negociação, ou prefere passar aqui na loja hoje?'
+      : 'Me conta: **qual é o modelo e o ano** da sua moto ou carro? Assim já te explico como funciona a avaliação e deixo adiantado para a equipe!';
     paragraphs.push(
-      `🔄 **Sobre veículo na troca:**\nA **${STORE.name}** aceita sua moto ou carro usado como parte do pagamento! Nossa equipe avalia os dados e o estado do seu veículo presencialmente na loja (${STORE_STREET_ADDRESS}, ${STORE.district}) ou adianta a pré-avaliação pelo WhatsApp **${STORE.phoneDisplay}**.`,
+      `🔄 **Sim, aceitamos seu veículo como entrada${nameGreeting}!** 😊\nAqui na **${STORE.name}** nós fazemos **compra, venda, troca e financiamento** — analisamos sua moto ou carro usado como entrada na negociação (tanto para abater no valor à vista quanto para reduzir as parcelas do financiamento).\n\nBasta trazer para avaliação aqui na loja na **${STORE_STREET_ADDRESS} — ${STORE.district}, ${STORE.city}/${STORE.state}** ou enviar os dados pelo WhatsApp **${STORE.phoneDisplay}**.\n${
+        !intents.asksAddressOrLocation ? MAP_URL : ''
+      }\n\n${followUpTradeQuestion}`.trim(),
     );
     handoffRequested = true;
     handoffReason = 'trade_in';
@@ -850,8 +1012,18 @@ export async function answerFromPlatformKnowledge(
 
   if (intents.asksFinancing) {
     facts.push({ field: 'payment', quote: text.trim().slice(0, 100) });
+    const targetVehicle = selectedCards[0];
+    let entrySimulationText = '';
+    if (intents.entryCents && targetVehicle && intents.entryCents < targetVehicle.priceCents) {
+      const entryBRL = intents.entryCents / 100;
+      const balanceBRL = (targetVehicle.priceCents - intents.entryCents) / 100;
+      entrySimulationText = `\n\n📊 **Pré-cálculo orientativo (${targetVehicle.title}):**\n• Valor do veículo: **${formatPrice(targetVehicle.priceBRL)}**\n• Entrada informada: **${formatPrice(entryBRL)}**\n• Saldo restante para financiar: **${formatPrice(balanceBRL)}** (simulável em 12x, 24x, 36x ou até 48x pelos bancos parceiros, sujeito à análise de crédito).`;
+    } else if (intents.entryCents) {
+      const entryBRL = intents.entryCents / 100;
+      entrySimulationText = `\n\nCom uma entrada de **${formatPrice(entryBRL)}**, a aprovação pelos bancos parceiros fica ainda mais fácil e reduz bastante o valor das parcelas (em até 48x mediante análise de crédito).`;
+    }
     paragraphs.push(
-      `💳 **Sobre financiamento e pagamento:**\nTrabalhamos com opções de financiamento e parcelamento sujeitas à análise de crédito de acordo com o seu perfil e valor de entrada, sem prometer aprovação prévia automática. Nosso vendedor pode simular as parcelas para você no WhatsApp **${STORE.phoneDisplay}**.`,
+      `💳 **Sobre financiamento e parcelamento${nameGreeting}:**\nTrabalhamos com financiamentos pelos bancos parceiros (em até 48x) e parcelamento no cartão, sujeitos à análise de crédito de acordo com o seu perfil e valor de entrada, sem prometer aprovação prévia automática.${entrySimulationText}\n\nNosso consultor pode rodar sua simulação sem compromisso no WhatsApp **${STORE.phoneDisplay}**. Qual veículo você gostaria de simular?`,
     );
     handoffRequested = true;
     handoffReason = handoffReason ?? 'financing';
@@ -859,7 +1031,7 @@ export async function answerFromPlatformKnowledge(
 
   if (intents.asksHuman) {
     paragraphs.push(
-      `Perfeito! Vou encaminhar seu atendimento para um vendedor da **${STORE.name}**. Você também pode chamar direto no nosso WhatsApp **${STORE.phoneDisplay}**.`,
+      `Perfeito${nameGreeting}! Vou encaminhar seu atendimento para um vendedor da **${STORE.name}**. Você também pode chamar direto no nosso WhatsApp **${STORE.phoneDisplay}**.`,
     );
     handoffRequested = true;
     handoffReason = 'visitor_request';

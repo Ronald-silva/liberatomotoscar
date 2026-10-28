@@ -7,6 +7,7 @@ import { deterministicAnswer, deterministicChoices, deterministicMenuText, hando
   routeDeterministicText, type DeterministicChoice } from './deterministic';
 import {
   answerFromPlatformKnowledge,
+  extractCustomerFirstName,
   hasInstitutionalQuestion,
   isKnowledgeOrSpecificCatalogQuery,
 } from './knowledge';
@@ -39,7 +40,12 @@ export type SiteChatView = {
   handoffUrl: string;
 };
 
-export type SiteTurnInput = { message?: string; choice?: DeterministicChoice; clientMessageId: string };
+export type SiteTurnInput = {
+  message?: string;
+  choice?: DeterministicChoice;
+  clientMessageId: string;
+  customerName?: string | null;
+};
 
 const factLabels: Record<string, string> = {
   category: 'Categoria', model: 'Modelo', budget: 'Orçamento', payment: 'Pagamento', trade_in: 'Troca',
@@ -153,14 +159,27 @@ function extractRecentModelContext(conversation: ConversationRow | null, history
   return modelFact?.quote ?? null;
 }
 
+function extractRecentCustomerName(history: MessageRow[], explicitName?: string | null): string | null {
+  if (explicitName && explicitName.trim()) return explicitName.trim();
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const msg = history[i];
+    if (msg?.sender === 'visitor') {
+      const found = extractCustomerFirstName(msg.body);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 async function smartKnowledgeOrChoiceReply(
   deps: SiteChatDeps,
   body: string,
   routed: DeterministicChoice | null,
   recentModelOrTitle: string | null = null,
+  customerName: string | null = null,
 ): Promise<AutomatedReply> {
   if (isKnowledgeOrSpecificCatalogQuery(body)) {
-    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
     if (kb.matched) {
       return {
         sender: 'bot',
@@ -172,7 +191,7 @@ async function smartKnowledgeOrChoiceReply(
     }
   }
   if (routed) return choiceReply(deps, routed);
-  const kbFallback = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+  const kbFallback = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
   if (kbFallback.matched) {
     return {
       sender: 'bot',
@@ -186,7 +205,7 @@ async function smartKnowledgeOrChoiceReply(
 }
 
 async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, 'disabled'>, conversation: ConversationRow,
-  body: string, choice: DeterministicChoice | undefined, signal?: AbortSignal): Promise<AutomatedReply> {
+  body: string, choice: DeterministicChoice | undefined, signal?: AbortSignal, explicitCustomerName?: string | null): Promise<AutomatedReply> {
   // Botões do menu nunca chamam o modelo, em nenhum modo.
   if (choice) return choiceReply(deps, choice);
   const routed = routeDeterministicText(body);
@@ -196,11 +215,12 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   const messages = await deps.listMessages(conversation.id, 40).catch(() => []);
   const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
   const recentModelOrTitle = extractRecentModelContext(conversation, history);
+  const customerName = extractRecentCustomerName(history, explicitCustomerName);
 
   if (mode === 'deterministic') {
     if (routed) return choiceReply(deps, routed);
     if (hasInstitutionalQuestion(body)) {
-      const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+      const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
       if (kb.matched) {
         return {
           sender: 'bot',
@@ -219,7 +239,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   // Perguntas institucionais da plataforma (endereço, localização, telefone, horário, avaliação, venda)
   // e consultas diretas à base de conhecimento/catálogo em produção respondem com 100% de precisão.
   if (hasInstitutionalQuestion(body) || (isDefaultAgent && isKnowledgeOrSpecificCatalogQuery(body))) {
-    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
     if (kb.matched) {
       return {
         sender: 'ai',
@@ -233,7 +253,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
 
   const reservation = await deps.reserveAi();
   if (!reservation) {
-    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle);
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle, customerName);
   }
   try {
     const answer = await deps.runAgent(buildAgentSession(conversation, history), body, signal);
@@ -247,7 +267,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
     };
   } catch (error) {
     console.warn('Provedor IA indisponível no turno do site; usando base de conhecimento da Dayse:', error instanceof Error ? error.message : 'erro');
-    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle);
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle, customerName);
   }
 }
 
@@ -289,7 +309,7 @@ export async function handleSiteTurn(token: string | null, input: SiteTurnInput,
 
     let reply: AutomatedReply;
     try {
-      reply = await generateReply(deps, setting.mode, reserved, body, choice, signal);
+      reply = await generateReply(deps, setting.mode, reserved, body, choice, signal, input.customerName);
     } catch (error) {
       await deps.releaseTurn(activeConversation.id).catch(() => undefined);
       throw error;
@@ -326,7 +346,7 @@ export async function handleSiteTurn(token: string | null, input: SiteTurnInput,
     const routed = choice ?? routeDeterministicText(body);
     const reply = choice
       ? await choiceReply(deps, choice)
-      : await smartKnowledgeOrChoiceReply(deps, body, routed);
+      : await smartKnowledgeOrChoiceReply(deps, body, routed, null, input.customerName ?? null);
     return {
       token: null,
       view: toView(setting.mode, null, [

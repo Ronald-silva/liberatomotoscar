@@ -21,6 +21,10 @@ export type MetaWebhookPayload = {
           display_phone_number?: string;
           phone_number_id?: string;
         };
+        contacts?: Array<{
+          wa_id?: string;
+          profile?: { name?: string };
+        }>;
         messages?: Array<{
           id: string;
           from: string;
@@ -108,6 +112,7 @@ export type WebhookHandlerDeps = {
   runAgentTurn?: (params: {
     tenant: WhatsappTenantRow;
     customerWaId: string;
+    customerName?: string | null;
     waMessageId: string;
     text: string;
   }) => Promise<string | null>;
@@ -122,6 +127,7 @@ export type WebhookHandlerDeps = {
 async function defaultRunAgentTurn(params: {
   tenant: WhatsappTenantRow;
   customerWaId: string;
+  customerName?: string | null;
   waMessageId: string;
   text: string;
 }): Promise<string | null> {
@@ -132,6 +138,7 @@ async function defaultRunAgentTurn(params: {
   const prevCountResult = await handleSiteTurn(token, {
     message: params.text.slice(0, 1000),
     clientMessageId,
+    customerName: params.customerName,
   });
 
   const lastMsg = prevCountResult.view.messages.at(-1);
@@ -208,9 +215,14 @@ export async function processMetaWebhookPayload(
 
         if (!normalizedText) continue;
 
+        const contactMatch =
+          value?.contacts?.find((c) => c.wa_id === incoming.from) ?? value?.contacts?.[0];
+        const customerName = contactMatch?.profile?.name?.trim() || null;
+
         const replyBody = await runAgent({
           tenant,
           customerWaId: incoming.from,
+          customerName,
           waMessageId: incoming.id,
           text: normalizedText,
         });
