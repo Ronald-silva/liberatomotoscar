@@ -6,11 +6,11 @@ import { completeEmbeddedSignup, listWhatsappTenants } from '@/server/whatsapp/e
 export const runtime = 'nodejs';
 
 const embeddedSignupSchema = z.object({
-  tenantId: z.string().trim().min(2).max(80),
-  tenantName: z.string().trim().min(2).max(120),
-  code: z.string().trim().min(10),
-  wabaId: z.string().trim().min(3).max(64),
-  phoneNumberId: z.string().trim().min(3).max(64),
+  code: z.string().trim().min(5),
+  tenantId: z.string().trim().min(2).max(80).optional(),
+  tenantName: z.string().trim().min(2).max(120).optional(),
+  wabaId: z.string().trim().max(64).optional(),
+  phoneNumberId: z.string().trim().max(64).optional(),
   displayPhoneNumber: z.string().trim().max(40).optional().nullable(),
   coexistenceEnabled: z.boolean().optional(),
 });
@@ -30,8 +30,8 @@ export async function GET() {
 }
 
 /**
- * Recebe o `code`, `wabaId` e `phoneNumberId` retornados pelo SDK de Embedded Signup da Meta,
- * troca pelo token permanente da WABA, inscreve o Webhook e salva criptografado por tenant.
+ * Recebe apenas o `code` (e opcionalmente `wabaId` / `phoneNumberId`) do botão oficial da Meta,
+ * descobre automaticamente a conta e o número caso necessário, inscreve o Webhook e salva criptografado.
  */
 export async function POST(request: Request) {
   try {
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
   const parsed = embeddedSignupSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Dados de Embedded Signup inválidos.' }, { status: 400 });
+    return NextResponse.json({ error: 'Não foi possível validar a resposta da Meta.' }, { status: 400 });
   }
 
   try {
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Erro no Embedded Signup WhatsApp:', error instanceof Error ? error.message : 'erro');
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Não foi possível concluir o Embedded Signup.' },
+      { error: error instanceof Error ? error.message : 'Não foi possível concluir a conexão do WhatsApp.' },
       { status: 502 },
     );
   }

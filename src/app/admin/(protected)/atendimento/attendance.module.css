@@ -74,6 +74,11 @@
 .replyForm { display: grid; gap: var(--attendance-space-1); }
 .replyLabel { font-weight: 700; }
 .replyTextarea { width: 100%; min-height: 88px; padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-bg); color: var(--attendance-ink); font: inherit; resize: vertical; }
+.textInput { width: 100%; min-height: 44px; padding: 0.55rem 0.85rem; border: 1px solid var(--attendance-line); border-radius: 12px; background: var(--attendance-bg); color: var(--attendance-ink); font: inherit; }
+.fieldGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--attendance-space-2); }
+.fieldLabel { display: grid; gap: 0.35rem; font-size: 0.875rem; font-weight: 600; color: var(--attendance-muted); }
+.tenantList { display: grid; gap: var(--attendance-space-1); margin: var(--attendance-space-2) 0 0; padding: 0; list-style: none; }
+.tenantItem { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--attendance-space-2); padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 12px; background: var(--attendance-bg); font-size: 0.875rem; }
 .eventList { display: grid; gap: 0.35rem; margin: 0; padding: var(--attendance-space-2) 0 0; border-top: 1px solid var(--attendance-line); list-style: none; font-size: 0.875rem; color: var(--attendance-muted); }
 
 @media (max-width: 780px) {

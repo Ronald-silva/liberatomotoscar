@@ -78,6 +78,7 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
             tenantName: row.tenantName,
             wabaId: row.wabaId,
             whatsappPhoneNumberId: row.whatsappPhoneNumberId,
+            displayPhoneNumber: row.displayPhoneNumber,
             coexistenceEnabled: row.coexistenceEnabled,
           };
         },
@@ -88,6 +89,62 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
     expect(saved.tenantId).toBe('liberato-motos-car');
     expect(saved.whatsappPhoneNumberId).toBe('phone_85996365664');
     expect(decryptAccessToken(persistedEncryptedToken, TEST_HEX_KEY)).toBe('EAAG_TOKEN_CLIENTE_LIBERATO');
+  });
+
+  it('descobre automaticamente WABA ID e Phone Number ID na Graph API quando o botão envia apenas o code (fluxo 1-clique)', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/oauth/access_token')) {
+        return new Response(JSON.stringify({ access_token: 'EAAG_TOKEN_AUTO' }), { status: 200 });
+      }
+      if (url.includes('/debug_token')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              granular_scopes: [
+                { scope: 'whatsapp_business_management', target_ids: ['waba_auto_777'] },
+              ],
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/waba_auto_777/phone_numbers')) {
+        return new Response(
+          JSON.stringify({
+            data: [{ id: 'phone_auto_888', display_phone_number: '+55 85 99636-5664' }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/waba_auto_777/subscribed_apps')) {
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }
+      return new Response('Not found', { status: 404 });
+    });
+
+    const saved = await completeEmbeddedSignup(
+      { code: 'code_apenas_1_clique' },
+      {
+        appId: '172704712193909',
+        appSecret: TEST_APP_SECRET,
+        encryptionKeyHex: TEST_HEX_KEY,
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        upsertTenant: async (row) => ({
+          id: '22222222-2222-4222-8222-222222222222',
+          tenantId: row.tenantId,
+          tenantName: row.tenantName,
+          wabaId: row.wabaId,
+          whatsappPhoneNumberId: row.whatsappPhoneNumberId,
+          displayPhoneNumber: row.displayPhoneNumber,
+          coexistenceEnabled: row.coexistenceEnabled,
+        }),
+      },
+    );
+
+    expect(saved.wabaId).toBe('waba_auto_777');
+    expect(saved.whatsappPhoneNumberId).toBe('phone_auto_888');
+    expect(saved.displayPhoneNumber).toBe('+55 85 99636-5664');
   });
 
   it('roteia evento inbound pelo phone_number_id do tenant, chama a Dayse e envia outbound com o token do cliente', async () => {

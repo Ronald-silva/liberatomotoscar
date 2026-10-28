@@ -9,8 +9,10 @@ import {
 } from '@/server/attendance/inbox';
 import { listAdminSiteModeChanges, readAdminSiteSetting } from '@/server/attendance/settings';
 import { protocolOf } from '@/server/attendance/site-chat';
+import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { InboxOperatorControls } from './InboxOperatorControls';
 import { SiteModeForm } from './SiteModeForm';
+import { WhatsAppOnboardingCard } from './WhatsAppOnboardingCard';
 import attendanceStyles from './attendance.module.css';
 
 export const metadata: Metadata = { title: 'Atendimento do site', robots: { index: false, follow: false } };
@@ -64,11 +66,12 @@ export default async function AttendancePage({
   const rawConversation = Array.isArray(resolved.conversa) ? resolved.conversa[0] : resolved.conversa;
   const filter: InboxFilter = inboxFilterSchema.parse(rawFilter);
 
-  const [setting, changes, counts, list] = await Promise.all([
+  const [setting, changes, counts, list, tenants] = await Promise.all([
     readAdminSiteSetting(),
     listAdminSiteModeChanges(),
     countInbox().catch(() => ({ waiting: 0, mine: 0, automation: 0 })),
     listInbox(filter).catch(() => []),
+    listWhatsappTenants().catch(() => []),
   ]);
 
   const activeConversationId = rawConversation ?? list[0]?.id ?? null;
@@ -92,6 +95,8 @@ export default async function AttendancePage({
           Escolha como o site deverá responder quando o atendimento público for liberado. Quando um vendedor assume uma conversa, a automação daquela conversa é suspensa imediatamente.
         </p>
         <SiteModeForm mode={setting.mode} version={setting.version} />
+
+        <WhatsAppOnboardingCard initialTenants={tenants} />
 
         <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
           <div className={attendanceStyles.inboxHeader}>

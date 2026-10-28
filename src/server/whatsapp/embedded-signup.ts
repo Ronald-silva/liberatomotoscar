@@ -1,4 +1,5 @@
 import { and, desc, eq } from 'drizzle-orm';
+import { STORE } from '@/data/store';
 import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
 import { getDb } from '@/server/db/client';
 import { whatsappTenants } from '@/server/db/schema';
@@ -7,11 +8,11 @@ import { encryptAccessToken } from './crypto';
 export type WhatsappTenantRow = typeof whatsappTenants.$inferSelect;
 
 export type CompleteEmbeddedSignupInput = {
-  tenantId: string;
-  tenantName: string;
   code: string;
-  wabaId: string;
-  phoneNumberId: string;
+  tenantId?: string;
+  tenantName?: string;
+  wabaId?: string;
+  phoneNumberId?: string;
   displayPhoneNumber?: string | null;
   coexistenceEnabled?: boolean;
 };
@@ -30,7 +31,12 @@ export type EmbeddedSignupDeps = {
     displayPhoneNumber: string | null;
     encryptedAccessToken: string;
     coexistenceEnabled: boolean;
-  }) => Promise<Pick<WhatsappTenantRow, 'id' | 'tenantId' | 'tenantName' | 'wabaId' | 'whatsappPhoneNumberId' | 'coexistenceEnabled'>>;
+  }) => Promise<
+    Pick<
+      WhatsappTenantRow,
+      'id' | 'tenantId' | 'tenantName' | 'wabaId' | 'whatsappPhoneNumberId' | 'displayPhoneNumber' | 'coexistenceEnabled'
+    >
+  >;
 };
 
 async function defaultUpsertTenant(row: {
@@ -76,16 +82,81 @@ async function defaultUpsertTenant(row: {
       tenantName: whatsappTenants.tenantName,
       wabaId: whatsappTenants.wabaId,
       whatsappPhoneNumberId: whatsappTenants.whatsappPhoneNumberId,
+      displayPhoneNumber: whatsappTenants.displayPhoneNumber,
       coexistenceEnabled: whatsappTenants.coexistenceEnabled,
     });
   return saved!;
 }
 
 /**
- * Fluxo oficial de Tech Provider (RonalDigital ISP Platform - App ID 172704712193909):
- * 1. Troca o `code` retornado pelo SDK de Embedded Signup por um `access_token` permanente da WABA.
- * 2. Inscreve o App nos Webhooks da WABA (`POST /{waba_id}/subscribed_apps`).
- * 3. Criptografa o `access_token` com AES-256-GCM e persiste na tabela multi-tenant `whatsapp_tenants`.
+ * Descobre automaticamente o WABA ID e o Phone Number ID na Graph API usando o token recém-emitido,
+ * caso o navegador envie apenas o `code` OAuth (fluxo 1-clique sem campos técnicos).
+ */
+async function discoverWabaAndPhone(params: {
+  accessToken: string;
+  appId: string;
+  appSecret: string;
+  version: string;
+  fetchFn: typeof fetch;
+  knownWabaId?: string;
+  knownPhoneNumberId?: string;
+}): Promise<{ wabaId: string; phoneNumberId: string; displayPhoneNumber: string | null }> {
+  let wabaId = params.knownWabaId?.trim() ?? '';
+  let phoneNumberId = params.knownPhoneNumberId?.trim() ?? '';
+  let displayPhoneNumber: string | null = null;
+
+  if (!wabaId) {
+    const debugUrl = new URL(`https://graph.facebook.com/${params.version}/debug_token`);
+    debugUrl.searchParams.set('input_token', params.accessToken);
+    debugUrl.searchParams.set('access_token', `${params.appId}|${params.appSecret}`);
+
+    const debugRes = await params.fetchFn(debugUrl.toString(), { method: 'GET', cache: 'no-store' });
+    if (debugRes.ok) {
+      const debugData = (await debugRes.json()) as {
+        data?: {
+          granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
+        };
+      };
+      const wabaScope = debugData.data?.granular_scopes?.find(
+        (s) => s.scope === 'whatsapp_business_management' || s.scope === 'whatsapp_business_messaging',
+      );
+      wabaId = wabaScope?.target_ids?.[0] ?? '';
+    }
+  }
+
+  if (!wabaId) {
+    throw new Error('Não foi possível identificar a conta do WhatsApp Business (WABA) na Meta.');
+  }
+
+  if (!phoneNumberId) {
+    const phonesUrl = `https://graph.facebook.com/${params.version}/${encodeURIComponent(wabaId)}/phone_numbers`;
+    const phonesRes = await params.fetchFn(phonesUrl, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${params.accessToken}` },
+      cache: 'no-store',
+    });
+    if (phonesRes.ok) {
+      const phonesData = (await phonesRes.json()) as {
+        data?: Array<{ id?: string; display_phone_number?: string }>;
+      };
+      phoneNumberId = phonesData.data?.[0]?.id ?? '';
+      displayPhoneNumber = phonesData.data?.[0]?.display_phone_number ?? null;
+    }
+  }
+
+  if (!phoneNumberId) {
+    throw new Error('Nenhum número de WhatsApp foi encontrado na conta conectada.');
+  }
+
+  return { wabaId, phoneNumberId, displayPhoneNumber };
+}
+
+/**
+ * Fluxo 1-clique de Tech Provider (RonalDigital ISP Platform - App ID 172704712193909):
+ * 1. Troca o `code` retornado pelo botão da Meta por um `access_token` permanente da WABA.
+ * 2. Descobre automaticamente o `waba_id` e `phone_number_id` (se não vierem no evento da janela).
+ * 3. Inscreve o App nos Webhooks da WABA (`POST /{waba_id}/subscribed_apps`).
+ * 4. Criptografa o `access_token` com AES-256-GCM e persiste em `whatsapp_tenants`.
  */
 export async function completeEmbeddedSignup(
   input: CompleteEmbeddedSignupInput,
@@ -119,8 +190,19 @@ export async function completeEmbeddedSignup(
 
   const plainAccessToken = tokenData.access_token;
 
-  // 2. Inscrever o App nos Webhooks da WABA do cliente
-  const subscribeUrl = `https://graph.facebook.com/${version}/${encodeURIComponent(input.wabaId)}/subscribed_apps`;
+  // 2. Resolver WABA ID e Phone Number ID automaticamente caso não tenham vindo no evento postMessage
+  const discovered = await discoverWabaAndPhone({
+    accessToken: plainAccessToken,
+    appId,
+    appSecret,
+    version,
+    fetchFn,
+    knownWabaId: input.wabaId,
+    knownPhoneNumberId: input.phoneNumberId,
+  });
+
+  // 3. Inscrever o App nos Webhooks da WABA do cliente
+  const subscribeUrl = `https://graph.facebook.com/${version}/${encodeURIComponent(discovered.wabaId)}/subscribed_apps`;
   const subRes = await fetchFn(subscribeUrl, {
     method: 'POST',
     headers: {
@@ -131,18 +213,18 @@ export async function completeEmbeddedSignup(
 
   if (!subRes.ok) {
     const errText = await subRes.text().catch(() => '');
-    throw new Error(`Falha ao inscrever WABA ${input.wabaId} nos webhooks: ${errText.slice(0, 200)}`);
+    throw new Error(`Falha ao inscrever WABA ${discovered.wabaId} nos webhooks: ${errText.slice(0, 200)}`);
   }
 
-  // 3. Criptografar token e persistir no banco por cliente
+  // 4. Criptografar token e persistir no banco por cliente
   const encryptedAccessToken = encryptAccessToken(plainAccessToken, deps.encryptionKeyHex);
 
   return upsert({
-    tenantId: input.tenantId.trim(),
-    tenantName: input.tenantName.trim(),
-    wabaId: input.wabaId.trim(),
-    whatsappPhoneNumberId: input.phoneNumberId.trim(),
-    displayPhoneNumber: input.displayPhoneNumber?.trim() || null,
+    tenantId: input.tenantId?.trim() || 'liberato-motos-car',
+    tenantName: input.tenantName?.trim() || STORE.name,
+    wabaId: discovered.wabaId,
+    whatsappPhoneNumberId: discovered.phoneNumberId,
+    displayPhoneNumber: input.displayPhoneNumber?.trim() || discovered.displayPhoneNumber || STORE.phoneDisplay,
     encryptedAccessToken,
     coexistenceEnabled: input.coexistenceEnabled ?? true,
   });
@@ -179,4 +261,3 @@ export async function listWhatsappTenants(): Promise<
     .orderBy(desc(whatsappTenants.updatedAt));
   return rows;
 }
-
