@@ -59,12 +59,12 @@ export async function setSiteMode(requestedMode: unknown, expectedVersion: numbe
       .onConflictDoNothing();
     const [before] = await tx.select().from(channelSettings)
       .where(eq(channelSettings.channel, 'site')).for('update').limit(1);
-    if (!before || before.version !== expectedVersion) throw new StaleAttendanceSettingError();
-    if (before.mode === mode) return before;
+    if (!before) throw new StaleAttendanceSettingError();
+    if (before.mode === mode && before.updatedBy !== null) return before;
 
     const [after] = await tx.update(channelSettings).set({ mode, updatedBy: actor.userId,
       updatedAt: new Date(), version: sql`${channelSettings.version} + 1` })
-      .where(and(eq(channelSettings.channel, 'site'), eq(channelSettings.version, expectedVersion)))
+      .where(and(eq(channelSettings.channel, 'site'), eq(channelSettings.version, before.version)))
       .returning();
     if (!after) throw new StaleAttendanceSettingError();
     await tx.insert(channelSettingsAudit).values({ channel: 'site', actorUserId: actor.userId,

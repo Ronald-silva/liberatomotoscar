@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { startTransition, useActionState, useOptimistic } from 'react';
 import { changeSiteMode, type ModeFormState } from './actions';
 import attendanceStyles from './attendance.module.css';
 
@@ -32,7 +32,19 @@ export function SiteModeForm({ mode, version }: { mode: ModeFormState['mode']; v
     message: null,
     error: false,
   });
-  const currentMode = state.mode;
+  const [optimisticMode, setOptimisticMode] = useOptimistic(state.mode);
+
+  function handleSelectMode(nextMode: ModeFormState['mode']) {
+    if (pending || nextMode === optimisticMode) return;
+    const formData = new FormData();
+    formData.set('mode', nextMode);
+    formData.set('version', String(state.version));
+    formData.set('confirm', 'yes');
+    startTransition(() => {
+      setOptimisticMode(nextMode);
+      action(formData);
+    });
+  }
 
   return (
     <form action={action} className={attendanceStyles.form}>
@@ -46,8 +58,8 @@ export function SiteModeForm({ mode, version }: { mode: ModeFormState['mode']; v
               type="radio"
               name="mode"
               value={item.value}
-              checked={currentMode === item.value}
-              onChange={(event) => event.currentTarget.form?.requestSubmit()}
+              checked={optimisticMode === item.value}
+              onChange={() => handleSelectMode(item.value)}
             />
             <span>
               <strong>{item.label}</strong>
