@@ -45,17 +45,30 @@ export async function sendWhatsAppTextMessage(params: SendWhatsAppTextParams): P
   return { messageId: data.messages?.[0]?.id ?? null };
 }
 
+/**
+ * Converte a marcação do chat do site para a do WhatsApp:
+ * `**negrito**` (site) → `*negrito*` (WhatsApp), evitando asteriscos sobrando na tela do cliente.
+ */
+export function toWhatsAppMarkup(text: string): string {
+  return text
+    .replace(/\*\*([^*\n]+?)\*\*/g, '*$1*')
+    .replace(/\*{2,}/g, '*')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /** Formata a resposta da Dayse + cartões de veículos publicados para leitura direta no WhatsApp. */
 export function formatDayseWhatsAppReply(
   body: string,
   cards: Array<{ title: string; year: number | null; priceCents: number; href: string }>,
 ): string {
-  if (!cards.length) return body;
+  const text = toWhatsAppMarkup(body);
+  if (!cards.length) return text;
   const cardLines = cards.slice(0, 4).map((card) => {
     const fullUrl = new URL(card.href, SITE_URL).toString();
     const yearLabel = card.year ? ` (${card.year})` : '';
-    return `• *${card.title}*${yearLabel} — ${brl.format(card.priceCents / 100)}\n  ${fullUrl}`;
+    return `• *${card.title}*${yearLabel} — ${brl.format(card.priceCents / 100)}\n  Fotos e detalhes: ${fullUrl}`;
   });
-  return `${body}\n\n${cardLines.join('\n\n')}`;
+  return `${text}\n\n${cardLines.join('\n\n')}`;
 }
 

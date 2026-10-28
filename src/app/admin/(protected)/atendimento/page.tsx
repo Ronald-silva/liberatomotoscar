@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { SITE_URL } from '@/data/store';
 import {
   countInbox,
   getInboxConversation,
@@ -10,7 +11,9 @@ import {
 import { protocolOf } from '@/server/attendance/site-chat';
 import { readAdminSiteSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
+import { TEST_TENANT_ID } from '@/server/whatsapp/test-number';
 import { InboxOperatorControls } from './InboxOperatorControls';
+import { MetaTestNumberForm } from './MetaTestNumberForm';
 import { SiteModeForm } from './SiteModeForm';
 import { WhatsAppOnboardingCard } from './WhatsAppOnboardingCard';
 import attendanceStyles from './attendance.module.css';
@@ -123,9 +126,14 @@ export default async function AttendancePage({
         </p>
 
         <WhatsAppOnboardingCard
-          initialTenants={tenants}
+          initialTenants={tenants.filter((tenant) => tenant.tenantId !== TEST_TENANT_ID)}
           metaAppId={metaAppId}
           metaConfigId={metaConfigId}
+        />
+
+        <MetaTestNumberForm
+          webhookUrl={new URL('/api/webhooks/whatsapp', SITE_URL).toString()}
+          currentTestNumber={tenants.find((tenant) => tenant.tenantId === TEST_TENANT_ID && tenant.isActive)?.displayPhoneNumber ?? null}
         />
 
         <SiteModeForm mode={setting.mode} version={setting.version} />

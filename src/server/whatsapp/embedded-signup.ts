@@ -39,7 +39,7 @@ export type EmbeddedSignupDeps = {
   >;
 };
 
-async function defaultUpsertTenant(row: {
+export async function defaultUpsertTenant(row: {
   tenantId: string;
   tenantName: string;
   wabaId: string;

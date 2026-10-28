@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   deleteInboxConversation: vi.fn(),
   replyToInboxConversation: vi.fn(),
   revalidatePath: vi.fn(),
+  requireAdmin: vi.fn(async () => ({ userId: 'admin' })),
+  registerMetaTestNumber: vi.fn(),
 }));
 vi.mock('@/server/attendance/settings', () => ({ setSiteMode: mocks.setSiteMode }));
 vi.mock('@/server/attendance/inbox', () => ({
@@ -20,8 +22,10 @@ vi.mock('@/server/attendance/inbox', () => ({
   replyToInboxConversation: mocks.replyToInboxConversation,
 }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
+vi.mock('@/server/authz', () => ({ requireAdmin: mocks.requireAdmin }));
+vi.mock('@/server/whatsapp/test-number', () => ({ registerMetaTestNumber: mocks.registerMetaTestNumber }));
 
-import { changeSiteMode, operateInboxConversation, type ModeFormState } from './actions';
+import { changeSiteMode, connectMetaTestNumber, operateInboxConversation, type ModeFormState } from './actions';
 
 const current: ModeFormState = { mode: 'disabled', version: 1, message: null, error: false };
 const form = (mode: string, confirm = 'yes') => {
@@ -38,6 +42,18 @@ it('não altera o modo sem confirmação explícita', async () => {
   const result = await changeSiteMode(current, form('ai', ''));
   expect(result.error).toBe(true);
   expect(mocks.setSiteMode).not.toHaveBeenCalled();
+});
+
+it('exige administrador antes de registrar o número de teste', async () => {
+  mocks.requireAdmin.mockRejectedValueOnce(new Error('Acesso negado'));
+  const data = new FormData();
+  data.set('phoneNumberId', '1234567890123');
+  data.set('wabaId', '9876543210987');
+  data.set('accessToken', 'token-sensivel');
+  const result = await connectMetaTestNumber({ message: null, error: false }, data);
+  expect(result.error).toBe(true);
+  expect(mocks.registerMetaTestNumber).not.toHaveBeenCalled();
+  expect(result.message).not.toContain('token-sensivel');
 });
 
 it('devolve a versão nova e não pede repetição se a invalidação falhar depois de gravar', async () => {

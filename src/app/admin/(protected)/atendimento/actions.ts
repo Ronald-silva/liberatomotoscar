@@ -9,12 +9,33 @@ import {
   replyToInboxConversation,
 } from '@/server/attendance/inbox';
 import { setSiteMode, type AttendanceMode } from '@/server/attendance/settings';
+import { requireAdmin } from '@/server/authz';
+import { registerMetaTestNumber } from '@/server/whatsapp/test-number';
 
 export type ModeFormState = { mode: AttendanceMode; version: number; message: string | null; error: boolean };
 export type InboxActionState = { message: string | null; error: boolean };
+export type TestNumberState = { message: string | null; error: boolean };
 
 function revalidateAttendance() {
   try { revalidatePath('/admin/atendimento'); } catch { /* próxima navegação lê o banco */ }
+}
+
+export async function connectMetaTestNumber(_previous: TestNumberState, formData: FormData): Promise<TestNumberState> {
+  try {
+    await requireAdmin();
+    const saved = await registerMetaTestNumber({
+      phoneNumberId: String(formData.get('phoneNumberId') ?? ''),
+      wabaId: String(formData.get('wabaId') ?? ''),
+      accessToken: String(formData.get('accessToken') ?? ''),
+    });
+    revalidateAttendance();
+    return {
+      message: `Número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId} registrado. Confira o webhook no painel da Meta e mande “Boa tarde” do seu celular para ele.`,
+      error: false,
+    };
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : 'Não foi possível conectar o número de teste.', error: true };
+  }
 }
 
 export async function changeSiteMode(previous: ModeFormState, formData: FormData): Promise<ModeFormState> {

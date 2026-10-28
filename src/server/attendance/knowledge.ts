@@ -899,7 +899,7 @@ export async function answerFromPlatformKnowledge(
 
           paragraphs.push(
             `Para rodar na **Uber Moto, 99, entregas ou trabalho diário** com o melhor custo-benefício${nameGreeting}, o que mais compensa são as **150cc Street (Honda e Yamaha)**: fazem na faixa de **35 a 40 km/l**, têm manutenção barata, peças fáceis e aguentam rodar o dia inteiro com conforto.\n\nSeparei as **${selectedCards.length} melhores opções em custo-benefício** disponíveis hoje no nosso catálogo:\n${lines.join('\n')}${
-              extraTips.length > 0 ? `\n\n💡 *Outras opções no pátio:* se preferir ${extraTips.join(', ou ')}.` : ''
+              extraTips.length > 0 ? `\n\n💡 **Outras opções no pátio:** se preferir ${extraTips.join(', ou ')}.` : ''
             }${
               !intents.asksTradeIn && !intents.asksFinancing
                 ? '\n\nVocê pretende comprar à vista, financiar ou colocar alguma moto como entrada?'
