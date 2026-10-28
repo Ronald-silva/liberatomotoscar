@@ -88,7 +88,12 @@ export function WhatsAppOnboardingCard({
       }
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data?.type === 'WA_EMBEDDED_SIGNUP' && (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA')) {
+        if (
+          data?.type === 'WA_EMBEDDED_SIGNUP' &&
+          (data.event === 'FINISH' ||
+            data.event === 'FINISH_ONLY_WABA' ||
+            data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING')
+        ) {
           sessionInfoRef.current = {
             waba_id: data.data?.waba_id,
             phone_number_id: data.data?.phone_number_id,
@@ -184,6 +189,8 @@ export function WhatsAppOnboardingCard({
         response_type: 'code',
         override_default_response_type: true,
         extras: {
+          featureType: 'whatsapp_business_app_onboarding',
+          sessionInfoVersion: '3',
           version: 'v4',
         },
       };
