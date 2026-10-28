@@ -99,6 +99,29 @@ export function ensureAttendanceTables(): Promise<void> {
             WHERE "client_message_id" IS NOT NULL
         `);
         await db.execute(sql`
+          CREATE TABLE IF NOT EXISTS "whatsapp_tenants" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "tenant_id" text NOT NULL,
+            "tenant_name" text NOT NULL,
+            "waba_id" text NOT NULL,
+            "whatsapp_phone_number_id" text NOT NULL,
+            "display_phone_number" text,
+            "encrypted_access_token" text NOT NULL,
+            "coexistence_enabled" boolean DEFAULT true NOT NULL,
+            "is_active" boolean DEFAULT true NOT NULL,
+            "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+            "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+          )
+        `);
+        await db.execute(sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS "whatsapp_tenants_phone_number_id_uidx"
+            ON "whatsapp_tenants" ("whatsapp_phone_number_id")
+        `);
+        await db.execute(sql`
+          CREATE INDEX IF NOT EXISTS "whatsapp_tenants_tenant_id_idx"
+            ON "whatsapp_tenants" ("tenant_id")
+        `);
+        await db.execute(sql`
           UPDATE "channel_settings"
             SET "mode" = 'ai'
             WHERE "channel" = 'site' AND "updated_by" IS NULL AND "mode" = 'disabled'

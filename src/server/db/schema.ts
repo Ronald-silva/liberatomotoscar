@@ -273,3 +273,22 @@ export const attendanceRateLimits = pgTable('attendance_rate_limits', {
   check('attendance_rate_limits_hits_valid', sql`${table.hits} >= 0`),
   index('attendance_rate_limits_window_idx').on(table.windowStart),
 ]);
+
+// Clientes (tenants) conectados ao Tech Provider Meta via Embedded Signup (WhatsApp Cloud API).
+export const whatsappTenants = pgTable('whatsapp_tenants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tenantId: text('tenant_id').notNull(),
+  tenantName: text('tenant_name').notNull(),
+  wabaId: text('waba_id').notNull(),
+  whatsappPhoneNumberId: text('whatsapp_phone_number_id').notNull(),
+  displayPhoneNumber: text('display_phone_number'),
+  encryptedAccessToken: text('encrypted_access_token').notNull(),
+  coexistenceEnabled: boolean('coexistence_enabled').notNull().default(true),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('whatsapp_tenants_phone_number_id_uidx').on(table.whatsappPhoneNumberId),
+  index('whatsapp_tenants_tenant_id_idx').on(table.tenantId),
+]);
+

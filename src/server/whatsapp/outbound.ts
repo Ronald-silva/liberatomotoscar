@@ -1,0 +1,61 @@
+import { SITE_URL } from '@/data/store';
+
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+export type SendWhatsAppTextParams = {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  body: string;
+  previewUrl?: boolean;
+  apiVersion?: string;
+  fetchImpl?: typeof fetch;
+};
+
+/** Dispara mensagem de texto via Meta WhatsApp Cloud API usando as credenciais dinâmicas do tenant. */
+export async function sendWhatsAppTextMessage(params: SendWhatsAppTextParams): Promise<{ messageId: string | null }> {
+  const version = params.apiVersion ?? process.env.META_GRAPH_API_VERSION ?? 'v21.0';
+  const fetchFn = params.fetchImpl ?? fetch;
+  const url = `https://graph.facebook.com/${version}/${encodeURIComponent(params.phoneNumberId)}/messages`;
+
+  const response = await fetchFn(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: params.to,
+      type: 'text',
+      text: {
+        preview_url: params.previewUrl ?? true,
+        body: params.body.slice(0, 4096),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Falha ao enviar mensagem WhatsApp (${response.status}): ${errorText.slice(0, 300)}`);
+  }
+
+  const data = (await response.json()) as { messages?: Array<{ id?: string }> };
+  return { messageId: data.messages?.[0]?.id ?? null };
+}
+
+/** Formata a resposta da Dayse + cartões de veículos publicados para leitura direta no WhatsApp. */
+export function formatDayseWhatsAppReply(
+  body: string,
+  cards: Array<{ title: string; year: number | null; priceCents: number; href: string }>,
+): string {
+  if (!cards.length) return body;
+  const cardLines = cards.slice(0, 4).map((card) => {
+    const fullUrl = new URL(card.href, SITE_URL).toString();
+    const yearLabel = card.year ? ` (${card.year})` : '';
+    return `• *${card.title}*${yearLabel} — ${brl.format(card.priceCents / 100)}\n  ${fullUrl}`;
+  });
+  return `${body}\n\n${cardLines.join('\n\n')}`;
+}
+
