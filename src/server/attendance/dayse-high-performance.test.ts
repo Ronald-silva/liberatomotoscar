@@ -133,7 +133,7 @@ describe('Dayse Alta Performance — financiamento, nome e WhatsApp', () => {
     expect(res.text).toContain('Honda Pop');
     expect(res.text).toContain('ano 2000');
     expect(res.text).toContain('700 km');
-    expect(res.text).toContain('Confirma se o ano e a quilometragem estão corretos?');
+    expect(res.text).toContain('A equipe confere o documento, a quilometragem e o estado do veículo');
     expect(res.text).not.toContain('Yamaha Fazer');
     expect(res.cards).toHaveLength(0);
     expect(res.facts[0]?.quote).toContain('700 km');

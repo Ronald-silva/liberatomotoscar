@@ -657,7 +657,7 @@ export async function answerFromPlatformKnowledge(
       matched: true,
       isInstitutionalOnly: false,
       text: mileageLabel
-        ? `Perfeito${nameGreeting}! Anotei os dados que você informou para avaliar sua **${offeredVehicle} como entrada**: **ano ${year}** e **${mileageLabel}**. Confirma se o ano e a quilometragem estão corretos? A equipe confere o documento e o estado da moto antes de definir o valor. Qual moto ou carro do nosso estoque você quer negociar?`
+        ? `Perfeito${nameGreeting}! Anotei os dados que você informou para avaliar sua **${offeredVehicle} como entrada**: **ano ${year}** e **${mileageLabel}**. A equipe confere o documento, a quilometragem e o estado do veículo antes de definir o valor. Qual moto ou carro do nosso estoque você quer negociar?`
         : `Perfeito${nameGreeting}! Anotei **${offeredVehicle} ${year}** para avaliação como entrada. Se souber, me diga a **quilometragem aproximada** e qual moto ou carro do nosso estoque você quer negociar. A equipe confirma o valor da sua usada após a avaliação.`,
       cards: [],
       facts: [{ field: 'trade_in', quote: `${recentTradeIn.slice(0, 55)}; ano ${year}${mileageLabel ? `; ${mileageLabel}` : ''}`.slice(0, 100) }],
