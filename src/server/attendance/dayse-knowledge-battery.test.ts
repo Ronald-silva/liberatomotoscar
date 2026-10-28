@@ -384,5 +384,26 @@ describe('Bateria de Testes de Inteligência e Conhecimento da Dayse', () => {
       expect(res.handoffRequested).toBe(true);
       expect(res.handoffReason).toBe('financing');
     });
+
+    it('acolhe envio de fotos de veículo para avaliação no WhatsApp (com ou sem legenda) e aciona vendedor', async () => {
+      const res = await answerFromPlatformKnowledge(
+        '[MIDIA_WHATSAPP:VISUAL] Olha as fotos do meu carro para dar na troca na Saveiro',
+        mockSearchCatalog,
+      );
+      expect(res.matched).toBe(true);
+      expect(res.text).toContain('Recebi as imagens/mídia do seu veículo');
+      expect(res.text).toContain('Volkswagen Saveiro Robust');
+      expect(res.cards).toHaveLength(1);
+      expect(res.handoffRequested).toBe(true);
+      expect(res.handoffReason).toBe('trade_in');
+    });
+
+    it('acolhe envio de áudio no WhatsApp, orienta o cliente e destaca a conversa para o consultor', async () => {
+      const res = await answerFromPlatformKnowledge('[MIDIA_WHATSAPP:AUDIO]', mockSearchCatalog);
+      expect(res.matched).toBe(true);
+      expect(res.text).toContain('Recebi seu áudio');
+      expect(res.handoffRequested).toBe(true);
+      expect(res.handoffReason).toBe('visitor_request');
+    });
   });
 });

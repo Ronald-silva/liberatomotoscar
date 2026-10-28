@@ -27,6 +27,10 @@ export type MetaWebhookPayload = {
           timestamp: string;
           type: string;
           text?: { body?: string };
+          image?: { id?: string; caption?: string; mime_type?: string };
+          video?: { id?: string; caption?: string; mime_type?: string };
+          document?: { id?: string; caption?: string; filename?: string; mime_type?: string };
+          audio?: { id?: string; voice?: boolean; mime_type?: string };
         }>;
         /** Eventos de Coexistência: disparados quando o vendedor responde pelo WhatsApp Business no celular */
         message_echoes?: Array<{
@@ -180,15 +184,35 @@ export async function processMetaWebhookPayload(
         continue;
       }
 
-      // 2. Mensagens recebidas de clientes no WhatsApp
+      // 2. Mensagens recebidas de clientes no WhatsApp (Texto, Áudio, Fotos, Vídeos e Documentos)
       for (const incoming of value?.messages ?? []) {
-        if (incoming.type !== 'text' || !incoming.text?.body?.trim()) continue;
+        let normalizedText = '';
+        if (incoming.type === 'text' && incoming.text?.body?.trim()) {
+          normalizedText = incoming.text.body.trim();
+        } else if (incoming.type === 'audio') {
+          normalizedText = '[MIDIA_WHATSAPP:AUDIO]';
+        } else if (
+          incoming.type === 'image' ||
+          incoming.type === 'video' ||
+          incoming.type === 'document'
+        ) {
+          const caption =
+            incoming.image?.caption?.trim() ||
+            incoming.video?.caption?.trim() ||
+            incoming.document?.caption?.trim() ||
+            '';
+          normalizedText = caption
+            ? `[MIDIA_WHATSAPP:VISUAL] ${caption}`
+            : '[MIDIA_WHATSAPP:VISUAL]';
+        }
+
+        if (!normalizedText) continue;
 
         const replyBody = await runAgent({
           tenant,
           customerWaId: incoming.from,
           waMessageId: incoming.id,
-          text: incoming.text.body.trim(),
+          text: normalizedText,
         });
 
         if (replyBody) {

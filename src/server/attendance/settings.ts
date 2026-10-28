@@ -13,16 +13,16 @@ export class StaleAttendanceSettingError extends Error {
 }
 
 export function defaultSiteMode(): AttendanceMode {
-  return process.env.OPENROUTER_API_KEY?.trim() ? 'ai' : 'deterministic';
+  return 'ai';
 }
 
-// Sem linha no banco (ou se ficou 'disabled' de versão anterior), o canal permanece ativo (IA quando configurada, ou Chatbot determinístico).
+// Sem linha no banco (ou se ficou 'disabled' sem ação explícita de admin), o canal inicia com a Agente Dayse ('ai').
 export async function readSiteSetting() {
   try {
     await ensureAttendanceTables();
     const [row] = await getDb().select().from(channelSettings)
       .where(eq(channelSettings.channel, 'site')).limit(1);
-    if (!row || row.mode === 'disabled') {
+    if (!row || (row.mode === 'disabled' && !row.updatedBy)) {
       return { channel: 'site' as const, mode: defaultSiteMode(), version: row?.version ?? 1,
         updatedBy: row?.updatedBy ?? null, updatedAt: row?.updatedAt ?? null };
     }

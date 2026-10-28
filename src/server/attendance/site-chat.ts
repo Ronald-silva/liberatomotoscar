@@ -198,7 +198,20 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   const recentModelOrTitle = extractRecentModelContext(conversation, history);
 
   if (mode === 'deterministic') {
-    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle);
+    if (routed) return choiceReply(deps, routed);
+    if (hasInstitutionalQuestion(body)) {
+      const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle });
+      if (kb.matched) {
+        return {
+          sender: 'bot',
+          body: kb.text,
+          cards: kb.cards,
+          facts: kb.facts.length ? kb.facts : undefined,
+          handoffReason: kb.handoffReason,
+        };
+      }
+    }
+    return { sender: 'bot', body: deterministicMenuText, cards: [] };
   }
 
   const isDefaultAgent = deps.runAgent === siteChatDeps.runAgent;

@@ -451,6 +451,8 @@ export function isKnowledgeOrSpecificCatalogQuery(text: string): boolean {
 
 /** Verifica se a mensagem pergunta sobre dados institucionais da loja (endereço, telefone, horário, avaliação, venda). */
 export function hasInstitutionalQuestion(text: string): boolean {
+  const v = normalizePlain(text);
+  if (v.startsWith('[midia_whatsapp:')) return true;
   const intents = detectMessageIntents(text);
   return (
     intents.asksAddressOrLocation ||
@@ -481,6 +483,35 @@ export async function answerFromPlatformKnowledge(
   const facts: LeadFact[] = [];
   let handoffRequested = false;
   let handoffReason: HandoffReason | null = null;
+
+  // 0. Mídia enviada pelo cliente no WhatsApp (Áudio, Foto, Vídeo ou Documento para avaliação)
+  if (v.startsWith('[midia_whatsapp:audio]')) {
+    facts.push({ field: 'negotiation', quote: 'Cliente enviou áudio no WhatsApp' });
+    return {
+      matched: true,
+      isInstitutionalOnly: false,
+      text: `🎧 **Recebi seu áudio!**\nNosso consultor da **${STORE.name}** já consegue ouvi-lo diretamente no WhatsApp da loja e vai te responder em instantes.\n\nSe quiser que eu já te adiante fotos, preços ou ficha técnica de algum veículo do estoque agora mesmo, pode digitar o nome do modelo ou valor aqui embaixo!`,
+      cards: [],
+      facts,
+      handoffRequested: true,
+      handoffReason: 'visitor_request',
+      handoffUrl: null,
+      checkedAt,
+    };
+  }
+
+  if (v.startsWith('[midia_whatsapp:visual]')) {
+    const captionRaw = text.replace(/^\[MIDIA_WHATSAPP:VISUAL\]\s*/i, '').trim();
+    facts.push({
+      field: 'trade_in',
+      quote: captionRaw ? `Enviou foto/vídeo: ${captionRaw.slice(0, 80)}` : 'Enviou fotos/vídeo do veículo para avaliação',
+    });
+    paragraphs.push(
+      `📸 **Recebi as imagens/mídia do seu veículo!**\nComo a avaliação visual de troca e análise de documentos são feitas com todo cuidado pelo nosso avaliador, já destaquei sua conversa para a equipe da **${STORE.name}** conferir as fotos no aparelho da loja.\n\nPara agilizar sua avaliação, me confirme por texto:\n• **Marca, modelo e ano** do seu veículo\n• **Quilometragem aproximada**\n• Qual moto ou carro do nosso estoque você tem interesse na troca`,
+    );
+    handoffRequested = true;
+    handoffReason = 'trade_in';
+  }
 
   // 1. Saudação pura
   if (intents.asksGreetingOnly) {
@@ -518,7 +549,9 @@ export async function answerFromPlatformKnowledge(
 
   if (intents.asksHoursOrVisit) {
     paragraphs.push(
-      `🕒 **Visitas e horário de atendimento:**\nAtendemos presencialmente na nossa loja na **${STORE_ADDRESS_LINE}**. Como os horários em finais de semana ou feriados podem variar, recomendamos confirmar o horário de hoje ou agendar sua visita pelo WhatsApp **${STORE.phoneDisplay}**.`,
+      `🕒 **Visitas e horário de atendimento:**\nAtendemos presencialmente na nossa loja na **${STORE_ADDRESS_LINE}** (CEP ${STORE.postalCode}). Como os horários em finais de semana ou feriados podem variar, recomendamos confirmar o horário de hoje ou agendar sua visita pelo WhatsApp **${STORE.phoneDisplay}**.\n${
+        !intents.asksAddressOrLocation ? MAP_URL : ''
+      }`.trim(),
     );
     facts.push({ field: 'visit', quote: text.trim().slice(0, 100) });
   }

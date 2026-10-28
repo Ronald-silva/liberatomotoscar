@@ -8,8 +8,10 @@ import {
   type InboxFilter,
 } from '@/server/attendance/inbox';
 import { protocolOf } from '@/server/attendance/site-chat';
+import { readAdminSiteSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { InboxOperatorControls } from './InboxOperatorControls';
+import { SiteModeForm } from './SiteModeForm';
 import { WhatsAppOnboardingCard } from './WhatsAppOnboardingCard';
 import attendanceStyles from './attendance.module.css';
 
@@ -63,7 +65,14 @@ export default async function AttendancePage({
   const rawConversation = Array.isArray(resolved.conversa) ? resolved.conversa[0] : resolved.conversa;
   const filter: InboxFilter = inboxFilterSchema.parse(rawFilter);
 
-  const [counts, list, tenants] = await Promise.all([
+  const [setting, counts, list, tenants] = await Promise.all([
+    readAdminSiteSetting().catch(() => ({
+      channel: 'site' as const,
+      mode: 'ai' as const,
+      version: 1,
+      updatedBy: null,
+      updatedAt: null,
+    })),
     countInbox().catch(() => ({ waiting: 0, mine: 0, automation: 0 })),
     listInbox(filter).catch(() => []),
     listWhatsappTenants().catch(() => []),
@@ -118,6 +127,8 @@ export default async function AttendancePage({
           metaAppId={metaAppId}
           metaConfigId={metaConfigId}
         />
+
+        <SiteModeForm mode={setting.mode} version={setting.version} />
 
         <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
           <div className={attendanceStyles.inboxHeader}>
