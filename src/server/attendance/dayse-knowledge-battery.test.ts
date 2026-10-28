@@ -295,6 +295,7 @@ describe('Bateria de Testes de Inteligência e Conhecimento da Dayse', () => {
         readConversation: vi.fn(async () => conv),
         listMessages: vi.fn(async () => [...messages]),
         deterministic: vi.fn(),
+        knowledge: vi.fn((body, context) => answerFromPlatformKnowledge(body, mockSearchCatalog, context)),
         runAgent: vi.fn(),
         reserveAi: vi.fn(async () => ({ dayUtc: '2026-10-28' })),
         recordTokens: vi.fn(async () => undefined),

@@ -7,9 +7,13 @@ import { deterministicAnswer, deterministicChoices, deterministicMenuText, hando
   routeDeterministicText, type DeterministicChoice } from './deterministic';
 import {
   answerFromPlatformKnowledge,
+  detectMessageIntents,
   extractCustomerFirstName,
   hasInstitutionalQuestion,
   isKnowledgeOrSpecificCatalogQuery,
+  isTradeInClarification,
+  isTradeInYearFollowUp,
+  type KnowledgeReply,
 } from './knowledge';
 import { recordSiteAiTokens, reserveSiteAiRequest } from './limits';
 import { readSiteSetting, type AttendanceMode } from './settings';
@@ -63,6 +67,8 @@ export const siteChatDeps = {
   readConversation: repository.readConversation,
   listMessages: repository.listConversationMessages,
   deterministic: (choice: DeterministicChoice) => deterministicAnswer(choice),
+  knowledge: (body: string, context: { recentModelOrTitle?: string | null; recentTradeIn?: string | null; customerName?: string | null }): Promise<KnowledgeReply> =>
+    answerFromPlatformKnowledge(body, undefined, context),
   runAgent: (session: DemoSession, message: string, signal?: AbortSignal) => runDemoAgent(session, message, undefined, signal),
   reserveAi: () => reserveSiteAiRequest(),
   recordTokens: recordSiteAiTokens,
@@ -171,15 +177,24 @@ function extractRecentCustomerName(history: MessageRow[], explicitName?: string 
   return null;
 }
 
+function extractRecentTradeIn(conversation: ConversationRow, history: MessageRow[]): string | null {
+  const tradeFact = [...conversation.facts].reverse().find((fact) => fact.field === 'trade_in');
+  if (tradeFact) return tradeFact.quote;
+  const recentVisitors = history.filter((message) => message.sender === 'visitor').slice(-5).reverse();
+  return recentVisitors.find((message) => detectMessageIntents(message.body).asksTradeIn)?.body ?? null;
+}
+
 async function smartKnowledgeOrChoiceReply(
   deps: SiteChatDeps,
   body: string,
   routed: DeterministicChoice | null,
   recentModelOrTitle: string | null = null,
   customerName: string | null = null,
+  recentTradeIn: string | null = null,
 ): Promise<AutomatedReply> {
-  if (isKnowledgeOrSpecificCatalogQuery(body)) {
-    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
+  if (isKnowledgeOrSpecificCatalogQuery(body) || isTradeInYearFollowUp(body, recentTradeIn) ||
+    isTradeInClarification(body, recentTradeIn)) {
+    const kb = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
     if (kb.matched) {
       return {
         sender: 'bot',
@@ -191,7 +206,7 @@ async function smartKnowledgeOrChoiceReply(
     }
   }
   if (routed) return choiceReply(deps, routed);
-  const kbFallback = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
+  const kbFallback = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
   if (kbFallback.matched) {
     return {
       sender: 'bot',
@@ -215,12 +230,14 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   const messages = await deps.listMessages(conversation.id, 40).catch(() => []);
   const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
   const recentModelOrTitle = extractRecentModelContext(conversation, history);
+  const recentTradeIn = extractRecentTradeIn(conversation, history);
   const customerName = extractRecentCustomerName(history, explicitCustomerName);
 
   if (mode === 'deterministic') {
     if (routed) return choiceReply(deps, routed);
-    if (hasInstitutionalQuestion(body)) {
-      const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
+    if (hasInstitutionalQuestion(body) || isTradeInYearFollowUp(body, recentTradeIn) ||
+      isTradeInClarification(body, recentTradeIn)) {
+      const kb = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
       if (kb.matched) {
         return {
           sender: 'bot',
@@ -238,8 +255,10 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
 
   // Perguntas institucionais da plataforma (endereço, localização, telefone, horário, avaliação, venda)
   // e consultas diretas à base de conhecimento/catálogo em produção respondem com 100% de precisão.
-  if (hasInstitutionalQuestion(body) || (isDefaultAgent && isKnowledgeOrSpecificCatalogQuery(body))) {
-    const kb = await answerFromPlatformKnowledge(body, undefined, { recentModelOrTitle, customerName });
+  if (hasInstitutionalQuestion(body) || isTradeInYearFollowUp(body, recentTradeIn) ||
+    isTradeInClarification(body, recentTradeIn) ||
+    (isDefaultAgent && isKnowledgeOrSpecificCatalogQuery(body))) {
+    const kb = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
     if (kb.matched) {
       return {
         sender: 'ai',
@@ -253,7 +272,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
 
   const reservation = await deps.reserveAi();
   if (!reservation) {
-    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle, customerName);
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle, customerName, recentTradeIn);
   }
   try {
     const answer = await deps.runAgent(buildAgentSession(conversation, history), body, signal);
@@ -267,7 +286,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
     };
   } catch (error) {
     console.warn('Provedor IA indisponível no turno do site; usando base de conhecimento da Dayse:', error instanceof Error ? error.message : 'erro');
-    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle, customerName);
+    return smartKnowledgeOrChoiceReply(deps, body, routed, recentModelOrTitle, customerName, recentTradeIn);
   }
 }
 

@@ -5,8 +5,10 @@ vi.mock('@/server/authz', () => ({
   requireAdmin: vi.fn(),
 }));
 
-import type { ConversationRow, MessageRow } from './conversation-repository';
+import type { AutomatedReply, ConversationRow, MessageRow } from './conversation-repository';
 import { handoffPausesAutomation } from './conversation-repository';
+import { answerFromPlatformKnowledge, fallbackCatalogFromStatic } from './knowledge';
+import type { searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
 import {
   buildAgentSession,
   getSiteChatView,
@@ -16,6 +18,12 @@ import {
 } from './site-chat';
 
 const now = new Date('2026-10-27T20:00:00.000Z');
+const catalogItems = fallbackCatalogFromStatic();
+const searchFixtureCatalog: typeof searchAvailableVehicles = async (input) => ({
+  items: catalogItems.filter((item) => !input.type || item.type === input.type)
+    .slice(0, input.limit ?? 3).map((item) => ({ ...item, versionNumber: 1 })),
+  checkedAt: now.toISOString(),
+});
 const baseConversation: ConversationRow = {
   id: '89f8cf37-e8cf-4f11-93f6-c92ecae72c71',
   channel: 'site',
@@ -69,7 +77,7 @@ function makeDeps(overrides: Partial<SiteChatDeps> = {}): SiteChatDeps {
     }),
     reserveTurn: vi.fn(async () => storedConversation),
     releaseTurn: vi.fn(async () => undefined),
-    commit: vi.fn(async (_id, reply) => {
+    commit: vi.fn(async (_id: string, reply: AutomatedReply) => {
       const msg = makeMessage({
         sender: reply.sender,
         body: reply.body,
@@ -81,8 +89,12 @@ function makeDeps(overrides: Partial<SiteChatDeps> = {}): SiteChatDeps {
           owner: handoffPausesAutomation(reply.handoffReason) ? 'human' : 'automation',
           handoffRequestedAt: now };
       }
-      if (reply.facts) {
-        storedConversation = { ...storedConversation, facts: reply.facts };
+      const incomingFacts = reply.facts;
+      if (incomingFacts) {
+        storedConversation = { ...storedConversation, facts: [
+          ...storedConversation.facts.filter((old) => !incomingFacts.some((next) => next.field === old.field)),
+          ...incomingFacts,
+        ].slice(-7) };
       }
       return msg;
     }),
@@ -97,6 +109,7 @@ function makeDeps(overrides: Partial<SiteChatDeps> = {}): SiteChatDeps {
       handoffRequested: choice === 'human' || choice === 'financing' || choice === 'trade_in',
       handoffUrl: 'https://wa.me/5585999999999',
     })),
+    knowledge: vi.fn((body, context) => answerFromPlatformKnowledge(body, searchFixtureCatalog, context)),
     runAgent: vi.fn(async () => ({
       answer: 'Temos a Honda Titan publicada no estoque.',
       cards: [{
@@ -212,17 +225,51 @@ describe('orquestração de atendimento do site (P3)', () => {
   it('mantém a Dayse ativa após solicitar avaliação de troca até um vendedor assumir', async () => {
     const deps = makeDeps();
     const first = await handleSiteTurn('token', {
-      choice: 'trade_in', clientMessageId: '11111111-1111-4111-8111-111111111111',
+      message: 'Tenho uma Honda Pop pra dar de entrada', clientMessageId: '11111111-1111-4111-8111-111111111111',
     }, deps);
     expect(first.view.conversation).toMatchObject({ owner: 'automation', handoffRequested: true });
     const second = await handleSiteTurn('token', {
-      message: 'Minha Honda Pop é 2018', clientMessageId: '22222222-2222-4222-8222-222222222222',
+      message: '2018', clientMessageId: '22222222-2222-4222-8222-222222222222',
     }, deps);
     expect(second.view.messages).toHaveLength(4);
     expect(second.view.messages.at(-1)?.sender).toBe('bot');
+    expect(second.view.messages.at(-1)?.body).toContain('Honda Pop 2018');
     expect(second.view.conversation?.owner).toBe('automation');
     expect(handoffPausesAutomation('visitor_request')).toBe(true);
     expect(handoffPausesAutomation('financing')).toBe(false);
+  });
+
+  it('sustenta a conversa inteira de cama box, viagem, Pop na entrada e ano com quilometragem', async () => {
+    const deps = makeDeps({
+      readSetting: vi.fn(async () => ({ channel: 'site' as const, mode: 'ai' as const,
+        version: 1, updatedBy: null, updatedAt: now })),
+      reserveAi: vi.fn(async () => null),
+    });
+    const messages = [
+      'Boa tarde',
+      'Preciso de uma cama box',
+      'Estou precisando de uma moto para viagens longas',
+      'Tenho uma Honda Pop pra dar de entrada. Vcs aceitam?',
+      'ano 2000 e tem 700 km rodado',
+    ];
+    const replies = [];
+    for (const [index, message] of messages.entries()) {
+      replies.push(await handleSiteTurn('token', {
+        message, clientMessageId: `11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+        customerName: 'Ronald',
+      }, deps));
+    }
+    expect(replies[1]?.view.messages.at(-1)?.body).toContain('cama box');
+    expect(replies[2]?.view.messages.at(-1)?.body).toContain('viagens longas');
+    expect(replies[3]?.view.conversation).toMatchObject({ owner: 'automation', handoffRequested: true });
+    const last = replies[4]!.view;
+    expect(last.messages.at(-1)?.body).toContain('Honda Pop');
+    expect(last.messages.at(-1)?.body).toContain('ano 2000');
+    expect(last.messages.at(-1)?.body).toContain('700 km');
+    expect(last.messages.at(-1)?.body).not.toContain('Yamaha Fazer');
+    expect(last.messages.at(-1)?.cards).toHaveLength(0);
+    const stored = await deps.readConversation(baseConversation.id);
+    expect(stored?.facts).toContainEqual({ field: 'purpose', quote: 'viagens longas' });
   });
 
   it('suspende respostas automáticas quando a conversa pertence a um vendedor humano', async () => {

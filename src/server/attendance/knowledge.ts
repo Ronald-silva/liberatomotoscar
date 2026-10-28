@@ -293,6 +293,16 @@ export function extractEntryCents(text: string): number | null {
   return null;
 }
 
+export function isTradeInYearFollowUp(text: string, recentTradeIn?: string | null): boolean {
+  const v = normalizePlain(text);
+  return Boolean(recentTradeIn) && v.length <= 100 && /\b(?:19|20)\d{2}\b/.test(v) &&
+    !/\b(quero|procuro|busco|gostei|comprar|financ\w*)\b/.test(v);
+}
+
+export function isTradeInClarification(text: string, recentTradeIn?: string | null): boolean {
+  return Boolean(recentTradeIn) && /^\s*\?{2,}\s*$/.test(text);
+}
+
 const KNOWN_BRANDS = [
   { canonical: 'Honda', aliases: ['honda'] },
   { canonical: 'Yamaha', aliases: ['yamaha'] },
@@ -562,7 +572,7 @@ export function hasInstitutionalQuestion(text: string): boolean {
 export async function answerFromPlatformKnowledge(
   text: string,
   searchFn: typeof searchAvailableVehicles = searchAvailableVehicles,
-  context?: { recentModelOrTitle?: string | null; customerName?: string | null },
+  context?: { recentModelOrTitle?: string | null; recentTradeIn?: string | null; customerName?: string | null },
 ): Promise<KnowledgeReply> {
   const v = normalizePlain(text);
   const intents = detectMessageIntents(text);
@@ -612,6 +622,50 @@ export async function answerFromPlatformKnowledge(
     );
     handoffRequested = true;
     handoffReason = 'trade_in';
+  }
+
+  const recentTradeIn = context?.recentTradeIn;
+  if (recentTradeIn && isTradeInClarification(text, recentTradeIn)) {
+    const offeredModel = [...catalog, ...INVENTORY_VEHICLES].find((item) => item.model &&
+      new RegExp(`\\b${normalizePlain(item.model)}\\b`).test(normalizePlain(recentTradeIn)));
+    const offeredVehicle = offeredModel
+      ? [offeredModel.brand, offeredModel.model].filter(Boolean).join(' ')
+      : 'sua moto ou carro';
+    return {
+      matched: true,
+      isInstitutionalOnly: false,
+      text: `Desculpe a demora${nameGreeting}. **Sim, aceitamos ${offeredVehicle} como entrada**, mediante avaliação da loja. Qual é o **ano** do seu veículo? Se souber, pode me passar também a quilometragem.`,
+      cards: [],
+      facts: [{ field: 'trade_in', quote: recentTradeIn.slice(0, 100) }],
+      handoffRequested: true,
+      handoffReason: 'trade_in',
+      handoffUrl: null,
+      checkedAt,
+    };
+  }
+  if (recentTradeIn && isTradeInYearFollowUp(text, recentTradeIn)) {
+    const year = v.match(/\b(?:19|20)\d{2}\b/)![0];
+    const mileageMatch = v.match(/\b(\d{1,3}(?:\.\d{3})*|\d{4,6})\s*km\b/);
+    const mileageKm = mileageMatch ? Number(mileageMatch[1]!.replace(/\./g, '')) : null;
+    const mileageLabel = mileageKm !== null ? formatKilometers(mileageKm) : null;
+    const offeredModel = [...catalog, ...INVENTORY_VEHICLES].find((item) => item.model &&
+      new RegExp(`\\b${normalizePlain(item.model)}\\b`).test(normalizePlain(recentTradeIn)));
+    const offeredVehicle = offeredModel
+      ? [offeredModel.brand, offeredModel.model].filter(Boolean).join(' ')
+      : 'seu veículo';
+    return {
+      matched: true,
+      isInstitutionalOnly: false,
+      text: mileageLabel
+        ? `Perfeito${nameGreeting}! Anotei os dados que você informou para avaliar sua **${offeredVehicle} como entrada**: **ano ${year}** e **${mileageLabel}**. Confirma se o ano e a quilometragem estão corretos? A equipe confere o documento e o estado da moto antes de definir o valor. Qual moto ou carro do nosso estoque você quer negociar?`
+        : `Perfeito${nameGreeting}! Anotei **${offeredVehicle} ${year}** para avaliação como entrada. Se souber, me diga a **quilometragem aproximada** e qual moto ou carro do nosso estoque você quer negociar. A equipe confirma o valor da sua usada após a avaliação.`,
+      cards: [],
+      facts: [{ field: 'trade_in', quote: `${recentTradeIn.slice(0, 55)}; ano ${year}${mileageLabel ? `; ${mileageLabel}` : ''}`.slice(0, 100) }],
+      handoffRequested: true,
+      handoffReason: 'trade_in',
+      handoffUrl: null,
+      checkedAt,
+    };
   }
 
   // 1. Saudação pura (espelhando Bom dia / Boa tarde / Boa noite + nome do cliente)

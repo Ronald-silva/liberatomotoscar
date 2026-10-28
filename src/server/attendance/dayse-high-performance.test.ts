@@ -114,6 +114,41 @@ describe('Dayse Alta Performance — financiamento, nome e WhatsApp', () => {
     }
   });
 
+  it('entende o ano enviado sozinho como continuação da avaliação da Honda Pop', async () => {
+    const res = await answerFromPlatformKnowledge('2018', mockSearchCatalog, {
+      recentTradeIn: 'Tenho uma Honda Pop pra dar de entrada', recentModelOrTitle: 'Yamaha Fazer',
+    });
+    expect(res.text).toContain('Honda Pop 2018');
+    expect(res.text).toContain('quilometragem aproximada');
+    expect(res.text).not.toContain('Yamaha Fazer');
+    expect(res.cards).toHaveLength(0);
+    expect(res.handoffReason).toBe('trade_in');
+  });
+
+  it('registra ano e quilometragem juntos como dados da Pop, sem puxar a Fazer', async () => {
+    const res = await answerFromPlatformKnowledge('ano 2000 e tem 700 km rodado', mockSearchCatalog, {
+      recentTradeIn: 'Tenho uma Honda Pop pra dar de entrada', recentModelOrTitle: 'Yamaha Fazer',
+      customerName: 'Ronald',
+    });
+    expect(res.text).toContain('Honda Pop');
+    expect(res.text).toContain('ano 2000');
+    expect(res.text).toContain('700 km');
+    expect(res.text).toContain('Confirma se o ano e a quilometragem estão corretos?');
+    expect(res.text).not.toContain('Yamaha Fazer');
+    expect(res.cards).toHaveLength(0);
+    expect(res.facts[0]?.quote).toContain('700 km');
+  });
+
+  it('retoma a pergunta sobre a Pop quando o cliente escreve apenas ????', async () => {
+    const res = await answerFromPlatformKnowledge('????', mockSearchCatalog, {
+      recentTradeIn: 'Tenho uma Honda Pop pra dar de entrada',
+    });
+    expect(res.text).toContain('aceitamos Honda Pop como entrada');
+    expect(res.text).toContain('ano');
+    expect(res.cards).toHaveLength(0);
+    expect(res.handoffReason).toBe('trade_in');
+  });
+
   it('prioriza a Lander publicada para viagens longas e pede dados úteis para a indicação', async () => {
     const onlyLiveBikes: typeof searchAvailableVehicles = async (input) => ({
       items: input.type === 'car' ? [] : [
