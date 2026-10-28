@@ -41,17 +41,17 @@ export function DangerActions({ vehicleId, draft, canDiscard, archiveTargetAvail
     <p className={styles.description}>Estas ações são opcionais e separadas da publicação.</p>
     {confirming ? <>
       <p className={styles.notice} role="alert">{confirming === 'discard'
-        ? 'Excluir este rascunho? As fotos enviadas serão apagadas e esta ação não pode ser desfeita.'
+        ? 'Excluir este veículo? As fotos enviadas serão apagadas e esta ação não pode ser desfeita.'
         : 'Arquivar este anúncio? Ele sairá do catálogo público. Para voltar a publicar, abra o rascunho novamente.'}</p>
-      <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy}
-        onClick={() => void execute()}>{busy ? 'Aguarde...' : confirming === 'discard' ? 'Sim, excluir rascunho' : 'Sim, arquivar'}</button>
+      <button className={confirming === 'discard' ? styles.button : `${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy}
+        onClick={() => void execute()}>{busy ? 'Aguarde...' : confirming === 'discard' ? 'Sim, excluir veículo' : 'Sim, arquivar'}</button>
       <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy}
         onClick={() => setConfirming(null)}>Cancelar</button>
     </> : <>
       {archiveTargetAvailable ? <button className={`${styles.button} ${styles.buttonSecondary}`} type="button"
         onClick={() => setConfirming('archive')}>Arquivar</button> : null}
       {canDiscard ? <button className={`${styles.button} ${styles.buttonSecondary}`} type="button"
-        onClick={() => setConfirming('discard')}>Excluir rascunho</button> : null}
+        onClick={() => setConfirming('discard')}>Excluir veículo</button> : null}
     </>}
     <FormNotice message={message} vehicleId={vehicleId} />
   </section>;

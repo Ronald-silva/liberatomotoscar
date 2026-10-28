@@ -28,8 +28,8 @@ it('ordena as três seções e mantém uma ação principal no rodapé', () => {
   expect(publish.compareDocumentPosition(management) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(publish.disabled).toBe(true);
   expect(screen.getByText(/Para publicar, complete: Pelo menos uma foto/)).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Excluir rascunho' })).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'Excluir rascunho' }));
+  expect(screen.getByRole('button', { name: 'Excluir veículo' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir veículo' }));
   expect(screen.getByText(/As fotos enviadas serão apagadas/)).toBeTruthy();
 });
 
@@ -46,18 +46,18 @@ it('pede confirmação de disponibilidade e publica com a versão atual', async 
   await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   expect(screen.getByText('Anúncio publicado. Situação: Publicado.')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Situação: Publicado' })).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Excluir rascunho' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Excluir veículo' })).toBeTruthy();
   expect((screen.getByRole('link', { name: 'Ver anúncio público' }) as HTMLAnchorElement).getAttribute('href'))
     .toBe('/veiculos/honda-cg-160-teste');
 });
 
-it('mostra anúncio publicado sem etapas nem rodapé e sem exclusão', () => {
-  render(<VehicleEditor {...props} status="published" isNew={false} canDiscard={false}
+it('mostra anúncio publicado sem etapas nem rodapé e mantém opção de exclusão quando habilitada', () => {
+  render(<VehicleEditor {...props} status="published" isNew={false} canDiscard={true}
     targets={['reserved', 'sold', 'archived']} initialMissing={[]} />);
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Honda CG 160');
   expect(screen.getByRole('heading', { name: 'O veículo' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Publicar anúncio' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Excluir rascunho' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Excluir veículo' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Reservar' })).toBeTruthy();
 });
 

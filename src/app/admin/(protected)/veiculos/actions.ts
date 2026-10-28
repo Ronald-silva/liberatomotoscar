@@ -107,9 +107,9 @@ export async function discardVehicleDraft(_state: FormState, formData: FormData)
   } catch (error) {
     return { message: toFormMessage(error) };
   }
-  // O rascunho já foi excluído aqui: falha ao revalidar não pode virar mensagem de erro, ou a
+  // O veículo já foi excluído aqui: falha ao revalidar não pode virar mensagem de erro, ou a
   // pessoa ficaria numa tela de um anúncio que não existe mais. A lista se corrige na próxima navegação.
-  try { revalidatePath('/admin'); } catch { /* ver acima */ }
+  try { revalidatePath('/admin'); revalidatePath('/'); revalidatePath('/veiculos/[slug]', 'page'); } catch { /* ver acima */ }
   redirect('/admin'); // redirect lança: um catch o engoliria
 }
 

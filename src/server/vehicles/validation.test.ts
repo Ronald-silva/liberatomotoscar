@@ -86,10 +86,11 @@ describe('requisitos de publicação', () => {
     }
   });
 
-  it('permite excluir apenas rascunho nunca publicado', () => {
+  it('permite excluir qualquer veículo que ainda não tenha sido descartado', () => {
     expect(isDiscardable({ status: 'draft', publishedAt: null })).toBe(true);
-    expect(isDiscardable({ status: 'draft', publishedAt: new Date() })).toBe(false);
-    expect(isDiscardable({ status: 'published', publishedAt: new Date() })).toBe(false);
-    expect(isDiscardable({ status: 'archived', publishedAt: null })).toBe(false);
+    expect(isDiscardable({ status: 'draft', publishedAt: new Date() })).toBe(true);
+    expect(isDiscardable({ status: 'published', publishedAt: new Date() })).toBe(true);
+    expect(isDiscardable({ status: 'archived', publishedAt: null })).toBe(true);
+    expect(isDiscardable({ status: 'discarded', publishedAt: null })).toBe(false);
   });
 });

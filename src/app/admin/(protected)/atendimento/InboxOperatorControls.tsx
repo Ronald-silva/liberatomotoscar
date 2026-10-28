@@ -39,6 +39,9 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
             <button type="submit" name="intent" value="close" className={attendanceStyles.secondaryButton} disabled={pending}>
               Encerrar conversa
             </button>
+            <button type="submit" name="intent" value="delete" className={attendanceStyles.secondaryButton} disabled={pending}>
+              Excluir conversa
+            </button>
           </form>
 
           {takenByOther ? (
@@ -81,7 +84,13 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
           )}
         </>
       ) : (
-        <p className={attendanceStyles.current}>Esta conversa foi encerrada e permanece apenas para consulta.</p>
+        <form action={action} className={attendanceStyles.operatorButtons}>
+          <input type="hidden" name="conversationId" value={conversationId} />
+          <p className={attendanceStyles.current}>Esta conversa foi encerrada.</p>
+          <button type="submit" name="intent" value="delete" className={attendanceStyles.secondaryButton} disabled={pending}>
+            Excluir conversa
+          </button>
+        </form>
       )}
       {state.message ? (
         <p role="status" aria-live="polite" className={state.error ? attendanceStyles.error : attendanceStyles.success}>

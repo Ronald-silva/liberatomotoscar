@@ -144,7 +144,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
       <StatusActions vehicleId={vehicleId} draft={draft} status={publishedNow ? 'published' : status}
         targets={publishedNow ? [] : targets} />
 
-      <DangerActions vehicleId={vehicleId} draft={draft} canDiscard={canDiscard && !publishedNow}
+      <DangerActions vehicleId={vehicleId} draft={draft} canDiscard={canDiscard}
         archiveTargetAvailable={!publishedNow && targets.includes('archived')} />
       <FormNotice message={publishMessage} vehicleId={vehicleId} role="alert" />
     </div>

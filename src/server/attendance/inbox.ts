@@ -26,7 +26,7 @@ export async function listInbox(filter: InboxFilter) {
     assignedTo: conversations.assignedTo, facts: conversations.facts, visitorTurns: conversations.visitorTurns,
     handoffRequestedAt: conversations.handoffRequestedAt, lastMessageAt: conversations.lastMessageAt,
     createdAt: conversations.createdAt,
-  }).from(conversations).where(and(eq(conversations.channel, 'site'), where))
+  }).from(conversations).where(where)
     .orderBy(desc(conversations.lastMessageAt)).limit(50);
 }
 
@@ -36,7 +36,7 @@ export async function countInbox() {
     waiting: sql<number>`count(*) filter (where ${conversations.owner} = 'human' and ${conversations.assignedTo} is null)::int`,
     mine: sql<number>`count(*) filter (where ${conversations.assignedTo} = ${admin.userId})::int`,
     automation: sql<number>`count(*) filter (where ${conversations.owner} = 'automation')::int`,
-  }).from(conversations).where(and(eq(conversations.channel, 'site'), eq(conversations.status, 'open')));
+  }).from(conversations).where(eq(conversations.status, 'open'));
   return row ?? { waiting: 0, mine: 0, automation: 0 };
 }
 
@@ -45,7 +45,7 @@ export async function getInboxConversation(id: string) {
   const parsed = conversationId.safeParse(id);
   if (!parsed.success) return null;
   const conversation = await repository.readConversation(parsed.data);
-  if (!conversation || conversation.channel !== 'site') return null;
+  if (!conversation) return null;
   const [messages, events] = await Promise.all([
     repository.listConversationMessages(conversation.id, 200),
     repository.listConversationHandoffs(conversation.id),
@@ -71,4 +71,10 @@ export async function closeInboxConversation(id: string) {
 export async function replyToInboxConversation(id: string, body: unknown) {
   const admin = await requireAdmin();
   return repository.appendHumanReplyAs(conversationId.parse(id), admin.userId, replyBody.parse(body));
+}
+
+export async function deleteInboxConversation(id: string) {
+  await requireAdmin();
+  const parsedId = conversationId.parse(id);
+  await getDb().delete(conversations).where(eq(conversations.id, parsedId));
 }

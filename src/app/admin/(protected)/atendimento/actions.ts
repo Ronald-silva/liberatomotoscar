@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import {
   assumeInboxConversation,
   closeInboxConversation,
+  deleteInboxConversation,
   releaseInboxConversation,
   replyToInboxConversation,
 } from '@/server/attendance/inbox';
@@ -52,6 +53,11 @@ export async function operateInboxConversation(_previous: InboxActionState, form
       await closeInboxConversation(id);
       revalidateAttendance();
       return { message: 'Conversa encerrada.', error: false };
+    }
+    if (intent === 'delete') {
+      await deleteInboxConversation(id);
+      revalidateAttendance();
+      return { message: 'Conversa excluída.', error: false };
     }
     if (intent === 'reply') {
       await replyToInboxConversation(id, formData.get('body'));

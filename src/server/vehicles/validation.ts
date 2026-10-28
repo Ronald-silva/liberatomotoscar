@@ -35,10 +35,9 @@ export function assertStatusTransition(current: z.infer<typeof vehicleStatus>, n
   }
 }
 
-// Só rascunhos nunca publicados podem ser descartados. Anúncios com histórico
-// comercial permanecem arquiváveis, com fotos e auditoria preservadas.
+// Qualquer veículo ativo (rascunho, publicado, reservado, vendido ou arquivado) pode ser excluído pelo administrador.
 export function isDiscardable(vehicle: { status: string; publishedAt?: Date | null }): boolean {
-  return vehicle.status === 'draft' && vehicle.publishedAt == null;
+  return vehicle.status !== 'discarded';
 }
 
 type Publishable = { brand: string | null; model: string | null; priceCents: number | null };
