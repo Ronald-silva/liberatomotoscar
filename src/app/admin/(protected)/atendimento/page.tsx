@@ -114,6 +114,7 @@ export default async function AttendancePage({
     .replace(/['"\s]/g, '')
     .trim();
   const metaConfigId = !/^\d{10,25}$/.test(rawConfigId) ? '1590518199231570' : rawConfigId;
+  const testTenant = tenants.find((tenant) => tenant.tenantId === TEST_TENANT_ID && tenant.isActive);
 
   return (
     <main id="conteudo" className={attendanceStyles.screen}>
@@ -132,7 +133,9 @@ export default async function AttendancePage({
 
         <MetaTestNumberForm
           webhookUrl={process.env.WHATSAPP_WEBHOOK_CALLBACK_URL || TEST_WEBHOOK_URL}
-          currentTestNumber={tenants.find((tenant) => tenant.tenantId === TEST_TENANT_ID && tenant.isActive)?.displayPhoneNumber ?? null}
+          currentTestNumber={testTenant?.displayPhoneNumber ?? testTenant?.whatsappPhoneNumberId ?? null}
+          phoneNumberId={testTenant?.whatsappPhoneNumberId ?? null}
+          wabaId={testTenant?.wabaId ?? null}
         />
 
         <SiteModeForm mode={setting.mode} version={setting.version} />

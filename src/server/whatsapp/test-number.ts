@@ -1,6 +1,10 @@
 import { STORE } from '@/data/store';
-import { encryptAccessToken } from './crypto';
-import { defaultUpsertTenant, listWhatsappTenants, type EmbeddedSignupDeps } from './embedded-signup';
+import { and, desc, eq } from 'drizzle-orm';
+import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
+import { getDb } from '@/server/db/client';
+import { whatsappTenants } from '@/server/db/schema';
+import { decryptAccessToken, encryptAccessToken } from './crypto';
+import { defaultUpsertTenant, listWhatsappTenants, type EmbeddedSignupDeps, type WhatsappTenantRow } from './embedded-signup';
 
 export type RegisterTestNumberInput = {
   phoneNumberId: string;
@@ -16,6 +20,46 @@ export type RegisterTestNumberDeps = Pick<EmbeddedSignupDeps, 'apiVersion' | 'en
 
 export const TEST_TENANT_ID = 'liberato-motos-car-teste';
 export const TEST_WEBHOOK_URL = 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp';
+
+/** Diagnóstico de leitura: confirma se o token salvo ainda acessa o número de teste. */
+export async function checkMetaTestNumberStatus(deps: {
+  fetchImpl?: typeof fetch;
+  loadTenant?: () => Promise<Pick<WhatsappTenantRow, 'encryptedAccessToken' | 'whatsappPhoneNumberId'> | null>;
+  decryptToken?: (encrypted: string) => string;
+  apiVersion?: string;
+} = {}) {
+  const loadTenant = deps.loadTenant ?? (async () => {
+    await ensureAttendanceTables();
+    const [row] = await getDb().select().from(whatsappTenants)
+      .where(and(eq(whatsappTenants.tenantId, TEST_TENANT_ID), eq(whatsappTenants.isActive, true)))
+      .orderBy(desc(whatsappTenants.updatedAt)).limit(1);
+    return row ?? null;
+  });
+  const tenant = await loadTenant();
+  if (!tenant) return { ok: false, message: 'Nenhum número de teste está cadastrado. Preencha os dados de API Setup abaixo.' };
+
+  let token: string;
+  try {
+    token = (deps.decryptToken ?? decryptAccessToken)(tenant.encryptedAccessToken);
+  } catch {
+    return { ok: false, message: 'Não foi possível ler o token salvo. Cadastre um novo token de API Setup abaixo.' };
+  }
+
+  const version = (deps.apiVersion || process.env.META_GRAPH_API_VERSION || 'v21.0').trim();
+  const response = await (deps.fetchImpl ?? fetch)(
+    `https://graph.facebook.com/${version}/${tenant.whatsappPhoneNumberId}?fields=id`,
+    { method: 'GET', headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+  );
+  const data = (await response.json().catch(() => ({}))) as { id?: string; error?: { code?: number } };
+  if (response.ok && data.id === tenant.whatsappPhoneNumberId) {
+    return { ok: true, message: 'Token válido para o número de teste. Envie uma mensagem do celular verificado em “To” para testar a Dayse.' };
+  }
+  if (data.error?.code === 190) {
+    return { ok: false, message: 'O token do número de teste expirou ou foi invalidado. Gere outro em WhatsApp → API Setup e salve abaixo.' };
+  }
+  const code = Number.isInteger(data.error?.code) ? `, código Meta ${data.error?.code}` : '';
+  return { ok: false, message: `A Meta não confirmou o número de teste (HTTP ${response.status}${code}). Confira os IDs e as permissões em API Setup.` };
+}
 
 /**
  * Registra o número de teste gratuito da Meta (WhatsApp → API Setup) para validar a Dayse
@@ -38,6 +82,9 @@ export async function registerMetaTestNumber(input: RegisterTestNumberInput, dep
     (tenant.wabaId === wabaId || tenant.whatsappPhoneNumberId === phoneNumberId))) {
     throw new Error('Esta conta ou número já está conectado à loja. Use somente os IDs do número de teste da Meta.');
   }
+  const renewingExistingNumber = existingTenants.some((tenant) => tenant.isActive &&
+    tenant.tenantId === TEST_TENANT_ID && tenant.wabaId === wabaId &&
+    tenant.whatsappPhoneNumberId === phoneNumberId);
   const auth = { Authorization: `Bearer ${accessToken}` };
 
   // 1. Confirma que o token enxerga esse número (e obtém o número exibido)
@@ -47,9 +94,26 @@ export async function registerMetaTestNumber(input: RegisterTestNumberInput, dep
   );
   const phoneData = (await phoneRes.json().catch(() => ({}))) as {
     display_phone_number?: string;
+    error?: { code?: number; error_subcode?: number };
   };
   if (!phoneRes.ok) {
-    throw new Error(`A Meta recusou o token ou o número (HTTP ${phoneRes.status}). Confira os dados em API Setup.`);
+    if (phoneData.error?.code === 190) throw new Error('O token informado expirou ou é inválido. Gere um novo em API Setup.');
+    const code = Number.isInteger(phoneData.error?.code) ? `, código Meta ${phoneData.error?.code}` : '';
+    throw new Error(`A Meta recusou o token ou o número (HTTP ${phoneRes.status}${code}). Confira os dados em API Setup.`);
+  }
+
+  // Na renovação do mesmo número, o webhook já está inscrito. A validação do
+  // phone_number_id com o token novo basta para trocar a credencial de envio.
+  if (renewingExistingNumber) {
+    return upsert({
+      tenantId: TEST_TENANT_ID,
+      tenantName: `${STORE.name} (Número de teste Meta)`,
+      wabaId,
+      whatsappPhoneNumberId: phoneNumberId,
+      displayPhoneNumber: phoneData.display_phone_number ?? null,
+      encryptedAccessToken: encryptAccessToken(accessToken, deps.encryptionKeyHex),
+      coexistenceEnabled: false,
+    });
   }
 
   // Confirma que o número pertence à WABA informada antes de inscrever o app nela.

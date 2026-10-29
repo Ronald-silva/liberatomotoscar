@@ -33,6 +33,15 @@ export async function readSiteSetting() {
   }
 }
 
+/** O canal WhatsApp tem modo próprio; uma mudança no chat do site não altera o teste da Dayse. */
+export async function readWhatsappSetting() {
+  await ensureAttendanceTables();
+  const [row] = await getDb().select().from(channelSettings)
+    .where(eq(channelSettings.channel, 'whatsapp')).limit(1);
+  return row ?? { channel: 'whatsapp' as const, mode: 'ai' as const, version: 1,
+    updatedBy: null, updatedAt: null };
+}
+
 export async function readAdminSiteSetting() {
   await requireAdmin();
   return readSiteSetting();

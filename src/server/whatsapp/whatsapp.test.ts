@@ -304,6 +304,21 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
     }
   });
 
+  it('prioriza o token renovado no banco mesmo quando o ambiente ainda tem token de teste antigo', async () => {
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', '1234567890123');
+    vi.stubEnv('WHATSAPP_WABA_ID', '9876543210987');
+    vi.stubEnv('WHATSAPP_TOKEN', 'TOKEN_ANTIGO');
+    try {
+      const tenant = {
+        tenantId: TEST_TENANT_ID, wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',
+        isActive: true, encryptedAccessToken: 'token-renovado-criptografado',
+      } as WhatsappTenantRow;
+      expect(await resolveWebhookTenant('1234567890123', async () => tenant)).toBe(tenant);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('não contabiliza o envio quando a Meta não devolve ID da mensagem', async () => {
     const tenant = {
       tenantId: TEST_TENANT_ID, wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',

@@ -10,7 +10,7 @@ import {
 } from '@/server/attendance/inbox';
 import { setSiteMode, type AttendanceMode } from '@/server/attendance/settings';
 import { requireAdmin } from '@/server/authz';
-import { registerMetaTestNumber } from '@/server/whatsapp/test-number';
+import { checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
 
 export type ModeFormState = { mode: AttendanceMode; version: number; message: string | null; error: boolean };
 export type InboxActionState = { message: string | null; error: boolean };
@@ -30,11 +30,22 @@ export async function connectMetaTestNumber(_previous: TestNumberState, formData
     });
     revalidateAttendance();
     return {
-      message: `Número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId} registrado. Confira o webhook no painel da Meta e mande “Boa tarde” do seu celular para ele.`,
+      message: `Token salvo e validado para o número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId}. Envie “Boa tarde” do celular verificado em “To” para testar a Dayse.`,
       error: false,
     };
   } catch (error) {
     return { message: error instanceof Error ? error.message : 'Não foi possível conectar o número de teste.', error: true };
+  }
+}
+
+export async function verifyMetaTestNumber(_previous: TestNumberState): Promise<TestNumberState> {
+  void _previous;
+  try {
+    await requireAdmin();
+    const status = await checkMetaTestNumberStatus();
+    return { message: status.message, error: !status.ok };
+  } catch {
+    return { message: 'Não foi possível consultar a Meta agora. Tente novamente.', error: true };
   }
 }
 

@@ -73,7 +73,12 @@ export const siteChatDeps = {
   reserveAi: () => reserveSiteAiRequest(),
   recordTokens: recordSiteAiTokens,
 };
-export type SiteChatDeps = typeof siteChatDeps;
+export type SiteChatDeps = Omit<typeof siteChatDeps, 'readSetting'> & {
+  readSetting: () => Promise<{ mode: AttendanceMode }>;
+  maxVisitorTurns?: number;
+  failClosedOnPersistenceError?: boolean;
+  skipViewAfterTurn?: boolean;
+};
 
 export function protocolOf(conversationId: string) {
   return conversationId.replace(/-/g, '').slice(0, 8).toUpperCase();
@@ -295,13 +300,14 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
  * compare-and-swap e só a publica se a automação ainda for dona da conversa.
  */
 export async function handleSiteTurn(token: string | null, input: SiteTurnInput, deps: SiteChatDeps = siteChatDeps,
-  signal?: AbortSignal): Promise<{ token: string | null; view: SiteChatView }> {
+  signal?: AbortSignal): Promise<{ token: string | null; view: SiteChatView; replyMessageId: string | null }> {
   const choice = input.choice;
   const body = choice ? deterministicChoices.find((item) => item.id === choice)!.label : input.message?.trim() ?? '';
   if (!body || body.length > 1000) throw new SiteChatError('Escreva uma mensagem de até 1.000 caracteres.', 400, 'invalid_message');
 
   const setting = await deps.readSetting();
   let conversation = token ? await deps.findByToken(token).catch(() => null) : null;
+  let reservedConversationId: string | null = null;
   // Desativado: nenhuma resposta automática. Uma conversa já assumida por vendedor continua.
   if (setting.mode === 'disabled' && conversation?.owner !== 'human') {
     throw new SiteChatError('O atendimento automático está desativado. Fale com a loja pelo WhatsApp.', 409, 'disabled');
@@ -314,35 +320,59 @@ export async function handleSiteTurn(token: string | null, input: SiteTurnInput,
       newToken = created.token;
     }
     if (conversation.status === 'closed') throw new SiteChatError('Esta conversa foi encerrada. Inicie uma nova conversa.', 409, 'closed');
-    if (conversation.visitorTurns >= repository.MAX_VISITOR_TURNS) {
+    if (conversation.visitorTurns >= (deps.maxVisitorTurns ?? repository.MAX_VISITOR_TURNS)) {
       throw new SiteChatError('Esta conversa chegou ao limite de mensagens. Continue pelo WhatsApp.', 429, 'turn_limit');
     }
 
     const activeConversation = conversation;
-    const appended = await deps.appendVisitor(activeConversation.id, body, input.clientMessageId);
-    const finish = async () => ({ token: newToken, view: await currentView(deps, setting.mode, activeConversation.id) });
-    if (appended.duplicate || activeConversation.owner === 'human' || setting.mode === 'disabled') return finish();
-
-    const reserved = await deps.reserveTurn(activeConversation.id);
-    if (!reserved) return finish();
-
-    let reply: AutomatedReply;
-    try {
-      reply = await generateReply(deps, setting.mode, reserved, body, choice, signal, input.customerName);
-    } catch (error) {
-      await deps.releaseTurn(activeConversation.id).catch(() => undefined);
-      throw error;
+    const finish = async (committed: MessageRow | null = null) => ({
+      token: newToken,
+      view: deps.skipViewAfterTurn
+        ? toView(setting.mode, activeConversation, committed ? [committed] : [])
+        : await currentView(deps, setting.mode, activeConversation.id),
+      replyMessageId: committed?.id ?? null,
+    });
+    const automated = activeConversation.owner !== 'human' && setting.mode !== 'disabled';
+    // No webhook, não confirmar a entrega antes de reservar o turno. Assim a Meta
+    // pode reenviar o evento quando outra mensagem do mesmo cliente ainda está em andamento.
+    let reserved = deps.failClosedOnPersistenceError && automated
+      ? await deps.reserveTurn(activeConversation.id)
+      : null;
+    if (reserved) reservedConversationId = activeConversation.id;
+    if (deps.failClosedOnPersistenceError && automated && !reserved) {
+      throw new Error('Conversa do WhatsApp ocupada; evento deve ser reenviado.');
     }
+
+    const appended = await deps.appendVisitor(activeConversation.id, body, input.clientMessageId);
+    if (appended.duplicate || !automated) {
+      if (reservedConversationId) await deps.releaseTurn(reservedConversationId);
+      reservedConversationId = null;
+      return finish();
+    }
+
+    if (!reserved) reserved = await deps.reserveTurn(activeConversation.id);
+    if (!reserved) return finish();
+    reservedConversationId = activeConversation.id;
+    if (setting.mode === 'disabled') {
+      await deps.releaseTurn(activeConversation.id);
+      reservedConversationId = null;
+      return finish();
+    }
+
+    const reply = await generateReply(deps, setting.mode, reserved, body, choice, signal, input.customerName);
     // Troca de modo vale no próximo turno, mas desativar impede qualquer nova emissão.
     const latest = await deps.readSetting();
     if (latest.mode === 'disabled') {
-      await deps.releaseTurn(activeConversation.id).catch(() => undefined);
+      await deps.releaseTurn(activeConversation.id);
+      reservedConversationId = null;
       return finish();
     }
-    await deps.commit(activeConversation.id, reply);
-    return finish();
+    const committed = await deps.commit(activeConversation.id, reply);
+    reservedConversationId = null;
+    return finish(committed);
   } catch (error) {
-    if (error instanceof SiteChatError) throw error;
+    if (reservedConversationId) await deps.releaseTurn(reservedConversationId).catch(() => undefined);
+    if (error instanceof SiteChatError || deps.failClosedOnPersistenceError) throw error;
     console.warn('Persistência de conversa indisponível; respondendo em modo resiliente:', error instanceof Error ? error.message : 'erro');
     const now = new Date();
     const fallbackConv: ConversationRow = conversation ?? {
@@ -368,6 +398,7 @@ export async function handleSiteTurn(token: string | null, input: SiteTurnInput,
       : await smartKnowledgeOrChoiceReply(deps, body, routed, null, input.customerName ?? null);
     return {
       token: null,
+      replyMessageId: null,
       view: toView(setting.mode, null, [
         {
           id: input.clientMessageId,

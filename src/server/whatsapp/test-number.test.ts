@@ -7,9 +7,9 @@ vi.mock('@/server/authz', () => ({
 }));
 
 import { decryptAccessToken } from './crypto';
-import type { listWhatsappTenants } from './embedded-signup';
+import type { EmbeddedSignupDeps, listWhatsappTenants } from './embedded-signup';
 import { formatDayseWhatsAppReply, toWhatsAppMarkup } from './outbound';
-import { registerMetaTestNumber, TEST_TENANT_ID } from './test-number';
+import { checkMetaTestNumberStatus, registerMetaTestNumber, TEST_TENANT_ID } from './test-number';
 
 const KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const TOKEN = `EAAG${'x'.repeat(80)}`;
@@ -33,6 +33,27 @@ describe('Formatação das respostas da Dayse para o WhatsApp', () => {
 });
 
 describe('Registro do número de teste da Meta', () => {
+  it('identifica token expirado pelo código 190 sem exibir detalhes da credencial', async () => {
+    const status = await checkMetaTestNumberStatus({
+      loadTenant: async () => ({ whatsappPhoneNumberId: '1234567890123', encryptedAccessToken: 'encrypted' }),
+      decryptToken: () => 'TOKEN_DE_TESTE',
+      fetchImpl: vi.fn(async () => new Response(JSON.stringify({ error: { code: 190, message: 'token invalid' } }),
+        { status: 401 })) as unknown as typeof fetch,
+    });
+    expect(status).toMatchObject({ ok: false, message: expect.stringContaining('expirou') });
+    expect(status.message).not.toContain('TOKEN_DE_TESTE');
+  });
+
+  it('confirma o número somente quando a Meta devolve o mesmo phone number ID', async () => {
+    const status = await checkMetaTestNumberStatus({
+      loadTenant: async () => ({ whatsappPhoneNumberId: '1234567890123', encryptedAccessToken: 'encrypted' }),
+      decryptToken: () => 'TOKEN_DE_TESTE',
+      fetchImpl: vi.fn(async () => new Response(JSON.stringify({ id: '1234567890123' }),
+        { status: 200 })) as unknown as typeof fetch,
+    });
+    expect(status).toMatchObject({ ok: true, message: expect.stringContaining('Token válido') });
+  });
+
   it('valida o token, inscreve a WABA nos webhooks e salva criptografado como tenant de teste', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -80,6 +101,28 @@ describe('Registro do número de teste da Meta', () => {
     expect(saved!.coexistenceEnabled).toBe(false);
     expect(saved!.encryptedAccessToken).not.toContain(TOKEN);
     expect(decryptAccessToken(saved!.encryptedAccessToken, KEY)).toBe(TOKEN);
+  });
+
+  it('renova o token do número já cadastrado sem reinscrever o webhook', async () => {
+    const existing = {
+      id: 'id', tenantId: TEST_TENANT_ID, tenantName: 'Teste', wabaId: '9876543210987',
+      whatsappPhoneNumberId: '1234567890123', displayPhoneNumber: '+1 555 012 3456',
+      coexistenceEnabled: false, isActive: true, createdAt: new Date(), updatedAt: new Date(),
+    } satisfies Awaited<ReturnType<typeof listWhatsappTenants>>[number];
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ display_phone_number: '+1 555 012 3456' })));
+    const upsertTenant = vi.fn(async (row: Parameters<NonNullable<EmbeddedSignupDeps['upsertTenant']>>[0]) => ({
+      id: 'id', ...row,
+    }));
+    await registerMetaTestNumber({ phoneNumberId: existing.whatsappPhoneNumberId,
+      wabaId: existing.wabaId, accessToken: TOKEN }, {
+      encryptionKeyHex: KEY,
+      listTenants: async () => [existing],
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      upsertTenant,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(upsertTenant).toHaveBeenCalledOnce();
+    expect(decryptAccessToken(upsertTenant.mock.calls[0]![0].encryptedAccessToken, KEY)).toBe(TOKEN);
   });
 
   it('não salva nada quando a Meta recusa o token', async () => {

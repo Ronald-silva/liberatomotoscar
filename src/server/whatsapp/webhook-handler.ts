@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
 import { hashConversationToken, RETENTION_NO_LEAD_DAYS } from '@/server/attendance/conversation-repository';
-import { handleSiteTurn } from '@/server/attendance/site-chat';
+import { recordWhatsappAiTokens, reserveWhatsappAiRequest } from '@/server/attendance/limits';
+import { handleSiteTurn, siteChatDeps, type SiteChatDeps } from '@/server/attendance/site-chat';
+import { readWhatsappSetting } from '@/server/attendance/settings';
 import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
 import { decryptAccessToken, deterministicUuidFromWaMessageId } from './crypto';
@@ -15,14 +17,14 @@ type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPh
   accessToken?: string;
 };
 
-/** O número de teste pode usar as credenciais da Vercel mesmo sem cadastro na tabela de tenants. */
+/** O cadastro no banco tem prioridade; variáveis da Vercel são apenas fallback legado. */
 export async function resolveWebhookTenant(
   phoneNumberId: string,
   findDbTenant: (id: string) => Promise<WhatsappTenantRow | null> = findActiveTenantByPhoneNumberId,
   eventWabaId?: string,
 ): Promise<WebhookTenant | null> {
   const dbTenant = await findDbTenant(phoneNumberId);
-  if (dbTenant && dbTenant.tenantId !== TEST_TENANT_ID) return dbTenant;
+  if (dbTenant) return dbTenant;
 
   const envPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const envWabaId = process.env.WHATSAPP_WABA_ID?.trim() || eventWabaId;
@@ -36,7 +38,7 @@ export async function resolveWebhookTenant(
       accessToken: envAccessToken,
     };
   }
-  return dbTenant;
+  return null;
 }
 
 export type MetaWebhookPayload = {
@@ -99,7 +101,12 @@ async function ensureWhatsappConversation(token: string, now = new Date()) {
     .where(eq(conversations.tokenHash, tokenHash))
     .limit(1);
 
-  if (existing) return existing;
+  if (existing) {
+    if (existing.expiresAt > now) return existing;
+    const [renewed] = await db.update(conversations).set({ expiresAt })
+      .where(eq(conversations.id, existing.id)).returning();
+    return renewed ?? null;
+  }
 
   const [created] = await db
     .insert(conversations)
@@ -162,21 +169,33 @@ async function defaultRunAgentTurn(params: {
   text: string;
 }): Promise<string | null> {
   const token = whatsappConversationToken(params.tenant.tenantId, params.customerWaId);
-  await ensureWhatsappConversation(token);
+  const conversation = await ensureWhatsappConversation(token);
+  if (!conversation) throw new Error('Não foi possível criar a conversa do WhatsApp.');
   const clientMessageId = deterministicUuidFromWaMessageId(params.waMessageId);
 
-  const prevCountResult = await handleSiteTurn(token, {
+  const deps: SiteChatDeps = {
+    ...siteChatDeps,
+    readSetting: readWhatsappSetting,
+    reserveAi: reserveWhatsappAiRequest,
+    recordTokens: recordWhatsappAiTokens,
+    maxVisitorTurns: params.tenant.tenantId === TEST_TENANT_ID ? 200 : undefined,
+    failClosedOnPersistenceError: true,
+    skipViewAfterTurn: true,
+    create: async () => { throw new Error('Conversa do WhatsApp indisponível.'); },
+  };
+
+  const result = await handleSiteTurn(token, {
     message: params.text.slice(0, 1000),
     clientMessageId,
     customerName: params.customerName,
-  });
+  }, deps);
 
-  const lastMsg = prevCountResult.view.messages.at(-1);
-  if (!lastMsg || (lastMsg.sender !== 'ai' && lastMsg.sender !== 'bot')) {
+  const reply = result.view.messages.find((message) => message.id === result.replyMessageId);
+  if (!reply || (reply.sender !== 'ai' && reply.sender !== 'bot')) {
     return null;
   }
 
-  return formatDayseWhatsAppReply(lastMsg.body, lastMsg.cards);
+  return formatDayseWhatsAppReply(reply.body, reply.cards);
 }
 
 /**

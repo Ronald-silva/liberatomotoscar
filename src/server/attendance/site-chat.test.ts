@@ -318,18 +318,65 @@ describe('orquestração de atendimento do site (P3)', () => {
   });
 
   it('não duplica resposta quando o mesmo clientMessageId é reenviado', async () => {
-    const deps = makeDeps({
-      appendVisitor: vi.fn(async () => ({ duplicate: true as const, message: null })),
-    });
-
-    await handleSiteTurn(
+    const deps = makeDeps();
+    const first = await handleSiteTurn(
       'token',
       { message: 'Oi', clientMessageId: '11111111-1111-4111-8111-111111111111' },
       deps,
     );
+    const duplicateDeps = { ...deps,
+      appendVisitor: vi.fn(async () => ({ duplicate: true as const, message: null })) };
+    const duplicate = await handleSiteTurn('token',
+      { message: 'Oi', clientMessageId: '11111111-1111-4111-8111-111111111111' }, duplicateDeps);
 
-    expect(deps.reserveTurn).not.toHaveBeenCalled();
-    expect(deps.commit).not.toHaveBeenCalled();
+    expect(first.replyMessageId).toBeTruthy();
+    expect(duplicate.view.messages.at(-1)?.sender).toBe('bot');
+    expect(duplicate.replyMessageId).toBeNull();
+    expect(deps.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('devolve erro para reentrega do webhook quando a conversa WhatsApp está ocupada', async () => {
+    const deps = makeDeps({
+      failClosedOnPersistenceError: true,
+      reserveTurn: vi.fn(async () => null) as unknown as SiteChatDeps['reserveTurn'],
+    });
+    await expect(handleSiteTurn('token',
+      { message: 'Outra pergunta', clientMessageId: '11111111-1111-4111-8111-111111111111' }, deps))
+      .rejects.toThrow('ocupada');
+    expect(deps.appendVisitor).not.toHaveBeenCalled();
+  });
+
+  it('não entrega resposta quando o vendedor assume antes da confirmação do turno', async () => {
+    const deps = makeDeps({
+      failClosedOnPersistenceError: true,
+      skipViewAfterTurn: true,
+      commit: vi.fn(async () => null),
+    });
+    const result = await handleSiteTurn('token',
+      { message: 'Tem motos?', clientMessageId: '11111111-1111-4111-8111-111111111111' }, deps);
+    expect(result.replyMessageId).toBeNull();
+    expect(result.view.messages).toHaveLength(0);
+  });
+
+  it('aceita mais de 20 turnos somente quando o canal de teste define limite próprio', async () => {
+    const deps = makeDeps({
+      maxVisitorTurns: 200,
+      findByToken: vi.fn(async () => ({ ...baseConversation, visitorTurns: 20 })),
+    });
+    const result = await handleSiteTurn('token',
+      { message: 'Outra moto?', clientMessageId: '11111111-1111-4111-8111-111111111111' }, deps);
+    expect(result.replyMessageId).toBeTruthy();
+  });
+
+  it('não responde sem persistência no webhook e libera a reserva após erro', async () => {
+    const deps = makeDeps({
+      failClosedOnPersistenceError: true,
+      appendVisitor: vi.fn(async () => { throw new Error('Banco indisponível'); }),
+    });
+    await expect(handleSiteTurn('token',
+      { message: 'Oi', clientMessageId: '11111111-1111-4111-8111-111111111111' }, deps))
+      .rejects.toThrow('Banco indisponível');
+    expect(deps.releaseTurn).toHaveBeenCalledWith(baseConversation.id);
   });
 
   it('monta a sessão do agente com pares visitante e resposta já persistidos', () => {

@@ -17,12 +17,17 @@ export function siteAiDailyLimit() {
   return Number.isSafeInteger(value) && value >= 0 ? value : 150;
 }
 
-export async function reserveSiteAiRequest(now = new Date(), limit = siteAiDailyLimit()) {
+export function whatsappAiDailyLimit() {
+  const value = Number(process.env.WHATSAPP_AI_DAILY_LIMIT ?? 150);
+  return Number.isSafeInteger(value) && value >= 0 ? value : 150;
+}
+
+async function reserveAiRequest(channel: 'site' | 'whatsapp', now: Date, limit: number) {
   const dayUtc = now.toISOString().slice(0, 10);
   if (limit <= 0) return null;
   try {
     await ensureAttendanceTables();
-    const [row] = await getDb().insert(attendanceUsage).values({ channel: 'site', dayUtc, aiRequests: 1, updatedAt: now })
+    const [row] = await getDb().insert(attendanceUsage).values({ channel, dayUtc, aiRequests: 1, updatedAt: now })
       .onConflictDoUpdate({
         target: [attendanceUsage.channel, attendanceUsage.dayUtc],
         set: { aiRequests: sql`${attendanceUsage.aiRequests} + 1`, updatedAt: now },
@@ -34,13 +39,29 @@ export async function reserveSiteAiRequest(now = new Date(), limit = siteAiDaily
   }
 }
 
-export async function recordSiteAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {
+export async function reserveSiteAiRequest(now = new Date(), limit = siteAiDailyLimit()) {
+  return reserveAiRequest('site', now, limit);
+}
+
+export async function reserveWhatsappAiRequest(now = new Date(), limit = whatsappAiDailyLimit()) {
+  return reserveAiRequest('whatsapp', now, limit);
+}
+
+async function recordAiTokens(channel: 'site' | 'whatsapp', dayUtc: string, inputTokens: number, outputTokens: number) {
   await ensureAttendanceTables();
   await getDb().update(attendanceUsage).set({
     inputTokens: sql`${attendanceUsage.inputTokens} + ${Math.max(0, Math.floor(inputTokens))}`,
     outputTokens: sql`${attendanceUsage.outputTokens} + ${Math.max(0, Math.floor(outputTokens))}`,
     updatedAt: new Date(),
-  }).where(and(eq(attendanceUsage.channel, 'site'), eq(attendanceUsage.dayUtc, dayUtc)));
+  }).where(and(eq(attendanceUsage.channel, channel), eq(attendanceUsage.dayUtc, dayUtc)));
+}
+
+export async function recordSiteAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {
+  return recordAiTokens('site', dayUtc, inputTokens, outputTokens);
+}
+
+export async function recordWhatsappAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {
+  return recordAiTokens('whatsapp', dayUtc, inputTokens, outputTokens);
 }
 
 export function rateLimitKey(scope: string, clientAddress: string, secret: string) {
