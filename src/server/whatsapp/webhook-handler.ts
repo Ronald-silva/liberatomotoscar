@@ -17,18 +17,24 @@ type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPh
   accessToken?: string;
 };
 
-/** O cadastro no banco tem prioridade; variáveis da Vercel são apenas fallback legado. */
+/** Para o número de teste, credenciais completas do ambiente substituem o token salvo no banco. */
 export async function resolveWebhookTenant(
   phoneNumberId: string,
   findDbTenant: (id: string) => Promise<WhatsappTenantRow | null> = findActiveTenantByPhoneNumberId,
   eventWabaId?: string,
 ): Promise<WebhookTenant | null> {
   const dbTenant = await findDbTenant(phoneNumberId);
-  if (dbTenant) return dbTenant;
-
   const envPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const envWabaId = process.env.WHATSAPP_WABA_ID?.trim() || eventWabaId;
   const envAccessToken = process.env.WHATSAPP_TOKEN?.trim();
+  if (dbTenant) {
+    if (dbTenant.isActive && dbTenant.tenantId === TEST_TENANT_ID &&
+      envPhoneNumberId === phoneNumberId && envAccessToken) {
+      return { ...dbTenant, accessToken: envAccessToken };
+    }
+    return dbTenant;
+  }
+
   if (envPhoneNumberId === phoneNumberId && envWabaId && envAccessToken) {
     return {
       tenantId: TEST_TENANT_ID,

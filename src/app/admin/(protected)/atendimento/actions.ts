@@ -10,7 +10,7 @@ import {
 } from '@/server/attendance/inbox';
 import { setSiteMode, type AttendanceMode } from '@/server/attendance/settings';
 import { requireAdmin } from '@/server/authz';
-import { checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
+import { activateConfiguredMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
 
 export type ModeFormState = { mode: AttendanceMode; version: number; message: string | null; error: boolean };
 export type InboxActionState = { message: string | null; error: boolean };
@@ -46,6 +46,18 @@ export async function verifyMetaTestNumber(_previous: TestNumberState): Promise<
     return { message: status.message, error: !status.ok };
   } catch {
     return { message: 'Não foi possível consultar a Meta agora. Tente novamente.', error: true };
+  }
+}
+
+export async function activateMetaTestNumberFromEnvironment(_previous: TestNumberState): Promise<TestNumberState> {
+  void _previous;
+  try {
+    await requireAdmin();
+    const saved = await activateConfiguredMetaTestNumber();
+    revalidateAttendance();
+    return { message: `Número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId} ativado neste serviço. Webhook direcionado e token validado pela Meta.`, error: false };
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : 'Não foi possível ativar o número de teste neste serviço.', error: true };
   }
 }
 

@@ -304,14 +304,32 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
     }
   });
 
-  it('prioriza o token renovado no banco mesmo quando o ambiente ainda tem token de teste antigo', async () => {
+  it('usa o token do ambiente para o número de teste cadastrado sem alterar a WABA salva', async () => {
     vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', '1234567890123');
-    vi.stubEnv('WHATSAPP_WABA_ID', '9876543210987');
-    vi.stubEnv('WHATSAPP_TOKEN', 'TOKEN_ANTIGO');
+    vi.stubEnv('WHATSAPP_WABA_ID', '9999999999999');
+    vi.stubEnv('WHATSAPP_TOKEN', 'TOKEN_NOVO_DO_RAILWAY');
     try {
       const tenant = {
         tenantId: TEST_TENANT_ID, wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',
-        isActive: true, encryptedAccessToken: 'token-renovado-criptografado',
+        isActive: true, encryptedAccessToken: 'token-antigo-criptografado',
+      } as WhatsappTenantRow;
+      expect(await resolveWebhookTenant('1234567890123', async () => tenant)).toMatchObject({
+        tenantId: TEST_TENANT_ID,
+        wabaId: '9876543210987',
+        accessToken: 'TOKEN_NOVO_DO_RAILWAY',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('mantém o token do banco quando falta uma das credenciais de teste no ambiente', async () => {
+    vi.stubEnv('WHATSAPP_PHONE_NUMBER_ID', '1234567890123');
+    vi.stubEnv('WHATSAPP_TOKEN', '');
+    try {
+      const tenant = {
+        tenantId: TEST_TENANT_ID, wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',
+        isActive: true, encryptedAccessToken: 'token-criptografado',
       } as WhatsappTenantRow;
       expect(await resolveWebhookTenant('1234567890123', async () => tenant)).toBe(tenant);
     } finally {

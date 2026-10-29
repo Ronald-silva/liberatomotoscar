@@ -136,6 +136,8 @@ export default async function AttendancePage({
           currentTestNumber={testTenant?.displayPhoneNumber ?? testTenant?.whatsappPhoneNumberId ?? null}
           phoneNumberId={testTenant?.whatsappPhoneNumberId ?? null}
           wabaId={testTenant?.wabaId ?? null}
+          hasEnvTestCredentials={Boolean(process.env.WHATSAPP_TOKEN?.trim() &&
+            process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() && process.env.WHATSAPP_WEBHOOK_CALLBACK_URL?.trim())}
         />
 
         <SiteModeForm mode={setting.mode} version={setting.version} />

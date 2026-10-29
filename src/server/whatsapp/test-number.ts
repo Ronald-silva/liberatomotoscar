@@ -16,10 +16,39 @@ export type RegisterTestNumberDeps = Pick<EmbeddedSignupDeps, 'apiVersion' | 'en
   listTenants?: typeof listWhatsappTenants;
   webhookUrl?: string;
   webhookVerifyToken?: string;
+  forceWebhookOverride?: boolean;
 };
 
 export const TEST_TENANT_ID = 'liberato-motos-car-teste';
 export const TEST_WEBHOOK_URL = 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp';
+
+/** Ativa no host atual as credenciais de teste já configuradas no ambiente do servidor. */
+export async function activateConfiguredMetaTestNumber(deps: RegisterTestNumberDeps = {}) {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() ?? '';
+  const accessToken = process.env.WHATSAPP_TOKEN?.trim() ?? '';
+  const webhookUrl = process.env.WHATSAPP_WEBHOOK_CALLBACK_URL?.trim() ?? '';
+  if (!phoneNumberId || !accessToken || !webhookUrl) {
+    throw new Error('Configure WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TOKEN e WHATSAPP_WEBHOOK_CALLBACK_URL neste serviço.');
+  }
+  let callback: URL;
+  try { callback = new URL(webhookUrl); } catch { throw new Error('URL do webhook de teste inválida.'); }
+  if (callback.protocol !== 'https:' || callback.pathname !== '/api/webhooks/whatsapp' || callback.search || callback.hash) {
+    throw new Error('WHATSAPP_WEBHOOK_CALLBACK_URL deve ser a URL HTTPS de /api/webhooks/whatsapp deste serviço.');
+  }
+
+  const tenants = await (deps.listTenants ?? listWhatsappTenants)();
+  const existing = tenants.find((tenant) => tenant.isActive && tenant.tenantId === TEST_TENANT_ID &&
+    tenant.whatsappPhoneNumberId === phoneNumberId);
+  const envWabaId = process.env.WHATSAPP_WABA_ID?.trim() ?? '';
+  if (existing && envWabaId && envWabaId !== existing.wabaId) {
+    throw new Error('WHATSAPP_WABA_ID não corresponde à conta do número de teste já cadastrado.');
+  }
+  const wabaId = existing?.wabaId ?? envWabaId;
+  if (!wabaId) throw new Error('Não foi possível identificar a WABA do número de teste. Configure WHATSAPP_WABA_ID.');
+
+  return registerMetaTestNumber({ phoneNumberId, wabaId, accessToken },
+    { ...deps, webhookUrl, forceWebhookOverride: true });
+}
 
 /** Diagnóstico de leitura: confirma se o token salvo ainda acessa o número de teste. */
 export async function checkMetaTestNumberStatus(deps: {
@@ -104,7 +133,7 @@ export async function registerMetaTestNumber(input: RegisterTestNumberInput, dep
 
   // Na renovação do mesmo número, o webhook já está inscrito. A validação do
   // phone_number_id com o token novo basta para trocar a credencial de envio.
-  if (renewingExistingNumber) {
+  if (renewingExistingNumber && !deps.forceWebhookOverride) {
     return upsert({
       tenantId: TEST_TENANT_ID,
       tenantName: `${STORE.name} (Número de teste Meta)`,
@@ -117,16 +146,18 @@ export async function registerMetaTestNumber(input: RegisterTestNumberInput, dep
   }
 
   // Confirma que o número pertence à WABA informada antes de inscrever o app nela.
-  const phonesRes = await fetchFn(
-    `https://graph.facebook.com/${version}/${wabaId}/phone_numbers?fields=id&limit=100`,
-    { method: 'GET', headers: auth, cache: 'no-store' },
-  );
-  if (!phonesRes.ok) {
-    throw new Error(`A Meta não confirmou a conta do WhatsApp Business (HTTP ${phonesRes.status}).`);
-  }
-  const phonesData = (await phonesRes.json()) as { data?: Array<{ id?: string }> };
-  if (!phonesData.data?.some((phone) => phone.id === phoneNumberId)) {
-    throw new Error('O número informado não pertence à conta do WhatsApp Business indicada. Confira os IDs em API Setup.');
+  if (!renewingExistingNumber) {
+    const phonesRes = await fetchFn(
+      `https://graph.facebook.com/${version}/${wabaId}/phone_numbers?fields=id&limit=100`,
+      { method: 'GET', headers: auth, cache: 'no-store' },
+    );
+    if (!phonesRes.ok) {
+      throw new Error(`A Meta não confirmou a conta do WhatsApp Business (HTTP ${phonesRes.status}).`);
+    }
+    const phonesData = (await phonesRes.json()) as { data?: Array<{ id?: string }> };
+    if (!phonesData.data?.some((phone) => phone.id === phoneNumberId)) {
+      throw new Error('O número informado não pertence à conta do WhatsApp Business indicada. Confira os IDs em API Setup.');
+    }
   }
 
   // O callback global deste app atende o SalesNet. A WABA de teste precisa apontar

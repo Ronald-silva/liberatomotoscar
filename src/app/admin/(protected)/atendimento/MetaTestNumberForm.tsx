@@ -1,20 +1,22 @@
 'use client';
 
 import { useActionState } from 'react';
-import { connectMetaTestNumber, verifyMetaTestNumber, type TestNumberState } from './actions';
+import { activateMetaTestNumberFromEnvironment, connectMetaTestNumber, verifyMetaTestNumber, type TestNumberState } from './actions';
 import attendanceStyles from './attendance.module.css';
 
 const initialState: TestNumberState = { message: null, error: false };
 
 /** Conecta o número de teste gratuito da Meta para validar a Dayse sem usar o número real da loja. */
-export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberId, wabaId }: {
+export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberId, wabaId, hasEnvTestCredentials }: {
   webhookUrl: string;
   currentTestNumber: string | null;
   phoneNumberId: string | null;
   wabaId: string | null;
+  hasEnvTestCredentials: boolean;
 }) {
   const [state, action, pending] = useActionState(connectMetaTestNumber, initialState);
   const [checkState, checkAction, checking] = useActionState(verifyMetaTestNumber, initialState);
+  const [activationState, activationAction, activating] = useActionState(activateMetaTestNumberFromEnvironment, initialState);
 
   return (
     <details className={attendanceStyles.history} open>
@@ -32,6 +34,17 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberI
         O número de teste usa a Dayse independentemente do modo escolhido para o chat do site.
         O envio funciona apenas para celulares adicionados e verificados em “To” no painel da Meta.
       </p>
+      {hasEnvTestCredentials ? (
+        <form action={activationAction} className={attendanceStyles.form}>
+          <button type="submit" className={attendanceStyles.submit} disabled={activating}>
+            {activating ? 'Ativando…' : 'Ativar número de teste com as credenciais deste serviço'}
+          </button>
+          {activationState.message ? <p role="status" aria-live="polite"
+            className={activationState.error ? attendanceStyles.error : attendanceStyles.success}>
+            {activationState.message}
+          </p> : null}
+        </form>
+      ) : null}
       {currentTestNumber ? (
         <form action={checkAction} className={attendanceStyles.form}>
           <button type="submit" className={attendanceStyles.submit} disabled={checking}>
