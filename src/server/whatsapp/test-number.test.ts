@@ -6,10 +6,10 @@ vi.mock('@/server/authz', () => ({
   requireAdmin: vi.fn(),
 }));
 
-import { decryptAccessToken } from './crypto';
+import { decryptAccessToken, encryptAccessToken } from './crypto';
 import type { EmbeddedSignupDeps, listWhatsappTenants } from './embedded-signup';
 import { formatDayseWhatsAppReply, toWhatsAppMarkup } from './outbound';
-import { activateConfiguredMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber, TEST_TENANT_ID } from './test-number';
+import { activateConfiguredMetaTestNumber, activateSavedMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber, TEST_TENANT_ID } from './test-number';
 
 const KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const TOKEN = `EAAG${'x'.repeat(80)}`;
@@ -123,6 +123,47 @@ describe('Registro do número de teste da Meta', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(upsertTenant).toHaveBeenCalledOnce();
     expect(decryptAccessToken(upsertTenant.mock.calls[0]![0].encryptedAccessToken, KEY)).toBe(TOKEN);
+  });
+
+  it('ativa o webhook do Railway com o token salvo, mesmo quando o ambiente ainda tem o token antigo', async () => {
+    vi.stubEnv('WHATSAPP_TOKEN', 'TOKEN_ANTIGO_DO_RAILWAY');
+    vi.stubEnv('WHATSAPP_WEBHOOK_CALLBACK_URL', 'https://dayse.up.railway.app/api/webhooks/whatsapp');
+    const existing = {
+      id: 'id', tenantId: TEST_TENANT_ID, tenantName: 'Teste', wabaId: '9876543210987',
+      whatsappPhoneNumberId: '1234567890123', displayPhoneNumber: '+1 555 012 3456',
+      encryptedAccessToken: encryptAccessToken(TOKEN, KEY),
+      coexistenceEnabled: false, isActive: true, createdAt: new Date(), updatedAt: new Date(),
+    };
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify(
+      init?.method === 'POST' ? { success: true } : { display_phone_number: '+1 555 012 3456' },
+    )));
+    const upsertTenant = vi.fn(async (row: Parameters<NonNullable<EmbeddedSignupDeps['upsertTenant']>>[0]) => ({ id: 'id', ...row }));
+    try {
+      await activateSavedMetaTestNumber({
+        encryptionKeyHex: KEY,
+        loadTenant: async () => existing,
+        listTenants: async () => [existing],
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        upsertTenant,
+        webhookVerifyToken: 'verify-token',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      for (const [, init] of fetchMock.mock.calls) {
+        expect(init?.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+      }
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        'https://graph.facebook.com/v21.0/9876543210987/subscribed_apps',
+        expect.objectContaining({
+          body: JSON.stringify({
+            override_callback_uri: 'https://dayse.up.railway.app/api/webhooks/whatsapp',
+            verify_token: 'verify-token',
+          }),
+        }),
+      );
+      expect(decryptAccessToken(upsertTenant.mock.calls[0]![0].encryptedAccessToken, KEY)).toBe(TOKEN);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('ativa no Railway o token do ambiente e move o callback da WABA de teste', async () => {

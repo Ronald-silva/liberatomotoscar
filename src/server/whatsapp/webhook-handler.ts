@@ -17,7 +17,7 @@ type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPh
   accessToken?: string;
 };
 
-/** Para o número de teste, credenciais completas do ambiente substituem o token salvo no banco. */
+/** O token salvo e validado no painel tem prioridade; o ambiente cobre apenas o primeiro cadastro. */
 export async function resolveWebhookTenant(
   phoneNumberId: string,
   findDbTenant: (id: string) => Promise<WhatsappTenantRow | null> = findActiveTenantByPhoneNumberId,
@@ -28,10 +28,6 @@ export async function resolveWebhookTenant(
   const envWabaId = process.env.WHATSAPP_WABA_ID?.trim() || eventWabaId;
   const envAccessToken = process.env.WHATSAPP_TOKEN?.trim();
   if (dbTenant) {
-    if (dbTenant.isActive && dbTenant.tenantId === TEST_TENANT_ID &&
-      envPhoneNumberId === phoneNumberId && envAccessToken) {
-      return { ...dbTenant, accessToken: envAccessToken };
-    }
     return dbTenant;
   }
 

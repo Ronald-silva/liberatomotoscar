@@ -22,6 +22,23 @@ export type RegisterTestNumberDeps = Pick<EmbeddedSignupDeps, 'apiVersion' | 'en
 export const TEST_TENANT_ID = 'liberato-motos-car-teste';
 export const TEST_WEBHOOK_URL = 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp';
 
+async function loadActiveTestTenant(): Promise<WhatsappTenantRow | null> {
+  await ensureAttendanceTables();
+  const [row] = await getDb().select().from(whatsappTenants)
+    .where(and(eq(whatsappTenants.tenantId, TEST_TENANT_ID), eq(whatsappTenants.isActive, true)))
+    .orderBy(desc(whatsappTenants.updatedAt)).limit(1);
+  return row ?? null;
+}
+
+function configuredTestWebhookUrl(value: string): string {
+  let callback: URL;
+  try { callback = new URL(value.trim()); } catch { throw new Error('URL do webhook de teste inválida.'); }
+  if (callback.protocol !== 'https:' || callback.pathname !== '/api/webhooks/whatsapp' || callback.search || callback.hash) {
+    throw new Error('WHATSAPP_WEBHOOK_CALLBACK_URL deve ser a URL HTTPS de /api/webhooks/whatsapp deste serviço.');
+  }
+  return callback.toString();
+}
+
 /** Ativa no host atual as credenciais de teste já configuradas no ambiente do servidor. */
 export async function activateConfiguredMetaTestNumber(deps: RegisterTestNumberDeps = {}) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() ?? '';
@@ -30,11 +47,7 @@ export async function activateConfiguredMetaTestNumber(deps: RegisterTestNumberD
   if (!phoneNumberId || !accessToken || !webhookUrl) {
     throw new Error('Configure WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TOKEN e WHATSAPP_WEBHOOK_CALLBACK_URL neste serviço.');
   }
-  let callback: URL;
-  try { callback = new URL(webhookUrl); } catch { throw new Error('URL do webhook de teste inválida.'); }
-  if (callback.protocol !== 'https:' || callback.pathname !== '/api/webhooks/whatsapp' || callback.search || callback.hash) {
-    throw new Error('WHATSAPP_WEBHOOK_CALLBACK_URL deve ser a URL HTTPS de /api/webhooks/whatsapp deste serviço.');
-  }
+  const callbackUrl = configuredTestWebhookUrl(webhookUrl);
 
   const tenants = await (deps.listTenants ?? listWhatsappTenants)();
   const existing = tenants.find((tenant) => tenant.isActive && tenant.tenantId === TEST_TENANT_ID &&
@@ -47,7 +60,24 @@ export async function activateConfiguredMetaTestNumber(deps: RegisterTestNumberD
   if (!wabaId) throw new Error('Não foi possível identificar a WABA do número de teste. Configure WHATSAPP_WABA_ID.');
 
   return registerMetaTestNumber({ phoneNumberId, wabaId, accessToken },
-    { ...deps, webhookUrl, forceWebhookOverride: true });
+    { ...deps, webhookUrl: callbackUrl, forceWebhookOverride: true });
+}
+
+/** Aplica ao webhook o token que acabou de ser validado e salvo pelo formulário. */
+export async function activateSavedMetaTestNumber(deps: RegisterTestNumberDeps & {
+  loadTenant?: () => Promise<WhatsappTenantRow | null>;
+} = {}) {
+  const tenant = await (deps.loadTenant ?? loadActiveTestTenant)();
+  if (!tenant) throw new Error('Nenhum número de teste está cadastrado. Salve um token válido primeiro.');
+  const webhookUrl = configuredTestWebhookUrl(
+    deps.webhookUrl ?? process.env.WHATSAPP_WEBHOOK_CALLBACK_URL?.trim() ?? '',
+  );
+  const accessToken = decryptAccessToken(tenant.encryptedAccessToken, deps.encryptionKeyHex);
+  return registerMetaTestNumber({
+    phoneNumberId: tenant.whatsappPhoneNumberId,
+    wabaId: tenant.wabaId,
+    accessToken,
+  }, { ...deps, webhookUrl, forceWebhookOverride: true });
 }
 
 /** Diagnóstico de leitura: confirma se o token salvo ainda acessa o número de teste. */
@@ -57,13 +87,7 @@ export async function checkMetaTestNumberStatus(deps: {
   decryptToken?: (encrypted: string) => string;
   apiVersion?: string;
 } = {}) {
-  const loadTenant = deps.loadTenant ?? (async () => {
-    await ensureAttendanceTables();
-    const [row] = await getDb().select().from(whatsappTenants)
-      .where(and(eq(whatsappTenants.tenantId, TEST_TENANT_ID), eq(whatsappTenants.isActive, true)))
-      .orderBy(desc(whatsappTenants.updatedAt)).limit(1);
-    return row ?? null;
-  });
+  const loadTenant = deps.loadTenant ?? loadActiveTestTenant;
   const tenant = await loadTenant();
   if (!tenant) return { ok: false, message: 'Nenhum número de teste está cadastrado. Preencha os dados de API Setup abaixo.' };
 

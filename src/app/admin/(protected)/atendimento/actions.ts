@@ -10,7 +10,7 @@ import {
 } from '@/server/attendance/inbox';
 import { setSiteMode, type AttendanceMode } from '@/server/attendance/settings';
 import { requireAdmin } from '@/server/authz';
-import { activateConfiguredMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
+import { activateConfiguredMetaTestNumber, activateSavedMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
 
 export type ModeFormState = { mode: AttendanceMode; version: number; message: string | null; error: boolean };
 export type InboxActionState = { message: string | null; error: boolean };
@@ -30,7 +30,7 @@ export async function connectMetaTestNumber(_previous: TestNumberState, formData
     });
     revalidateAttendance();
     return {
-      message: `Token salvo e validado para o número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId}. Envie “Boa tarde” do celular verificado em “To” para testar a Dayse.`,
+      message: `Token salvo e validado para o número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId}. Clique em “Ativar webhook com o token salvo” antes de enviar a mensagem de teste.`,
       error: false,
     };
   } catch (error) {
@@ -58,6 +58,18 @@ export async function activateMetaTestNumberFromEnvironment(_previous: TestNumbe
     return { message: `Número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId} ativado neste serviço. Webhook direcionado e token validado pela Meta.`, error: false };
   } catch (error) {
     return { message: error instanceof Error ? error.message : 'Não foi possível ativar o número de teste neste serviço.', error: true };
+  }
+}
+
+export async function activateMetaTestNumberFromSavedToken(_previous: TestNumberState): Promise<TestNumberState> {
+  void _previous;
+  try {
+    await requireAdmin();
+    const saved = await activateSavedMetaTestNumber();
+    revalidateAttendance();
+    return { message: `Número de teste ${saved.displayPhoneNumber ?? saved.whatsappPhoneNumberId} ativado. O webhook foi direcionado para este serviço e o token salvo será usado nas respostas da Dayse.`, error: false };
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : 'Não foi possível ativar o número de teste salvo.', error: true };
   }
 }
 

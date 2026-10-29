@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { activateMetaTestNumberFromEnvironment, connectMetaTestNumber, verifyMetaTestNumber, type TestNumberState } from './actions';
+import { activateMetaTestNumberFromEnvironment, activateMetaTestNumberFromSavedToken, connectMetaTestNumber, verifyMetaTestNumber, type TestNumberState } from './actions';
 import attendanceStyles from './attendance.module.css';
 
 const initialState: TestNumberState = { message: null, error: false };
@@ -16,7 +16,10 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberI
 }) {
   const [state, action, pending] = useActionState(connectMetaTestNumber, initialState);
   const [checkState, checkAction, checking] = useActionState(verifyMetaTestNumber, initialState);
-  const [activationState, activationAction, activating] = useActionState(activateMetaTestNumberFromEnvironment, initialState);
+  const [activationState, activationAction, activating] = useActionState(
+    currentTestNumber ? activateMetaTestNumberFromSavedToken : activateMetaTestNumberFromEnvironment,
+    initialState,
+  );
 
   return (
     <details className={attendanceStyles.history} open>
@@ -25,7 +28,7 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberI
       <p className={attendanceStyles.current}>
         Em developers.facebook.com → seu app → <strong>WhatsApp → API Setup</strong>, copie os três dados abaixo e
         cadastre o seu celular em “To”. Use apenas os IDs do número de teste, sem informar os dados da loja.
-        O cadastro direciona somente a conta de teste para <strong>{webhookUrl}</strong>.
+        A ativação direciona somente a conta de teste para <strong>{webhookUrl}</strong>.
         O callback global do app atende outros projetos e não deve ser alterado para este teste.
         O token temporário da Meta expira. Para renová-lo, gere outro em API Setup e salve abaixo.
         Os IDs do número já cadastrado aparecem preenchidos. O campo do token fica vazio após salvar por segurança.
@@ -34,10 +37,12 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberI
         O número de teste usa a Dayse independentemente do modo escolhido para o chat do site.
         O envio funciona apenas para celulares adicionados e verificados em “To” no painel da Meta.
       </p>
-      {hasEnvTestCredentials ? (
+      {currentTestNumber || hasEnvTestCredentials ? (
         <form action={activationAction} className={attendanceStyles.form}>
           <button type="submit" className={attendanceStyles.submit} disabled={activating}>
-            {activating ? 'Ativando…' : 'Ativar número de teste com as credenciais deste serviço'}
+            {activating ? 'Ativando…' : currentTestNumber
+              ? 'Ativar webhook com o token salvo'
+              : 'Ativar número de teste com as credenciais deste serviço'}
           </button>
           {activationState.message ? <p role="status" aria-live="polite"
             className={activationState.error ? attendanceStyles.error : attendanceStyles.success}>
