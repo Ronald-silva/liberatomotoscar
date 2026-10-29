@@ -12,6 +12,7 @@ export const leadFactSchema = z.object({
 
 export const agentOutputSchema = z.object({
   vehicleIds: z.array(z.uuid()).max(3),
+  reply: z.string().trim().min(1).max(360),
   question: z.string().trim().max(180).nullable(),
   stage: z.enum(['researching', 'requirements_defined', 'ready_for_seller']),
   facts: z.array(leadFactSchema).max(7),

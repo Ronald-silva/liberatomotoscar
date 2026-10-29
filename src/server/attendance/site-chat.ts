@@ -13,6 +13,7 @@ import {
   isKnowledgeOrSpecificCatalogQuery,
   isTradeInClarification,
   isTradeInYearFollowUp,
+  normalizePlain,
   type KnowledgeReply,
 } from './knowledge';
 import { recordSiteAiTokens, reserveSiteAiRequest } from './limits';
@@ -159,15 +160,29 @@ async function choiceReply(deps: SiteChatDeps, choice: DeterministicChoice): Pro
   };
 }
 
-function extractRecentModelContext(conversation: ConversationRow | null, history: MessageRow[]): string | null {
+function extractRecentCardOptions(history: MessageRow[]): string[] {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const msg = history[i];
-    if (msg?.cards && msg.cards.length > 0 && msg.cards[0]?.title) {
-      return msg.cards[0].title;
-    }
+    if (msg?.cards && msg.cards.length > 0) return msg.cards.map((card) => card.title);
   }
+  return [];
+}
+
+function extractRecentModelContext(conversation: ConversationRow | null, history: MessageRow[]): string | null {
+  const options = extractRecentCardOptions(history);
+  if (options.length > 1) return null;
+  if (options.length === 1) return options[0] ?? null;
   const modelFact = conversation?.facts?.find((f) => f.field === 'model');
   return modelFact?.quote ?? null;
+}
+
+function ambiguousVehicleQuestion(body: string, options: string[]): boolean {
+  if (options.length < 2) return false;
+  const attributes = detectMessageIntents(body).asksSpecificAttribute;
+  if (!Object.values(attributes).some(Boolean)) return false;
+  const normalized = normalizePlain(body);
+  return !options.some((title) => normalizePlain(title).split(/\s+/)
+    .some((word) => word.length >= 4 && normalized.includes(word)));
 }
 
 function extractRecentCustomerName(history: MessageRow[], explicitName?: string | null): string | null {
@@ -221,7 +236,9 @@ async function smartKnowledgeOrChoiceReply(
       handoffReason: kbFallback.handoffReason,
     };
   }
-  return { sender: 'bot', body: deterministicMenuText, cards: [] };
+  return { sender: 'bot', body: recentModelOrTitle
+    ? `Quero te ajudar com ${recentModelOrTitle}. Você quer confirmar preço, disponibilidade ou combinar uma visita?`
+    : 'Me conta um pouco mais do que você precisa. Está procurando uma moto, um carro ou quer falar com a equipe?', cards: [] };
 }
 
 async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, 'disabled'>, conversation: ConversationRow,
@@ -234,6 +251,10 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
 
   const messages = await deps.listMessages(conversation.id, 40).catch(() => []);
   const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
+  const recentOptions = extractRecentCardOptions(history);
+  if (ambiguousVehicleQuestion(body, recentOptions)) {
+    return { sender: 'bot', body: `Você quer saber de ${recentOptions.map((title) => `**${title}**`).join(' ou ')}?`, cards: [] };
+  }
   const recentModelOrTitle = extractRecentModelContext(conversation, history);
   const recentTradeIn = extractRecentTradeIn(conversation, history);
   const customerName = extractRecentCustomerName(history, explicitCustomerName);

@@ -272,6 +272,55 @@ describe('orquestração de atendimento do site (P3)', () => {
     expect(stored?.facts).toContainEqual({ field: 'purpose', quote: 'viagens longas' });
   });
 
+  it('mantém o contexto da Strada em visita e preço, sem empurrar estoque para pergunta casual', async () => {
+    const deps = makeDeps({
+      readSetting: vi.fn(async () => ({ channel: 'whatsapp' as const, mode: 'ai' as const,
+        version: 1, updatedBy: null, updatedAt: now })),
+      reserveAi: vi.fn(async () => null),
+    });
+    const messages = ['Quero ver a Fiat Strada', 'Posso ir agora?', 'Qual o valor?', 'Doce de coco?'];
+    const replies = [];
+    for (const [index, message] of messages.entries()) {
+      replies.push(await handleSiteTurn('token', {
+        message, clientMessageId: `11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+        customerName: 'Ronald',
+      }, deps));
+    }
+    const visit = replies[1]!.view.messages.at(-1)!;
+    expect(visit.body).toContain('Fiat Strada');
+    expect(visit.body).toContain('confirme');
+    expect(visit.body).not.toContain('Escolha uma opção');
+    const price = replies[2]!.view.messages.at(-1)!;
+    expect(price.body).toContain('67.000');
+    expect(price.body).not.toContain('Ficha completa');
+    const unrelated = replies[3]!.view.messages.at(-1)!;
+    expect(unrelated.body).toContain('doce de coco');
+    expect(unrelated.body).toContain('Fiat Strada');
+    expect(unrelated.cards).toEqual([]);
+    expect(replies[3]!.view.conversation?.handoffRequested).toBe(false);
+  });
+
+  it('pede qual veículo quando o cliente pergunta preço após receber duas opções', async () => {
+    const previous = makeMessage({ sender: 'ai', body: 'Separei duas opções.', cards: [
+      { id: '1', title: 'Fiat Strada', year: 2016, priceCents: 6700000, href: '/veiculos/fiat-strada-2016' },
+      { id: '2', title: 'Volkswagen Saveiro Robust', year: 2024, priceCents: 6999900,
+        href: '/veiculos/volkswagen-saveiro-robust-2024' },
+    ] });
+    const deps = makeDeps({
+      readSetting: vi.fn(async () => ({ mode: 'ai' as const })),
+      listMessages: vi.fn(async () => [previous]),
+      skipViewAfterTurn: true,
+    });
+    const result = await handleSiteTurn('token', {
+      message: 'Qual o valor?', clientMessageId: '11111111-1111-4111-8111-111111111111',
+    }, deps);
+    expect(result.view.messages.at(-1)?.body).toContain('Fiat Strada');
+    expect(result.view.messages.at(-1)?.body).toContain('Volkswagen Saveiro');
+    expect(result.view.messages.at(-1)?.cards).toEqual([]);
+    expect(deps.runAgent).not.toHaveBeenCalled();
+    expect(deps.knowledge).not.toHaveBeenCalled();
+  });
+
   it('suspende respostas automáticas quando a conversa pertence a um vendedor humano', async () => {
     const humanConv: ConversationRow = { ...baseConversation, owner: 'human', assignedTo: 'seller-1' };
     const deps = makeDeps({

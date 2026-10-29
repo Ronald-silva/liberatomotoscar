@@ -5,7 +5,8 @@ import type { getVehicleDetails } from '@/server/vehicles/agent-catalog';
 
 const id = '0f6ad37b-47cb-4946-92e8-723dd2c90bd8';
 const output: AgentOutput = {
-  vehicleIds: [id], question: 'Você pretende comprar em breve?', stage: 'requirements_defined',
+  vehicleIds: [id], reply: 'Entendi. Vou te ajudar a avançar nessa escolha.',
+  question: 'Você pretende comprar em breve?', stage: 'requirements_defined',
   facts: [
     { field: 'budget', quote: 'até 18 mil' },
     { field: 'trade_in', quote: 'uma Fan para dar na troca' },
@@ -43,10 +44,11 @@ describe('resposta validada do agente', () => {
     expect(result.lead.facts.map((fact) => fact.field)).toEqual(['budget', 'trade_in']);
   });
 
-  it('monta card somente com dados relidos e prepara passagem humana para troca', async () => {
+  it('prepara passagem humana para troca sem repetir anúncios no encaminhamento', async () => {
     const readDetails = vi.fn(async () => ({ item: published, checkedAt: '2026-10-26T00:00:00Z' })) as unknown as typeof getVehicleDetails;
     const result = await finalizeDemoAnswer(output, new Set([id]), ['Quero uma moto até 18 mil e tenho uma Fan para dar na troca'], [], undefined, readDetails);
-    expect(result.cards).toMatchObject([{ title: 'Honda Titan', priceCents: 1150000, href: '/veiculos/honda-titan-2013' }]);
+    expect(result.cards).toEqual([]);
+    expect(readDetails).not.toHaveBeenCalled();
     expect(result.handoffUrl).toContain('wa.me/');
     expect(result.answer).not.toContain('financiamento aprovado');
     expect(result.lead.stage).toBe('ready_for_seller');
@@ -77,5 +79,18 @@ describe('resposta validada do agente', () => {
     expect(result.lead.facts.map((fact) => fact.field)).toEqual(['budget', 'trade_in']);
     expect(result.lead.stage).toBe('ready_for_seller');
     expect(new URL(result.handoffUrl!).searchParams.get('text')).toContain('Orçamento: “até 18 mil”');
+  });
+
+  it('não encaminha nem oferece veículos por causa de fatos antigos em pergunta fora do assunto', async () => {
+    const readDetails = vi.fn(async () => ({ item: published, checkedAt: '2026-10-26T00:00:00Z' })) as unknown as typeof getVehicleDetails;
+    const result = await finalizeDemoAnswer({ ...output, reply: 'Doce de coco não temos por aqui 😄 Quer continuar falando da Strada?',
+      facts: [], nextAction: 'human_trade_in', wantsHuman: true },
+    new Set([id]), ['Tenho uma Fan para dar na troca', 'Doce de coco?'], [], undefined, readDetails,
+    [{ field: 'trade_in', quote: 'Fan para dar na troca' }]);
+    expect(result.handoffRequested).toBe(false);
+    expect(result.cards).toEqual([]);
+    expect(result.answer).toContain('Doce de coco');
+    expect(result.answer).not.toContain('Você pretende comprar em breve?');
+    expect(readDetails).not.toHaveBeenCalled();
   });
 });

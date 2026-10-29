@@ -240,7 +240,8 @@ const OUT_OF_SCOPE_PRODUCTS = [
   'cama box', 'cama', 'colchao', 'sofa', 'geladeira', 'fogao', 'microondas', 'armario',
   'guarda-roupa', 'guarda roupa', 'mesa', 'cadeira', 'televisao', 'smart tv', 'iphone',
   'notebook', 'computador', 'impressora', 'camisa', 'calca', 'sapato', 'tenis', 'pizza',
-  'hamburguer', 'lanche', 'acai', 'cerveja', 'refrigerante', 'apartamento', 'terreno',
+  'hamburguer', 'lanche', 'acai', 'cerveja', 'refrigerante', 'doce de coco', 'doce',
+  'sorvete', 'comida', 'apartamento', 'terreno',
   'bicicleta', 'patinete', 'ar-condicionado', 'ar condicionado', 'maquina de lavar',
   'ventilador', 'liquidificador', 'airfryer', 'panela',
 ];
@@ -363,7 +364,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
     /\b(telefone|whatsapp|zap|wpp|numero|contato|ligar|celular)\b/.test(v);
 
   const asksHoursOrVisit =
-    /\b(horario\w*|funciona\w*|abre|abrem|aberto|aberta|fecha\w*|sabado|domingo|feriado|visita\w*|ir na loja|ir ai|conhecer a loja)\b/.test(
+    /\b(horario\w*|funciona\w*|abre|abrem|aberto|aberta|fecha\w*|sabado|domingo|feriado|visita\w*|ir na loja|ir ai|ir agora|ir hoje|posso ir|posso passar|pode ir|pode passar|conhecer a loja)\b/.test(
       v,
     );
 
@@ -576,6 +577,20 @@ export async function answerFromPlatformKnowledge(
 ): Promise<KnowledgeReply> {
   const v = normalizePlain(text);
   const intents = detectMessageIntents(text);
+  const firstName = extractCustomerFirstName(text, context?.customerName);
+  const nameGreeting = firstName ? `, **${firstName}**` : '';
+  if (intents.asksOutOfScopeProduct && !intents.wantsMoto && !intents.wantsCar) {
+    const recentVehicle = context?.recentModelOrTitle?.trim();
+    return {
+      matched: true,
+      isInstitutionalOnly: true,
+      text: `${intents.asksOutOfScopeProduct} não temos por aqui${nameGreeting} 😄 A ${STORE.name} trabalha com motos e carros seminovos.${recentVehicle
+        ? ` Quer continuar falando do **${recentVehicle}** ou prefere procurar outro veículo?`
+        : ' Se quiser, me conta que moto ou carro você procura.'}`,
+      cards: [], facts: [], handoffRequested: false, handoffReason: null, handoffUrl: null,
+      checkedAt: new Date().toISOString(),
+    };
+  }
   const { items: catalog, checkedAt } = await loadFullPublishedCatalog(searchFn);
   const mentionsTargetModel = catalog.some((item) => {
     if (!item.model) return false;
@@ -587,8 +602,6 @@ export async function answerFromPlatformKnowledge(
   const tradeOnly = intents.asksTradeIn &&
     !/\b(quero|procuro|busco|gostei|interessad\w*|comprar|escolhi|simular)\b/.test(v) &&
     !mentionsTargetModel;
-  const firstName = extractCustomerFirstName(text, context?.customerName);
-  const nameGreeting = firstName ? `, **${firstName}**` : '';
 
   const paragraphs: string[] = [];
   const facts: LeadFact[] = [];
@@ -696,25 +709,6 @@ export async function answerFromPlatformKnowledge(
     };
   }
 
-  // 1.5 Blindagem de Domínio Automotivo (Anti-"Cama Box" / itens fora do nicho de concessionária)
-  if (intents.asksOutOfScopeProduct && !intents.wantsMoto && !intents.wantsCar) {
-    const motos = catalog.filter((i) => i.type === 'motorcycle').sort((a, b) => a.priceCents - b.priceCents);
-    const cheapestMoto = motos[0];
-    return {
-      matched: true,
-      isInstitutionalOnly: true,
-      text: `Haha, **${intents.asksOutOfScopeProduct}** eu vou ficar te devendo${nameGreeting}! 😄 Aqui na **${STORE.name}** nós somos uma concessionária especializada exclusivamente em **motos e carros seminovos** — trabalhamos com **compra, venda, troca e financiamento** na ${STORE.district} (${STORE.city}/${STORE.state}).\n\nMas se estiver pensando em pegar uma **moto econômica para rodar no dia a dia/aplicativo**${
-        cheapestMoto ? ` (temos opções a partir de **${formatPrice(cheapestMoto.priceBRL)}**)` : ''
-      } ou um **carro/utilitário**, me conta o que você procura que eu separo as melhores opções do nosso pátio agora mesmo!`,
-      cards: [],
-      facts: [],
-      handoffRequested: false,
-      handoffReason: null,
-      handoffUrl: null,
-      checkedAt,
-    };
-  }
-
   // 2. Blocos institucionais da plataforma (Endereço, Telefone, Horário, Sobre a Loja, Venda)
   if (intents.asksAddressOrLocation) {
     paragraphs.push(
@@ -730,9 +724,9 @@ export async function answerFromPlatformKnowledge(
 
   if (intents.asksHoursOrVisit) {
     paragraphs.push(
-      `🕒 **Visitas e horário de atendimento:**\nAtendemos presencialmente na nossa loja na **${STORE_ADDRESS_LINE}** (CEP ${STORE.postalCode}). Como os horários em finais de semana ou feriados podem variar, recomendamos confirmar o horário de hoje ou agendar sua visita pelo WhatsApp **${STORE.phoneDisplay}**.\n${
-        !intents.asksAddressOrLocation ? MAP_URL : ''
-      }`.trim(),
+      `Quero te receber${nameGreeting}! Antes de sair, confirme com a equipe pelo WhatsApp **${STORE.phoneDisplay}** se ainda estamos atendendo hoje${context?.recentModelOrTitle
+        ? ` e se **${context.recentModelOrTitle}** continua disponível`
+        : ''}. Estamos na **${STORE_ADDRESS_LINE}**. ${MAP_URL}`,
     );
     facts.push({ field: 'visit', quote: text.trim().slice(0, 100) });
   }
@@ -774,6 +768,7 @@ export async function answerFromPlatformKnowledge(
     intents.asksSpecificAttribute.price ||
     intents.asksSpecificAttribute.engineOrSpecs;
 
+  let matchedFromRecentContext = false;
   if (
     matchedModels.length === 0 &&
     (asksAnySpecificAttr || intents.asksFinancing) &&
@@ -788,6 +783,7 @@ export async function answerFromPlatformKnowledge(
       const titleNorm = normalizePlain(item.title);
       return (modelNorm && recentNorm.includes(modelNorm)) || titleNorm.includes(recentNorm);
     });
+    matchedFromRecentContext = matchedModels.length > 0;
   }
 
   const requestedBrand = KNOWN_BRANDS.find((b) =>
@@ -884,7 +880,9 @@ export async function answerFromPlatformKnowledge(
           directSpotlight.length > 0
             ? `${directSpotlight.join(' ')}\n\nFicha completa no nosso catálogo:`
             : `Aqui estão todas as informações sobre **${target.title}** disponível no nosso catálogo:`;
-        paragraphs.push(`${prefix}\n${detailsLines.join('\n')}`);
+        paragraphs.push(matchedFromRecentContext && directSpotlight.length > 0
+          ? directSpotlight.join(' ')
+          : `${prefix}\n${detailsLines.join('\n')}`);
       } else {
         paragraphs.push(
           `Encontrei estes modelos no catálogo da **${STORE.name}**:\n${detailsLines.join('\n')}`,

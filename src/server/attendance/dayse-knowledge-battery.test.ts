@@ -319,6 +319,7 @@ describe('Bateria de Testes de Inteligência e Conhecimento da Dayse', () => {
       const result = await finalizeDemoAnswer(
         {
           vehicleIds: [],
+          reply: 'Posso te passar o endereço.',
           question: 'Posso te mostrar nossas motos ou carros disponíveis?',
           stage: 'researching',
           facts: [],
