@@ -31,6 +31,35 @@ const mockSearchCatalog: typeof searchAvailableVehicles = vi.fn(async (input) =>
 });
 
 describe('Dayse Alta Performance — conversa real do teste com a IA concorrente', () => {
+  it('entende bicicleta elétrica como proposta de entrada na Bros sem prometer aceite', async () => {
+    const proposal = 'Tenho uma bicicleta elétrica analisada em 2 mil reais. Vcs recebe de entrada para a compra de uma Bros?';
+    expect(detectMessageIntents(proposal).asksTradeIn).toBe(true);
+    const first = await answerFromPlatformKnowledge(proposal, mockSearchCatalog, { customerName: 'Ronald' });
+    expect(first.text).toContain('bicicleta elétrica');
+    expect(first.text).toContain('R$');
+    expect(first.text).toContain('2.000');
+    expect(first.text).toContain('Bros');
+    expect(first.text).toContain('Não encontrei uma Bros publicada');
+    expect(first.text).toContain('vendedor precisa confirmar');
+    expect(first.text).not.toContain('bicicleta não temos');
+    expect(first.text).not.toContain('Sim, aceitamos');
+    expect(first.cards).toEqual([]);
+    expect(first.handoffReason).toBe('trade_in');
+
+    const followUp = await answerFromPlatformKnowledge('Tenho uma bicicleta para da de entrada', mockSearchCatalog,
+      { customerName: 'Ronald', recentTradeIn: proposal });
+    expect(detectMessageIntents('Tenho uma bicicleta para da de entrada').asksTradeIn).toBe(true);
+    expect(followUp.text).toContain('bicicleta elétrica');
+    expect(followUp.text).toContain('Sim, entendi sua proposta');
+    expect(followUp.text).toContain('2.000');
+    expect(followUp.text).toContain('Bros');
+    expect(followUp.text).not.toContain('bicicleta não temos');
+
+    const confirmation = await answerFromPlatformKnowledge('Aceitam ela?', mockSearchCatalog,
+      { customerName: 'Ronald', recentTradeIn: proposal });
+    expect(confirmation.text).toContain('precisa ser confirmado');
+    expect(confirmation.text).not.toContain('Sim, aceitamos');
+  });
   it('"Boa tarde" (WhatsApp Ronald): espelha o período e chama o cliente pelo nome do perfil', async () => {
     const res = await answerFromPlatformKnowledge('Boa tarde', mockSearchCatalog, { customerName: 'Ronald Silva' });
     expect(res.text.startsWith('Boa tarde, **Ronald**!')).toBe(true);

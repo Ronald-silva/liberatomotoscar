@@ -384,7 +384,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
     /\b(troca|trocar|dar na troca|aceita\w* troca|aceita\w* moto|aceita\w* carro|aceita\w* uma moto|aceita\w* um carro|meu carro na troca|minha moto na troca|veiculo na troca|como entrada|dar de entrada|moto de entrada|carro de entrada)\b/.test(
       v,
     ) || /\b(?:pra|para)\s+d(?:a|ar)\s+(?:de|como|na)\s+entrada\b/.test(v) ||
-    (/\bde entrada\b/.test(v) && entryCents === null &&
+    (/\bde entrada\b/.test(v) && (OUT_OF_SCOPE_PRODUCTS.some((item) => new RegExp(`\\b${item}\\b`).test(v)) || entryCents === null) &&
       (mentionsKnownModel || /\b(?:tenho|meu|minha|aceita\w*)\b/.test(v)));
 
   const asksFinancing =
@@ -579,6 +579,46 @@ export async function answerFromPlatformKnowledge(
   const intents = detectMessageIntents(text);
   const firstName = extractCustomerFirstName(text, context?.customerName);
   const nameGreeting = firstName ? `, **${firstName}**` : '';
+  const tradeSource = [context?.recentTradeIn, text].filter(Boolean).join(' ');
+  const normalizedTradeSource = normalizePlain(tradeSource);
+  const offeredNonVehicle = intents.asksOutOfScopeProduct && /\b(entrada|troca)\b/.test(v) &&
+    /\b(tenho|minha|meu|possuo|aceita\w*|recebe\w*|pega\w*|dar|da)\b/.test(v);
+  if (offeredNonVehicle) {
+    const offeredLabel = intents.asksOutOfScopeProduct === 'bicicleta' && /\bbicicleta eletrica\b/.test(normalizedTradeSource)
+      ? 'bicicleta elétrica' : intents.asksOutOfScopeProduct;
+    const estimatedCents = extractEntryCents(tradeSource);
+    const target = /\bbros\b/.test(normalizedTradeSource) ? ' na Bros' : '';
+    const brosPublished = target && /\bbros\b/.test(v)
+      ? await searchFn({ type: 'motorcycle', model: 'Bros', limit: 1 })
+        .then((result) => result.items.some((item) => /\bbros\b/.test(normalizePlain(item.model ?? ''))))
+        .catch(() => null)
+      : null;
+    const valueQuote = tradeSource.match(/(?:r\$\s*)?\d+(?:[.,]\d+)?\s*mil(?:\s*reais)?|r\$\s*\d{1,3}(?:\.\d{3})+(?:,\d{2})?/i)?.[0];
+    const tradeFact = [offeredLabel, valueQuote, target ? 'entrada na Bros' : 'entrada na compra']
+      .filter(Boolean).join('; ').slice(0, 100);
+    const responseStart = context?.recentTradeIn ? `Sim, entendi sua proposta${nameGreeting}` : `Entendi${nameGreeting}`;
+    return {
+      matched: true, isInstitutionalOnly: false,
+      text: `${responseStart}: você quer oferecer **${offeredLabel}**${estimatedCents
+        ? `, que você estima em **${formatPrice(estimatedCents / 100)}**` : ''} como entrada${target}. A loja avalia motos e carros usados na troca; para ${offeredLabel}, um vendedor precisa confirmar se aceita e qual valor atribui.${brosPublished === false
+        ? ' Não encontrei uma Bros publicada no catálogo agora, mas posso verificar outras opções.' : ''} Vou sinalizar sua proposta para avaliação. Pode me dizer a marca, o modelo e o estado do item?`,
+      cards: [], facts: [{ field: 'trade_in', quote: tradeFact }],
+      handoffRequested: true, handoffReason: 'trade_in', handoffUrl: null,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+  const recentNonVehicle = context?.recentTradeIn && OUT_OF_SCOPE_PRODUCTS.some((item) =>
+    new RegExp(`\\b${item}\\b`).test(normalizePlain(context.recentTradeIn!)));
+  if (recentNonVehicle && (isTradeInClarification(text, context?.recentTradeIn) ||
+    isTradeInYearFollowUp(text, context?.recentTradeIn) || /^aceita\w*(?:\s+(?:ela|isso|a bicicleta))?\??$/.test(v))) {
+    return {
+      matched: true, isInstitutionalOnly: false,
+      text: `Anotei essa informação${nameGreeting}. O uso da bicicleta como entrada ainda precisa ser confirmado por um vendedor; não consigo prometer o aceite nem o valor antes da avaliação.`,
+      cards: [], facts: [{ field: 'trade_in', quote: tradeSource.slice(0, 100) }],
+      handoffRequested: true, handoffReason: 'trade_in', handoffUrl: null,
+      checkedAt: new Date().toISOString(),
+    };
+  }
   if (intents.asksOutOfScopeProduct && !intents.wantsMoto && !intents.wantsCar) {
     const recentVehicle = context?.recentModelOrTitle?.trim();
     return {

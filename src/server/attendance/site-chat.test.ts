@@ -321,6 +321,29 @@ describe('orquestração de atendimento do site (P3)', () => {
     expect(deps.knowledge).not.toHaveBeenCalled();
   });
 
+  it('preserva bicicleta, valor e Bros ao continuar proposta de entrada no WhatsApp', async () => {
+    const deps = makeDeps({
+      readSetting: vi.fn(async () => ({ mode: 'ai' as const })),
+      reserveAi: vi.fn(async () => null),
+    });
+    const first = await handleSiteTurn('token', {
+      message: 'Tenho uma bicicleta elétrica analisada em 2 mil reais. Vcs recebe de entrada para a compra de uma Bros?',
+      clientMessageId: '11111111-1111-4111-8111-111111111111', customerName: 'Ronald',
+    }, deps);
+    expect(first.view.messages.at(-1)?.body).toContain('Bros');
+    expect(first.view.messages.at(-1)?.body).toContain('vendedor precisa confirmar');
+    const second = await handleSiteTurn('token', {
+      message: 'Tenho uma bicicleta para da de entrada',
+      clientMessageId: '22222222-2222-4222-8222-222222222222', customerName: 'Ronald',
+    }, deps);
+    expect(second.view.messages.at(-1)?.body).toContain('bicicleta elétrica');
+    expect(second.view.messages.at(-1)?.body).toContain('2.000');
+    expect(second.view.messages.at(-1)?.body).toContain('Bros');
+    expect(second.view.messages.at(-1)?.body).not.toContain('bicicleta não temos');
+    expect(second.view.conversation).toMatchObject({ owner: 'automation', handoffRequested: true });
+    expect(deps.runAgent).not.toHaveBeenCalled();
+  });
+
   it('suspende respostas automáticas quando a conversa pertence a um vendedor humano', async () => {
     const humanConv: ConversationRow = { ...baseConversation, owner: 'human', assignedTo: 'seller-1' };
     const deps = makeDeps({
