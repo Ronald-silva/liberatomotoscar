@@ -219,12 +219,74 @@ Sem isso não há como dizer ao lojista que o agente funciona.
 
 ---
 
-## Parte 4 — Encaixes em aberto
+## Parte 4 — Jev / TypeSafe AI: onde encaixa e onde não encaixa
 
-- **"JEV"** — não identificado. Não existe sistema de concessionária com esse nome nas
-  fontes consultadas; o mais próximo é **JMEV**, montadora chinesa de elétricos. Se for um
-  DMS, um ERP ou um catálogo a integrar, trate como **Fase 1.7**: uma ferramenta a mais
-  (`consultar_jev(...)`) sobre a API dele. A arquitetura já comporta.
+Fonte: <https://typesafe.ai/blog/introducing-system-one-models-and-jev> e
+<https://docs.typesafe.ai/introduction>.
+
+### O que é
+
+**Jev** é o primeiro "System One model" da TypeSafe AI. **Não é um LLM conversacional: ele
+não gera texto.** Recebe um *state* (texto ou JSON) e *questions* tipadas, e devolve
+decisões tipadas com probabilidade. Três primitivas:
+
+| Primitiva | Pergunta | Retorno |
+|---|---|---|
+| `Choice` | escolha uma opção da lista | opção + probabilidades + confiança |
+| `Score` | pontue segundo uma rubrica | nota + probabilidades + confiança |
+| `Noul` | esta afirmação é verdadeira? | valor entre 0 e 1 |
+
+Números do anúncio (auto-reportados pelo fornecedor): entrada **US$ 0,042/MTok**, saída
+gratuita, latência **70–500 ms**. A alegação de 0% de erro de schema é "by construction" — o
+próprio post diz *"Our number is not empirical"*.
+
+### Onde encaixa neste projeto
+
+**Não substitui o agente conversacional.** A resposta ao cliente continua exigindo um LLM.
+Jev não resolve "humanizado".
+
+Mas resolve, com precisão, **o problema que derrubou a versão anterior**: a classificação de
+intenção feita por 75 expressões regulares. Perguntas como *"‘vocês fazem troca de óleo?’ é
+proposta de troca de veículo ou pedido de serviço?"* são exatamente uma `Choice`.
+
+Encaixes de maior valor, por ordem:
+
+1. **Guardas de saída (Fase 3).** Em vez de regex procurando `R$`, uma `Noul`: *"esta
+   resposta promete valor, prazo ou aceite que a loja não confirmou?"*. Muito mais robusto
+   que as guardas por regex, que são frágeis e interferem entre si.
+2. **Pontuação de lead (Fase 6).** `Score` sobre a conversa: quão perto da compra, qual
+   urgência — ordena a fila do vendedor.
+3. **Roteamento de handoff (Fase 5).** `Choice` entre continuar, chamar vendedor ou
+   encerrar.
+
+### Recomendação: não na v1
+
+Razões, todas verificáveis na fonte:
+
+- **Early access com lista de espera.** Pode não haver acesso a tempo.
+- **Sem SDK TypeScript documentado.** Só existe um adaptador Python, que nem é cliente do
+  Jev. Integrar exigiria HTTP direto, com endpoint e autenticação ainda não verificados.
+- **Sem SLA.** Para entrega a cliente final, é risco.
+- **Benchmarks auto-reportados**, com viés reconhecido pelo próprio autor.
+- **Segundo fornecedor = segundo ponto de falha.** O projeto já tem a confiabilidade do
+  provedor de LLM como risco aberto.
+
+E o principal: **a arquitetura de ferramentas da Parte 2 torna o classificador
+desnecessário.** O modelo decide chamando ferramentas; não há intenção a classificar.
+
+### Como avaliar depois, sem apostar
+
+Quando existir agente funcionando e o corpus da Fase 4:
+
+| # | Tarefa | Critério de aceite |
+|---|---|---|
+| 4.6 | Entrar na lista de espera e confirmar endpoint HTTP, autenticação e limites | documentado neste arquivo |
+| 4.7 | Rodar as guardas da Fase 3 contra Jev sobre o mesmo corpus | tabela: regex × Jev, acertos e falsos positivos |
+| 4.8 | Medir latência real a partir do Railway (o serviço fica na costa oeste dos EUA) | p50 e p95 |
+| 4.9 | Decidir por medição: adotar só se superar a guarda atual no corpus | decisão escrita |
+
+Se superar, a adoção é barata — as guardas são um módulo isolado (`src/server/agent/`),
+trocáveis sem tocar no resto.
 
 ---
 
