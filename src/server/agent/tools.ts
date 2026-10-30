@@ -5,6 +5,10 @@ import { buildVehicleTitle } from '@/lib/vehicle-title';
 import type { HandoffReason, LeadFact } from '@/server/attendance/conversation-repository';
 import { getVehicleDetails, searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
 
+export function semAcento(valor: string) {
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+}
+
 /** Teto do schema de `vehicleSearchInput`; pedir mais que isso faz o parse falhar. */
 const MAX_RESULTADOS = 5;
 
@@ -64,12 +68,18 @@ export type VerifiedVehicle = {
 export type AgentTurnState = {
   /** Só um veículo que passou por uma ferramenta pode ser citado na resposta (guarda 3.3). */
   allowedVehicles: Map<string, VerifiedVehicle>;
+  /**
+   * Marcas que o modelo pediu ao estoque, em minúsculas e sem acento. Uma busca que não
+   * achou nada autoriza a resposta honesta ("não encontrei nenhuma Yamaha publicada"), que
+   * de outro modo seria bloqueada como estoque inventado.
+   */
+  searchedBrands: Set<string>;
   facts: LeadFact[];
   handoffReason: HandoffReason | null;
 };
 
 export function createAgentTurnState(): AgentTurnState {
-  return { allowedVehicles: new Map(), facts: [], handoffReason: null };
+  return { allowedVehicles: new Map(), searchedBrands: new Set(), facts: [], handoffReason: null };
 }
 
 export type AgentToolDeps = {
@@ -110,6 +120,7 @@ export function createAgentToolFunctions(state: AgentTurnState, deps: AgentToolD
 
   return {
     async buscarVeiculos({ tipo, marca, modelo, precoMax, limite }: z.infer<typeof buscarVeiculosSchema>) {
+      if (marca) state.searchedBrands.add(semAcento(marca));
       const { items, checkedAt } = await searchVehicles({
         type: tipo, brand: marca, model: modelo,
         maxPriceCents: precoMax ? precoMax * 100 : undefined,
