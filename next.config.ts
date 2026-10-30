@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Rede de segurança para o Railway: `RAILWAY_PUBLIC_DOMAIN` não tem o prefixo NEXT_PUBLIC_ e
+  // por isso não chegaria ao bundle do cliente. Valores declarados aqui são sempre inlinados no
+  // build, independente do prefixo. O caminho confiável continua sendo NEXT_PUBLIC_SITE_URL.
+  env: {
+    NEXT_PUBLIC_RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN ?? '',
+  },
   turbopack: {
     root: process.cwd(),
   },

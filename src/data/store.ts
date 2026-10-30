@@ -50,16 +50,55 @@ export const GOOGLE_PROFILE = {
 } as const;
 
 /**
- * URL pública do site, base de `og:image`, canonical e dados estruturados.
+ * URL pública do site: base de `og:image`, canonical, dados estruturados e de todo link que a
+ * Dayse envia ao cliente no WhatsApp.
  *
- * Em produção, defina `NEXT_PUBLIC_SITE_URL` com o domínio aprovado pela loja.
- * Sem ela, cada deploy de pré-visualização na Vercel se resolve pela própria
- * URL gerada — o que mantém a imagem do WhatsApp funcionando sem configuração.
- * O valor local é o último recurso, para desenvolvimento.
+ * **Defina `NEXT_PUBLIC_SITE_URL` com o domínio da loja.** É a única fonte determinística: o
+ * valor é inlinado no bundle durante o `next build`, então precisa existir no build, não só no
+ * runtime. Sem ela o site cai no domínio da plataforma e, fora dela, em `localhost` — e um link
+ * para localhost na mão do cliente é pior do que link nenhum.
+ *
+ * `RAILWAY_PUBLIC_DOMAIN` entra apenas como rede de segurança, via `env` do next.config (que
+ * inlina no bundle): não é garantido que o Railway o popule na fase de build, e há relato de
+ * valor obsoleto após troca de domínio. Não dependa dele.
  */
+/**
+ * Tira a barra final e espaços. Parte do código concatena (`${SITE_URL}/veiculos/...`), então uma
+ * barra sobrando viraria `//veiculos/...` nos dados estruturados e no canonical — URL diferente
+ * aos olhos do Google. Quem cadastra a variável no painel cola o que a plataforma mostra, com
+ * barra, então a normalização fica aqui e não na instrução.
+ */
+function normalizarBase(valor: string): string | null {
+  const limpo = valor.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\/[^\s/]+/.test(limpo)) return null;
+  return limpo;
+}
+
 function resolverSiteUrl(): string {
-  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  const explicita = process.env.NEXT_PUBLIC_SITE_URL;
+  if (explicita) {
+    const base = normalizarBase(explicita);
+    if (base) return base;
+    if (typeof window === 'undefined') {
+      console.error(
+        `\n*** NEXT_PUBLIC_SITE_URL="${explicita}" não é uma URL absoluta válida.\n` +
+        '    Use o formato https://dominio.com.br (sem barra no final). ***\n',
+      );
+    }
+  }
+  if (process.env.NEXT_PUBLIC_RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.NEXT_PUBLIC_RAILWAY_PUBLIC_DOMAIN.trim().replace(/\/+$/, '')}`;
+  }
   if (process.env.NEXT_PUBLIC_VERCEL_URL) return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`;
+
+  // Falha audível: foi o silêncio desse fallback que deixou links de localhost irem a produção.
+  if (process.env.NODE_ENV === 'production' && typeof window === 'undefined') {
+    console.error(
+      '\n*** NEXT_PUBLIC_SITE_URL não definida. O site vai gerar links para http://localhost:3000,\n' +
+      '    incluindo os que a Dayse manda no WhatsApp. Defina a variável no painel do Railway\n' +
+      '    com o domínio da loja e faça um novo deploy (o valor é inlinado no build). ***\n',
+    );
+  }
   return 'http://localhost:3000';
 }
 
