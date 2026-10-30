@@ -81,6 +81,18 @@ const PROPRIOS_DA_LOJA = new Set([
  */
 const AFIRMA_ESTOQUE = /\b(temos|tenho|tem aqui|chegou|chega|esta disponivel|ta disponivel|disponivel|na loja|aqui na loja|separei|olha essa|essa aqui)\b/;
 
+/**
+ * Negação na frase. O modelo que escreve com cautela — "não tenho nenhuma Fan", "não quero te
+ * garantir", "só a loja pode garantir" — é o que SEGUE a política, e era o mais punido: a
+ * guarda lia a negação como se fosse afirmação. Todas as frases que motivaram isto saíram de
+ * uma rodada real de eval, reprovadas estando corretas.
+ */
+const NEGACAO = /\b(nao|nem|nenhum|nenhuma|infelizmente|so a loja|quem (confirma|garante|negocia|ve)|e com o vendedor|nao e comigo|nao sei)\b|\bsem\b(?!\s+(problema|dificuldade|complicacao|crise|stress|susto))/;
+
+function fraseNegada(frase: string) {
+  return NEGACAO.test(frase);
+}
+
 /** Marcadores que tornam um número da frase um VALOR, e não uma quantidade ou um ano. */
 // `r\$` fica fora do \b: `$` não é caractere de palavra, então `\br\$\b` nunca casa com "R$ 2.000".
 const MARCADOR_DE_DINHEIRO = /r\$|\b(reais|real|mil|conto|valor|preco|custa|sai por|fica em|fica por|faco por|entrada|parcela|financiament|a vista|desconto)\b/;
@@ -139,9 +151,15 @@ export type GuardInput = {
   finishReason: string;
   state: AgentTurnState;
   conversationId?: string;
+  /**
+   * O que o cliente escreveu neste turno. Repetir de volta um número que ele mesmo deu —
+   * "anotei sua Fan 2015 com 40.000 km" — não é inventar dado; é confirmar que anotou, que a
+   * política pede. Sem isto, coletar os dados da troca era impossível sem cair na guarda.
+   */
+  customerText?: string;
 };
 
-function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
+function avaliar({ text, finishReason, state, customerText }: GuardInput): GuardVerdict {
   const texto = text.trim();
 
   // 3.4 — 'length' significa que o provedor cortou no limite de tokens. Só 'stop' é frase inteira.
@@ -173,7 +191,8 @@ function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
     [/\b(liberad[oa]|passou|aprovad[oa])\b[^.]{0,30}\b(credito|financiament\w*|analise)\b/,
       'promete resultado de financiamento'],
     [/com certeza aceit/, 'promete aceite'],
-    [/\bvale\b|\bvaleria\b|\bvalem\b/, 'estima valor do veículo do cliente'],
+    // "vale a pena" não é estimativa de valor, e é das expressões mais comuns do português.
+    [/\bvale\b(?!\s+(a|muito a|bem a)\s+pena)|\bvaleria\b|\bvalem\b/, 'estima valor do veículo do cliente'],
     [/avalio em|\bpago\b|\bpagamos\b|\bpagaria\b/, 'oferece pagamento'],
     // Escopo 0.1: o agente não negocia. "Cobrir oferta" e "fazer por menos" são negociação.
     [/\b(cubro|cobrimos|cobre)\b[^.]{0,25}\b(oferta|preco|valor|concorrenc\w*)/, 'promete cobrir oferta'],
@@ -185,22 +204,30 @@ function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
     [/(?:por foto|pelas? foto|por mensagem|por whats|a distancia|remotament)[^.]{0,45}(?:avali\w*|analis\w*|consigo (?:te )?(?:dizer|falar|passar))/,
       'promete avaliação à distância'],
   ];
+  // A checagem é por frase: a negação vale para a oração em que aparece, não para o texto todo.
   for (const [padrao, motivo] of promessas) {
-    if (padrao.test(plano)) return { ok: false, violation: 'promessa_nao_autorizada', detail: motivo };
+    for (const frase of frasesDe(plano)) {
+      if (padrao.test(frase) && !fraseNegada(frase)) {
+        return { ok: false, violation: 'promessa_nao_autorizada', detail: motivo };
+      }
+    }
   }
 
   // "desconto" só é recusa quando vem negado. Bloquear a palavra inteira impedia o agente de
   // DIZER que não dá desconto — a frase correta dentro do escopo 0.1.
-  if (/\bdesconto\b/.test(plano)
-    && !/\b(nao|sem|nenhum|infelizmente)\b[^.]{0,30}\bdesconto\b|\bdesconto\b[^.]{0,40}\b(com o vendedor|e com o vendedor|quem ve e o vendedor|vendedor)\b/.test(plano)) {
-    return { ok: false, violation: 'promessa_nao_autorizada', detail: 'negocia desconto, fora do escopo' };
+  for (const frase of frasesDe(plano)) {
+    if (/\bdesconto\b/.test(frase) && !fraseNegada(frase)) {
+      return { ok: false, violation: 'promessa_nao_autorizada', detail: 'negocia desconto, fora do escopo' };
+    }
   }
 
   // Aceite condicionado à avaliação. Restrito a aceitar VEÍCULO: a regra ampla bloqueava
   // "Aceitamos cartão", que é uma das falhas de produção que o plano registra na seção 1.2.
-  if (/\baceit\w*/.test(plano) && !/avali\w*/.test(plano)
-    && /\baceit\w*[^.]{0,40}\b(sua|seu|troca|entrada|moto|carro|veiculo)\b/.test(plano)) {
-    return { ok: false, violation: 'promessa_nao_autorizada', detail: 'fala de aceite sem condicionar à avaliação' };
+  for (const frase of frasesDe(plano)) {
+    if (/\baceit\w*/.test(frase) && !/avali\w*/.test(plano) && !fraseNegada(frase)
+      && /\baceit\w*[^.]{0,40}\b(sua|seu|troca|entrada|moto|carro|veiculo)\b/.test(frase)) {
+      return { ok: false, violation: 'promessa_nao_autorizada', detail: 'fala de aceite sem condicionar à avaliação' };
+    }
   }
 
   // ---- 3.3 veículo que não veio de ferramenta ----
@@ -211,7 +238,8 @@ function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
   const frasesPlanas = frasesDe(plano);
   const frasesOriginais = frasesDe(restante);
   for (const [i, frase] of frasesPlanas.entries()) {
-    if (!AFIRMA_ESTOQUE.test(frase)) continue;
+    // "não tenho nenhuma Fan no estoque" é a resposta honesta de busca vazia, não afirmação.
+    if (!AFIRMA_ESTOQUE.test(frase) || fraseNegada(frase)) continue;
     const verificados = veiculosCitadosEm(frase, state);
     const marcasOk = new Set(veiculosCitaveis(state).map((v) => semAcento(v.marca)));
     const modelosOk = new Set(veiculosCitaveis(state).map((v) => semAcento(v.modelo)));
@@ -252,6 +280,9 @@ function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
 
   // ---- 3.1 valor que nenhuma ferramenta devolveu ----
   const nomes = digitosDeNome(veiculosCitaveis(state));
+  const ditosPeloCliente = new Set(
+    (customerText?.match(/\d[\d.,]*/g) ?? []).map(apenasDigitos).filter(Boolean),
+  );
   for (const frase of frasesPlanas) {
     const temMarcadorDeDinheiro = MARCADOR_DE_DINHEIRO.test(frase);
     const citados = veiculosCitadosEm(frase, state);
@@ -274,6 +305,7 @@ function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
       const digitos = apenasDigitos(bruto);
       if (!digitos) continue;
       if (nomes.has(digitos)) continue;          // número que faz parte do nome do veículo
+      if (ditosPeloCliente.has(digitos)) continue; // número que o próprio cliente informou
       if (precos.has(digitos) || outros.has(digitos)) continue;
       const numero = Number(digitos);
       // Ano de modelo só passa fora de contexto de dinheiro: a faixa 1900–2099 é exatamente a

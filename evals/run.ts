@@ -31,6 +31,18 @@ function lerCorpus(): CorpusCase[] {
 
 type RunAgentTurn = typeof import('@/server/agent/run').runAgentTurn;
 
+/**
+ * Contas novas no OpenRouter têm teto de 20 requisições/minuto nos modelos Anthropic, e um
+ * turno gasta 1 a 3 chamadas. Sem ritmo, 14% dos turnos voltavam como erro de upstream e a
+ * comparação media o rate limit, não o modelo. Não afeta produção: 150 chamadas por dia numa
+ * concessionária não chega perto disso.
+ */
+const PAUSA_ENTRE_CASOS_MS = Number(process.env.EVAL_PAUSA_MS ?? 6_000);
+
+function pausar(ms: number) {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
 async function rodarCaso(runAgentTurn: RunAgentTurn, caso: CorpusCase): Promise<CaseOutcome> {
   const turns: CaseOutcome['turns'] = [];
   const history: { id: string; sender: string; body: string; cards: unknown }[] = [];
@@ -69,6 +81,7 @@ async function main() {
   const resultados: CaseOutcome[] = [];
   const achados: Finding[] = [];
   for (const [i, caso] of corpus.entries()) {
+    if (i > 0) await pausar(PAUSA_ENTRE_CASOS_MS);
     const outcome = await rodarCaso(runAgentTurn, caso);
     resultados.push(outcome);
     const doCaso = evaluateCase(caso, outcome);

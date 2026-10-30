@@ -172,6 +172,10 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   const text = result.text.trim();
   const guard = checkAgentReply({
     text, finishReason: result.finishReason, state, conversationId: input.conversationId,
+    // O que o cliente escreveu neste turno e nos anteriores: repetir de volta um número que
+    // ele mesmo deu é confirmar que anotou, não inventar dado.
+    customerText: [...input.history.filter((m) => m.sender === 'visitor').map((m) => m.body),
+      input.message].join('\n'),
   });
   if (!guard.ok) return fallback(guard, usage, toolsUsed, text);
 
