@@ -321,3 +321,48 @@ describe('Dayse — dados da troca acumulam entre turnos', () => {
     expect(isTradeInClarification('aceita?', null)).toBe(false);
   });
 });
+
+/**
+ * A Dayse pede "a marca, o modelo e o estado do item" e o cliente responde. Tratar essa
+ * resposta como pedido de compra ("bicicleta não temos por aqui") é não entender a própria
+ * pergunta — foi o que aconteceu no teste real pelo WhatsApp.
+ */
+describe('Proposta de item fora do nicho continua aberta enquanto o cliente fala dele', () => {
+  const proposta = 'tenho uma bicicleta elétrica avaliada em 2 mil reais. aceitam de entrada para aquisição de uma bros?';
+
+  it('entende a descrição do item como resposta à pergunta, não como pedido de compra', async () => {
+    const res = await answerFromPlatformKnowledge(
+      'Bicicleta Elétrica Honeywhale S150 Para Adultos, Com Aro 29 e Bateria Removível de 22.5Ah',
+      mockSearchCatalog,
+      { recentTradeIn: 'bicicleta elétrica; 2 mil reais; entrada na Bros', customerName: 'Ronald' },
+    );
+    expect(res.text).not.toContain('não temos por aqui');
+    expect(res.text).toContain('Honeywhale');
+    expect(res.handoffReason).toBe('trade_in');
+    // Não pode prometer aceite nem valor: a avaliação é presencial.
+    expect(res.text).not.toMatch(/\baceitamos\b/);
+    expect(res.text).toContain('presencial');
+  });
+
+  it('não ecoa a cobrança de resposta como se fosse a descrição do item', async () => {
+    const res = await answerFromPlatformKnowledge('Aceitam ela?', mockSearchCatalog,
+      { recentTradeIn: proposta, customerName: 'Ronald' });
+    expect(res.text).toContain('precisa ser confirmado');
+    expect(res.text).not.toContain('**Aceitam ela?**');
+  });
+
+  it('preserva o item e o valor estimado no fato entregue ao vendedor', async () => {
+    const res = await answerFromPlatformKnowledge('Bicicleta Honeywhale S150, aro 29', mockSearchCatalog,
+      { recentTradeIn: 'bicicleta elétrica; 2 mil reais; entrada na Bros', customerName: 'Ronald' });
+    const quote = res.facts.find((f) => f.field === 'trade_in')?.quote ?? '';
+    expect(quote).toContain('2 mil reais');
+    expect(quote).toContain('Honeywhale');
+  });
+
+  it('solta a proposta quando o cliente volta a procurar veículo', async () => {
+    const res = await answerFromPlatformKnowledge('quero ver uma moto do estoque', mockSearchCatalog,
+      { recentTradeIn: 'bicicleta elétrica; 2 mil reais', customerName: 'Ronald' });
+    expect(res.text).not.toContain('Honeywhale');
+    expect(res.cards.length).toBeGreaterThan(0);
+  });
+});

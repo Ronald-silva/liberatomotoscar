@@ -837,14 +837,33 @@ export async function answerFromPlatformKnowledge(
       checkedAt: new Date().toISOString(),
     };
   }
-  const recentNonVehicle = context?.recentTradeIn && OUT_OF_SCOPE_PRODUCTS.some((item) =>
-    new RegExp(`\\b${item}\\b`).test(normalizePlain(context.recentTradeIn!)));
-  if (recentNonVehicle && (isTradeInClarification(text, context?.recentTradeIn) ||
-    isTradeInYearFollowUp(text, context?.recentTradeIn) || /^aceita\w*(?:\s+(?:ela|isso|a bicicleta))?\??$/.test(v))) {
+  // Item fora do nicho já oferecido como entrada. Enquanto a proposta está aberta, falar dele é
+  // continuar a negociação, nunca pedir para comprar: foi a própria Dayse quem pediu "marca,
+  // modelo e estado do item", então a resposta a essa pergunta não pode virar "não temos por aqui".
+  const openNonVehicleOffer = context?.recentTradeIn
+    ? OUT_OF_SCOPE_PRODUCTS.find((item) => new RegExp(`\\b${item}\\b`).test(normalizePlain(context.recentTradeIn!)))
+    : undefined;
+  const continuesNonVehicleOffer = Boolean(openNonVehicleOffer) &&
+    !intents.wantsMoto && !intents.wantsCar && (
+      isTradeInClarification(text, context?.recentTradeIn) ||
+      isTradeInYearFollowUp(text, context?.recentTradeIn) ||
+      isTradeInDataFollowUp(text, context?.recentTradeIn) ||
+      /^aceita\w*(?:\s+(?:ela|isso|a bicicleta))?\??$/.test(v) ||
+      // Descreveu o próprio item que ofereceu.
+      intents.asksOutOfScopeProduct === openNonVehicleOffer ||
+      new RegExp(`\\b${openNonVehicleOffer}\\b`).test(v)
+    );
+  if (continuesNonVehicleOffer) {
+    // Cobrar resposta é diferente de descrever o item: ecoar "Aceitam ela?" como se fosse a
+    // descrição do produto soa como se a Dayse não tivesse lido.
+    const apenasCobrança = isTradeInClarification(text, context?.recentTradeIn) ||
+      /^aceita\w*(?:\s+(?:ela|isso|a bicicleta))?\??$/.test(v);
     return {
       matched: true, isInstitutionalOnly: false,
-      text: `Anotei essa informação${nameGreeting}. O uso da bicicleta como entrada ainda precisa ser confirmado por um vendedor; não consigo prometer o aceite nem o valor antes da avaliação.`,
-      cards: [], facts: [{ field: 'trade_in', quote: tradeSource.slice(0, 100) }],
+      text: apenasCobrança
+        ? `Ainda não tenho essa resposta${nameGreeting}: o uso de ${openNonVehicleOffer} como entrada precisa ser confirmado por um vendedor, e nem o aceite nem o valor saem antes da avaliação presencial na loja.`
+        : `Anotei${nameGreeting}: **${text.trim().slice(0, 120)}**. Já passei os dados para o vendedor, mas o aceite de ${openNonVehicleOffer} como entrada precisa ser confirmado por ele, junto com o valor, na avaliação presencial aqui na loja. Enquanto isso, qual moto ou carro do nosso estoque você tem em vista?`,
+      cards: [], facts: [{ field: 'trade_in', quote: tradeSource.slice(0, 160) }],
       handoffRequested: true, handoffReason: 'trade_in', handoffUrl: null,
       checkedAt: new Date().toISOString(),
     };
