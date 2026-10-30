@@ -58,3 +58,21 @@ describe('ficha preenchida pelo lojista', () => {
     }
   });
 });
+
+describe('a ficha que o vendedor lê antes de ligar', () => {
+  it('registrar_lead limita o tamanho do que vai para a ficha', async () => {
+    const { registrarLeadSchema } = await import('./tools');
+    // O limite BALIZA, não decide: na conversa real o campo modelo guardou "O que precisa pra
+    // fechar negócio na Saveiro ?", que tem 44 caracteres e passaria por qualquer teto razoável.
+    // Quem distingue pergunta de dado é a instrução do prompt, medida com modelo real.
+    for (const bom of ['Saveiro Robust', 'até 90 mil', 'sábado 14h', 'Titan 2002']) {
+      expect(registrarLeadSchema.safeParse({ campo: 'model', valor: bom }).success, bom).toBe(true);
+    }
+    expect(registrarLeadSchema.safeParse({ campo: 'model', valor: 'x'.repeat(61) }).success).toBe(false);
+  });
+
+  it('o prompt dá o exemplo de dado curto', () => {
+    expect(P).toMatch(/Anote o DADO, curto/);
+    expect(P).toContain('"Saveiro Robust"');
+  });
+});

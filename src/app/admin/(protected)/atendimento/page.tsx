@@ -51,6 +51,24 @@ const factLabels: Record<string, string> = {
   purpose: 'Finalidade',
 };
 
+/**
+ * Ordem de leitura da ficha, pensada para quem vai ligar para o cliente: primeiro o que ele
+ * quer e quanto pode gastar, depois como pretende pagar. A visita sai desta lista e ganha
+ * destaque próprio — é o compromisso marcado, não mais um dado entre outros.
+ */
+const ORDEM_DA_FICHA = ['purpose', 'category', 'model', 'budget', 'trade_in',
+  'payment', 'timeline', 'negotiation'] as const;
+
+function organizarFicha(facts: { field: string; quote: string }[]) {
+  const porCampo = new Map(facts.map((f) => [f.field, f.quote]));
+  return {
+    visita: porCampo.get('visit') ?? null,
+    linhas: ORDEM_DA_FICHA
+      .filter((campo) => porCampo.has(campo))
+      .map((campo) => ({ campo, rotulo: factLabels[campo] ?? campo, valor: porCampo.get(campo)! })),
+  };
+}
+
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
   timeStyle: 'short',
@@ -221,15 +239,30 @@ export default async function AttendancePage({
                     </div>
                   </header>
 
-                  {detail.conversation.facts.length > 0 ? (
-                    <ul className={attendanceStyles.factList} aria-label="Interesses informados pelo cliente">
-                      {detail.conversation.facts.map((fact, idx) => (
-                        <li key={`${fact.field}-${idx}`} className={attendanceStyles.factChip}>
-                          <strong>{factLabels[fact.field] ?? fact.field}:</strong> “{fact.quote}”
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  {(() => {
+                    const ficha = organizarFicha(detail.conversation.facts);
+                    if (!ficha.visita && ficha.linhas.length === 0) return null;
+                    return (
+                      <div className={attendanceStyles.briefing}>
+                        {ficha.visita ? (
+                          <p className={attendanceStyles.visita}>
+                            <span className={attendanceStyles.visitaRotulo}>Visita combinada</span>
+                            <span className={attendanceStyles.visitaValor}>{ficha.visita}</span>
+                          </p>
+                        ) : null}
+                        {ficha.linhas.length > 0 ? (
+                          <dl className={attendanceStyles.ficha} aria-label="O que o cliente informou">
+                            {ficha.linhas.map(({ campo, rotulo, valor }) => (
+                              <div key={campo} className={attendanceStyles.fichaLinha}>
+                                <dt>{rotulo}</dt>
+                                <dd title={valor}>{valor}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
 
                   <div className={attendanceStyles.messageStream} aria-label="Histórico de mensagens">
                     {detail.messages.length === 0 ? (

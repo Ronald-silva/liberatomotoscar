@@ -55,7 +55,10 @@ export const detalharVeiculoSchema = z.object({
 
 export const registrarLeadSchema = z.object({
   campo: leadFieldSchema,
-  valor: z.string().trim().min(1).max(160).describe('trecho literal da mensagem do cliente'),
+  // O limite baliza, não decide: a pergunta que poluiu a ficha em produção tinha 44 caracteres.
+  // Quem distingue dado de frase é a instrução no prompt e na descrição da ferramenta.
+  valor: z.string().trim().min(1).max(60)
+    .describe('o dado em si, curto — "Saveiro Robust", "até 90 mil", "sábado 14h"'),
 });
 
 export const chamarVendedorSchema = z.object({ motivo: handoffReasonSchema });
@@ -252,7 +255,9 @@ export function createAgentTools(state: AgentTurnState, deps: AgentToolDeps = {}
     }),
     registrar_lead: tool({
       description: 'Anota um dado que o cliente informou, para o vendedor ver na caixa de entrada. '
-        + 'O valor deve ser trecho do que o cliente escreveu, não sua interpretação.',
+        + 'Grave o DADO, curto, não a frase inteira: para o campo model grave "Saveiro Robust", '
+        + 'não "o que precisa pra fechar negócio na Saveiro?". Para visit, grave o dia e a hora '
+        + 'combinados. O vendedor lê isso de relance antes de ligar.',
       inputSchema: registrarLeadSchema,
       execute: async (input) => fn.registrarLead(input),
     }),

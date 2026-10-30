@@ -60,9 +60,17 @@
 .conversationDetail { display: grid; gap: var(--attendance-space-2); padding: var(--attendance-space-3); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-surface); }
 .detailHeader { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--attendance-space-1); padding-bottom: var(--attendance-space-2); border-bottom: 1px solid var(--attendance-line); }
 .detailHeader h3 { margin: 0; font-size: 1.15rem; }
-.factList { display: flex; flex-wrap: wrap; gap: var(--attendance-space-1); margin: 0; padding: 0; list-style: none; }
-.factChip { padding: 0.25rem 0.65rem; border: 1px solid var(--attendance-line); border-radius: 999px; font-size: 0.8125rem; color: var(--attendance-muted); }
-.messageStream { display: grid; gap: var(--attendance-space-1); max-height: 420px; overflow-y: auto; padding-right: 0.25rem; }
+/* Ficha do vendedor: o que ele precisa saber antes de ligar, na ordem em que precisa. */
+.briefing { display: grid; gap: var(--attendance-space-2); }
+.visita { display: grid; gap: 0.15rem; margin: 0; padding: var(--attendance-space-2) var(--attendance-space-3); border-left: 3px solid #25d366; border-radius: 0 12px 12px 0; background: rgba(37, 211, 102, 0.1); }
+.visitaRotulo { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6ee7a0; }
+.visitaValor { font-size: 1.05rem; font-weight: 700; line-height: 1.35; }
+.ficha { display: grid; gap: 0; margin: 0; padding: 0; }
+.fichaLinha { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--attendance-space-2); padding: 0.45rem 0; border-top: 1px solid var(--attendance-line); }
+.fichaLinha:first-child { border-top: none; }
+.fichaLinha dt { font-size: 0.8125rem; font-weight: 600; color: var(--attendance-muted); }
+.fichaLinha dd { margin: 0; min-width: 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.messageStream { display: grid; gap: var(--attendance-space-1); max-height: min(60vh, 560px); overflow-y: auto; padding-right: 0.25rem; }
 .messageBubble { display: grid; gap: 0.25rem; padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-bg); }
 .messageVisitor { border-color: #6b7280; }
 .messageHuman { border-color: var(--attendance-accent); }
@@ -95,4 +103,5 @@
 @media (max-width: 480px) {
   .screen { padding: var(--attendance-space-2); }
   .choices, .conversationDetail { padding: var(--attendance-space-2); }
+  .fichaLinha { grid-template-columns: 1fr; gap: 0.1rem; }
 }
