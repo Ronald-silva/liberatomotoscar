@@ -49,6 +49,13 @@ export const STORE_POLICY = {
    * encher a mensagem com etapa de cartório afasta quem estava perto de comprar.
    */
   documentacao: 'a transferência e a documentação são tratadas na loja, com o Liberato' as string | null,
+  /**
+   * Confirmado pelo lojista em 30/10/2026. O estoque gira rápido, então não ter o veículo hoje
+   * não é um "não". É anotar o modelo e dizer que pode chegar — perder o cliente porque a moto
+   * dele não está na vitrine HOJE é perder uma venda que existiria na semana que vem.
+   */
+  rotatividade: 'o estoque gira rápido e entram veículos novos com frequência; o modelo que o '
+    + 'cliente procura pode chegar em pouco tempo' as string | null,
 } as const;
 
 const ROTULOS: Record<string, string> = {
@@ -75,6 +82,7 @@ export function resumoDaPolitica() {
     confirmado: {
       pagamento: [...STORE_POLICY.pagamento.aceitos],
       servicos: ['compra', 'venda', 'troca mediante avaliação presencial'],
+      ...(STORE_POLICY.rotatividade ? { rotatividade: STORE_POLICY.rotatividade } : {}),
       ...(STORE_POLICY.pagamento.parcelasNoCartao ? { parcelamento: STORE_POLICY.pagamento.parcelasNoCartao } : {}),
       ...(STORE_POLICY.garantia ? { garantia: STORE_POLICY.garantia } : {}),
       ...(STORE_POLICY.horario ? { horario: STORE_POLICY.horario } : {}),
