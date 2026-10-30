@@ -1,10 +1,11 @@
 import type { InventoryVehicle } from '@/data/inventory-vehicles';
+import { buildVehicleTitle } from '@/lib/vehicle-title';
 import type { listPublicVehiclesWithCover } from './service';
 
 type PublicListing = Awaited<ReturnType<typeof listPublicVehiclesWithCover>>[number];
 
 export function toCatalogVehicle(vehicle: PublicListing): InventoryVehicle {
-  const title = [vehicle.brand, vehicle.model, vehicle.version].filter(Boolean).join(' ');
+  const title = buildVehicleTitle(vehicle.brand, vehicle.model, vehicle.version);
   const category = vehicle.type === 'motorcycle' ? 'moto' : 'carro';
   const year = vehicle.year ?? undefined;
   const kilometers = vehicle.mileageKm ?? undefined;

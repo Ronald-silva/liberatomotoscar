@@ -12,6 +12,7 @@ import {
   STORE_ADDRESS_LINE,
   STORE_STREET_ADDRESS,
 } from '@/data/store';
+import { buildVehicleTitle } from '@/lib/vehicle-title';
 import type { HandoffReason, LeadFact } from './conversation-repository';
 import { searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
 
@@ -90,7 +91,7 @@ function findStaticMetadata(item: KnowledgeVehicleItem): InventoryVehicle | unde
 
 export function enrichCatalogVehicle(item: KnowledgeVehicleItem): EnrichedCatalogVehicle {
   const meta = findStaticMetadata(item);
-  const title = [item.brand, item.model, item.version].filter(Boolean).join(' ') || meta?.title || 'Veículo';
+  const title = buildVehicleTitle(item.brand, item.model, item.version) || meta?.title || 'Veículo';
   const priceCents = item.priceCents ?? Math.round((meta?.priceBRL ?? 0) * 100);
   const priceBRL = priceCents / 100;
   const categoryLabel =
@@ -246,6 +247,33 @@ const OUT_OF_SCOPE_PRODUCTS = [
   'ventilador', 'liquidificador', 'airfryer', 'panela',
 ];
 
+/**
+ * Nomes de modelo que colidem com palavra comum do português. "fazer uma proposta" não é a
+ * Yamaha Fazer e "sou fan de moto antiga" não é a Honda Fan, então esses exigem uma pista de
+ * veículo por perto (marca, artigo, cor ou cilindrada) para contar como menção ao anúncio.
+ */
+const AMBIGUOUS_MODEL_TOKENS = new Set(['fazer', 'fan', 'pop', 'city', 'up', 'ka', 'classic', 'eco', 'march']);
+
+/** Menção confiável a um modelo do catálogo, com desambiguação dos nomes que são palavra comum. */
+export function mentionsModelName(
+  model: string | null | undefined,
+  text: string,
+  brand?: string | null,
+): boolean {
+  const modelNorm = normalizePlain(model ?? '');
+  if (!modelNorm) return false;
+  const v = normalizePlain(text);
+  if (!new RegExp(`\\b${modelNorm}\\b`).test(v)) return false;
+  if (!AMBIGUOUS_MODEL_TOKENS.has(modelNorm)) return true;
+  const brandNorm = normalizePlain(brand ?? '');
+  return (
+    Boolean(brandNorm && new RegExp(`\\b${brandNorm}\\s+${modelNorm}\\b`).test(v)) ||
+    new RegExp(`\\b(?:moto|carro|modelo)\\s+${modelNorm}\\b`).test(v) ||
+    new RegExp(`\\b${modelNorm}\\s+(?:\\d{2,4}|branc\\w*|pret\\w*|vermelh\\w*|cinza|prata|azul)\\b`).test(v) ||
+    new RegExp(`\\b(?:a|na|da|pela|essa|esta|aquela|uma|minha)\\s+${modelNorm}\\b`).test(v)
+  );
+}
+
 /** Extrai o primeiro nome do cliente a partir do perfil do WhatsApp ou de apresentação na mensagem. */
 export function extractCustomerFirstName(text: string, contextName?: string | null): string | null {
   if (contextName && contextName.trim()) {
@@ -294,6 +322,76 @@ export function extractEntryCents(text: string): number | null {
   return null;
 }
 
+export type TradeInDetails = { vehicle: string | null; year: number | null; mileageKm: number | null };
+
+/**
+ * Dados do veículo oferecido na troca presentes num texto — serve tanto para a mensagem do
+ * cliente quanto para o fato `trade_in` já registrado, que é como o contexto atravessa os turnos.
+ */
+export function extractTradeInDetails(text: string): TradeInDetails {
+  const v = normalizePlain(text);
+  // "quero trocar na Fazer" cita o veículo que o cliente quer COMPRAR. Ele nunca pode substituir
+  // o veículo oferecido na troca, senão a usada do cliente se perde no meio da negociação.
+  const isPurchaseTarget = (term: string) =>
+    new RegExp(`\\b(?:n[ao]|pel[ao]|pr[ao]|para\\s+[ao])\\s+(?:\\w+\\s+)?${normalizePlain(term)}\\b`).test(v);
+  const brand = KNOWN_BRANDS.find((item) => item.aliases.some(
+    (alias) => new RegExp(`\\b${alias}\\b`).test(v) && !isPurchaseTarget(alias),
+  ));
+  const inventoryModel = INVENTORY_VEHICLES.find(
+    (item) => mentionsModelName(item.model, text, item.brand) && !isPurchaseTarget(item.model),
+  );
+  const unlistedModel = KNOWN_UNLISTED_MODELS.find(
+    (item) => mentionsModelName(item, text) && !isPurchaseTarget(item),
+  );
+  const modelLabel = inventoryModel?.model
+    ?? (unlistedModel ? unlistedModel.replace(/\b\w/g, (c) => c.toUpperCase()) : null);
+  const brandLabel = inventoryModel?.brand ?? brand?.canonical ?? null;
+  const vehicle = modelLabel
+    ? [brandLabel, modelLabel].filter(Boolean).join(' ')
+    : brandLabel;
+
+  const yearMatch = v.match(/\b(?:19|20)\d{2}\b/);
+  const mileageMatch = v.match(/\b(\d{1,3}(?:\.\d{3})*|\d{4,6})\s*km\b/);
+  return {
+    vehicle: vehicle || null,
+    year: yearMatch ? Number(yearMatch[0]) : null,
+    mileageKm: mileageMatch ? Number(mileageMatch[1]!.replace(/\./g, '')) : null,
+  };
+}
+
+/** O dado mais recente prevalece; o anterior preenche o que a mensagem atual não trouxe. */
+export function mergeTradeInDetails(previous: TradeInDetails, next: TradeInDetails): TradeInDetails {
+  return {
+    vehicle: next.vehicle ?? previous.vehicle,
+    year: next.year ?? previous.year,
+    mileageKm: next.mileageKm ?? previous.mileageKm,
+  };
+}
+
+/** Texto canônico do fato `trade_in`, relido nos turnos seguintes por extractTradeInDetails. */
+export function formatTradeInQuote(details: TradeInDetails): string {
+  return [
+    details.vehicle,
+    details.year ? `ano ${details.year}` : null,
+    details.mileageKm !== null ? `${details.mileageKm} km` : null,
+  ].filter(Boolean).join('; ').slice(0, 100);
+}
+
+/**
+ * O cliente está entregando dado do veículo da troca (modelo, ano ou quilometragem) e não
+ * pedindo um veículo do estoque. Sem isso, "é uma Honda Pop" virava busca no catálogo.
+ */
+export function isTradeInDataFollowUp(text: string, recentTradeIn?: string | null): boolean {
+  if (!recentTradeIn) return false;
+  const v = normalizePlain(text);
+  if (v.length > 120) return false;
+  if (/\b(quero|procuro|busco|gostei|comprar|financ\w*|simular|escolhi|interessad\w*|trocar n[ao])\b/.test(v)) {
+    return false;
+  }
+  const details = extractTradeInDetails(text);
+  return details.vehicle !== null || details.year !== null || details.mileageKm !== null;
+}
+
 export function isTradeInYearFollowUp(text: string, recentTradeIn?: string | null): boolean {
   const v = normalizePlain(text);
   return Boolean(recentTradeIn) && v.length <= 100 && /\b(?:19|20)\d{2}\b/.test(v) &&
@@ -301,7 +399,10 @@ export function isTradeInYearFollowUp(text: string, recentTradeIn?: string | nul
 }
 
 export function isTradeInClarification(text: string, recentTradeIn?: string | null): boolean {
-  return Boolean(recentTradeIn) && /^\s*\?{2,}\s*$/.test(text);
+  if (!recentTradeIn) return false;
+  // "????" ou uma cobrança curta de resposta ("aceita?", "e aí?") sobre a proposta em aberto.
+  return /^\s*\?{2,}\s*$/.test(text) ||
+    /^(e (?:ai|entao)|entao|aceita\w*|pode ser|da certo|tem interesse|serve)\s*\??$/.test(normalizePlain(text));
 }
 
 const KNOWN_BRANDS = [
@@ -335,6 +436,8 @@ export type DetectedIntents = {
   asksMostExpensive: boolean;
   asksLowestKm: boolean;
   asksNewest: boolean;
+  asksCourtesyClosing: boolean;
+  asksRecommendation: boolean;
   asksWorkOrAppUseCase: boolean;
   asksLongDistanceUseCase: boolean;
   asksOutOfScopeProduct: string | null;
@@ -356,7 +459,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
   const entryCents = extractEntryCents(text);
 
   const asksAddressOrLocation =
-    /\b(endereco|onde fica|localiza\w*|bairro|cidade|cep|como chegar|mapa|maps|rua|elcias lopes|parangaba|fortaleza|loja fisica|ponto de referencia)\b/.test(
+    /\b(endereco|onde fica\w*|fica\w* onde|onde voces|onde e a loja|onde esta\w*|localiza\w*|bairro|cidade|cep|como chegar|mapa|maps|rua|elcias lopes|parangaba|fortaleza|loja fisica|ponto de referencia)\b/.test(
       v,
     );
 
@@ -369,7 +472,15 @@ export function detectMessageIntents(text: string): DetectedIntents {
     );
 
   const asksAboutStoreOrTrust =
-    /\b(quem e voce|quem fala|dayse|sobre a loja|liberato motos|avaliac\w*|estrelas|google|confiavel|seguro|garantia|procedencia|historia)\b/.test(
+    /\b(quem e voce|quem fala|dayse|sobre a loja|liberato motos|avaliac\w*|estrelas|google|confiavel|historia)\b/.test(
+      v,
+    );
+
+  // Pergunta sobre consequência, arrependimento ou política de pós-venda não é intenção de
+  // compra: a base não tem esse dado, então ela não deve capturar o turno com o folder de
+  // troca ou de financiamento. Quem responde esses casos é o modelo.
+  const asksPolicyOrConsequence =
+    /\b(atras\w*|nao pagar|deixar de pagar|inadimpl\w*|multa|juros de mora|retomad\w*|busca e apreensao|devolv\w*|arrepend\w*|desistir|nao gostar|defeito|reclamac\w*|codigo de defesa|7 dias|sete dias|cancel\w*)\b/.test(
       v,
     );
 
@@ -378,19 +489,24 @@ export function detectMessageIntents(text: string): DetectedIntents {
       v,
     );
 
-  const mentionsKnownModel = [...INVENTORY_VEHICLES.map((item) => item.model), ...KNOWN_UNLISTED_MODELS]
-    .some((model) => new RegExp(`\\b${normalizePlain(model)}\\b`).test(v));
-  const asksTradeIn =
+  const mentionsKnownModel =
+    INVENTORY_VEHICLES.some((item) => mentionsModelName(item.model, text, item.brand)) ||
+    KNOWN_UNLISTED_MODELS.some((model) => mentionsModelName(model, text));
+  const mentionsTradeInPhrase =
     /\b(troca|trocar|dar na troca|aceita\w* troca|aceita\w* moto|aceita\w* carro|aceita\w* uma moto|aceita\w* um carro|meu carro na troca|minha moto na troca|veiculo na troca|como entrada|dar de entrada|moto de entrada|carro de entrada)\b/.test(
       v,
     ) || /\b(?:pra|para)\s+d(?:a|ar)\s+(?:de|como|na)\s+entrada\b/.test(v) ||
     (/\bde entrada\b/.test(v) && (OUT_OF_SCOPE_PRODUCTS.some((item) => new RegExp(`\\b${item}\\b`).test(v)) || entryCents === null) &&
       (mentionsKnownModel || /\b(?:tenho|meu|minha|aceita\w*)\b/.test(v)));
+  // "posso trocar se eu não gostar" é devolução, não entrada: só vale como troca quando o
+  // cliente aponta um veículo próprio.
+  const offersOwnVehicle = mentionsKnownModel || /\b(?:tenho|possuo|meu|minha|aceita\w*)\b/.test(v);
+  const asksTradeIn = mentionsTradeInPhrase && !(asksPolicyOrConsequence && !offersOwnVehicle);
 
   const asksFinancing =
-    /\b(financ\w*|parcel\w*|credito|simulac\w*|banco|cartao|sem entrada|dar entrada|prestac\w*)\b/.test(
+    (/\b(financ\w*|parcel\w*|credito|simulac\w*|banco|cartao|sem entrada|dar entrada|prestac\w*)\b/.test(
       v,
-    ) || (/\bentrada\b/.test(v) && !asksTradeIn);
+    ) || (/\bentrada\b/.test(v) && !asksTradeIn)) && !asksPolicyOrConsequence;
 
   const asksHuman =
     /\b(falar com vendedor|falar com atendente|chamar vendedor|atendente humano|falar com uma pessoa|atendimento humano|quero um vendedor)\b/.test(
@@ -413,6 +529,22 @@ export function detectMessageIntents(text: string): DetectedIntents {
 
   const asksNewest =
     /\b(mais nov\w*|ano mais recente|mais recente)\b/.test(v);
+
+  // Agradecimento ou encerramento não precisa de inferência: resposta instantânea, sem custo
+  // de modelo e sem risco de timeout num turno que só pede cordialidade.
+  // Pedido explícito de indicação: a base não decide por perfil, mas o modelo precisa de estoque.
+  const asksRecommendation =
+    /\b(o que (?:voce|vc|tu) (?:sugere|indica|recomenda|acha)|qual (?:voce|vc) (?:indica|recomenda|sugere)|me (?:ajuda a escolher|indica|sugere|recomenda)|qual (?:a )?melhor (?:opcao|moto|carro|escolha)|primeira moto|primeiro carro|nao sei qual|to na duvida|estou na duvida|qual vale mais a pena|o que compensa)\b/.test(
+      v,
+    );
+
+  const asksCourtesyClosing =
+    /^(ok+|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|agradec\w*|certo|entendi|perfeito|show|otimo|legal|bacana|k{2,}|haha\w*|rs+)[\s!.,…]*$/.test(
+      v,
+    ) ||
+    /\b(vou pensar|vou analisar|vou ver com calma|depois eu (?:volto|falo|chamo)|qualquer coisa eu (?:chamo|falo|volto))\b/.test(
+      v,
+    );
 
   const asksWorkOrAppUseCase =
     /\b(uber|99|aplicativo|app|ifood|entreg\w*|motoboy|frete|custo beneficio|custo-beneficio|melhor custo|economica|para rodar|rodar na|rodar no|para trabalhar)\b/.test(
@@ -460,6 +592,8 @@ export function detectMessageIntents(text: string): DetectedIntents {
     asksMostExpensive,
     asksLowestKm,
     asksNewest,
+    asksCourtesyClosing,
+    asksRecommendation,
     asksWorkOrAppUseCase,
     asksLongDistanceUseCase,
     asksOutOfScopeProduct,
@@ -528,10 +662,9 @@ export function isKnowledgeOrSpecificCatalogQuery(text: string): boolean {
   const v = normalizePlain(text);
   // Verifica se cita algum modelo ou marca conhecida do estoque ou do mercado
   for (const item of INVENTORY_VEHICLES) {
-    const modelNorm = normalizePlain(item.model);
     const brandNorm = normalizePlain(item.brand);
     if (
-      (modelNorm && new RegExp(`\\b${modelNorm}\\b`).test(v)) ||
+      mentionsModelName(item.model, text, item.brand) ||
       (brandNorm && new RegExp(`\\b${brandNorm}\\b`).test(v))
     ) {
       return true;
@@ -541,10 +674,34 @@ export function isKnowledgeOrSpecificCatalogQuery(text: string): boolean {
     if (brand.aliases.some((alias) => new RegExp(`\\b${alias}\\b`).test(v))) return true;
   }
   for (const unlisted of KNOWN_UNLISTED_MODELS) {
-    if (new RegExp(`\\b${unlisted}\\b`).test(v)) return true;
+    if (mentionsModelName(unlisted, text)) return true;
   }
 
   return false;
+}
+
+/**
+ * Marca e modelo que o cliente citou como interesse de compra, ignorando o que ele citou
+ * apenas como veículo de troca. `model` só vem preenchido para modelo que existe no catálogo,
+ * para não filtrar a busca por algo que a loja não anuncia; `mentionsAnyModel` também cobre
+ * modelos conhecidos de mercado, úteis para decidir se vale consultar o estoque.
+ */
+export function detectMentionedCatalogTerms(
+  text: string,
+): { brand?: string; model?: string; mentionsAnyModel: boolean } {
+  const v = normalizePlain(text);
+  const notOnlyTradeIn = (term: string) => !isMentionedOnlyAsTradeIn(normalizePlain(term), v);
+
+  const brand = KNOWN_BRANDS.find((item) => item.aliases.some(
+    (alias) => new RegExp(`\\b${alias}\\b`).test(v) && notOnlyTradeIn(alias),
+  ))?.canonical;
+  const model = INVENTORY_VEHICLES.find(
+    (item) => mentionsModelName(item.model, text, item.brand) && notOnlyTradeIn(item.model),
+  )?.model;
+  const unlisted = KNOWN_UNLISTED_MODELS.find(
+    (item) => mentionsModelName(item, text) && notOnlyTradeIn(item),
+  );
+  return { brand, model, mentionsAnyModel: Boolean(model ?? unlisted) };
 }
 
 /** Verifica se a mensagem pergunta sobre dados institucionais da loja (endereço, telefone, horário, avaliação, venda ou item fora do nicho). */
@@ -559,6 +716,7 @@ export function hasInstitutionalQuestion(text: string): boolean {
     intents.asksAboutStoreOrTrust ||
     intents.asksToSellVehicle ||
     intents.asksGreetingOnly ||
+    intents.asksCourtesyClosing ||
     intents.asksOutOfScopeProduct !== null
   );
 }
@@ -579,6 +737,9 @@ export async function answerFromPlatformKnowledge(
   const intents = detectMessageIntents(text);
   const firstName = extractCustomerFirstName(text, context?.customerName);
   const nameGreeting = firstName ? `, **${firstName}**` : '';
+  // Dentro de um trecho já em negrito o nome entra sem marcação: `**... , **Nome**!**` quebra
+  // o markdown do site e vira `*... , *Nome*!*` na tela do WhatsApp.
+  const namePlain = firstName ? `, ${firstName}` : '';
   const tradeSource = [context?.recentTradeIn, text].filter(Boolean).join(' ');
   const normalizedTradeSource = normalizePlain(tradeSource);
   const offeredNonVehicle = intents.asksOutOfScopeProduct && /\b(entrada|troca)\b/.test(v) &&
@@ -654,7 +815,7 @@ export async function answerFromPlatformKnowledge(
     return {
       matched: true,
       isInstitutionalOnly: false,
-      text: `🎧 **Recebi seu áudio${nameGreeting}!**\nNosso consultor da **${STORE.name}** já consegue ouvi-lo diretamente no WhatsApp da loja e vai te responder em instantes.\n\nSe quiser que eu já te adiante fotos, preços ou ficha técnica de algum veículo do estoque agora mesmo, pode digitar o nome do modelo ou valor aqui embaixo!`,
+      text: `🎧 **Recebi seu áudio${namePlain}!**\nNosso consultor da **${STORE.name}** já consegue ouvi-lo diretamente no WhatsApp da loja e vai te responder em instantes.\n\nSe quiser que eu já te adiante fotos, preços ou ficha técnica de algum veículo do estoque agora mesmo, pode digitar o nome do modelo ou valor aqui embaixo!`,
       cards: [],
       facts,
       handoffRequested: true,
@@ -671,49 +832,46 @@ export async function answerFromPlatformKnowledge(
       quote: captionRaw ? `Enviou foto/vídeo: ${captionRaw.slice(0, 80)}` : 'Enviou fotos/vídeo do veículo para avaliação',
     });
     paragraphs.push(
-      `📸 **Recebi as imagens/mídia do seu veículo${nameGreeting}!**\nComo a avaliação visual de troca e análise de documentos são feitas com todo cuidado pelo nosso avaliador, já destaquei sua conversa para a equipe da **${STORE.name}** conferir as fotos no aparelho da loja.\n\nPara agilizar sua avaliação, me confirme por texto:\n• **Marca, modelo e ano** do seu veículo\n• **Quilometragem aproximada**\n• Qual moto ou carro do nosso estoque você tem interesse na troca`,
+      `📸 **Recebi as imagens/mídia do seu veículo${namePlain}!**\nComo a avaliação visual de troca e análise de documentos são feitas com todo cuidado pelo nosso avaliador, já destaquei sua conversa para a equipe da **${STORE.name}** conferir as fotos no aparelho da loja.\n\nPara agilizar sua avaliação, me confirme por texto:\n• **Marca, modelo e ano** do seu veículo\n• **Quilometragem aproximada**\n• Qual moto ou carro do nosso estoque você tem interesse na troca`,
     );
     handoffRequested = true;
     handoffReason = 'trade_in';
   }
 
   const recentTradeIn = context?.recentTradeIn;
-  if (recentTradeIn && isTradeInClarification(text, recentTradeIn)) {
-    const offeredModel = [...catalog, ...INVENTORY_VEHICLES].find((item) => item.model &&
-      new RegExp(`\\b${normalizePlain(item.model)}\\b`).test(normalizePlain(recentTradeIn)));
-    const offeredVehicle = offeredModel
-      ? [offeredModel.brand, offeredModel.model].filter(Boolean).join(' ')
-      : 'sua moto ou carro';
+  const tradeInClarify = isTradeInClarification(text, recentTradeIn);
+  const tradeInData = isTradeInDataFollowUp(text, recentTradeIn);
+  // Coleta acumulativa dos dados da troca. O fato `trade_in` carrega o que já foi dito, a
+  // mensagem atual acrescenta o que falta, e nada disso consulta o estoque: "é uma Honda Pop"
+  // identifica o veículo do cliente, não um anúncio da loja.
+  if (recentTradeIn && (tradeInClarify || tradeInData)) {
+    const known = mergeTradeInDetails(
+      extractTradeInDetails(recentTradeIn),
+      extractTradeInDetails(text),
+    );
+    const registrados = [
+      known.vehicle,
+      known.year ? `ano ${known.year}` : null,
+      known.mileageKm !== null ? formatKilometers(known.mileageKm) : null,
+    ].filter(Boolean);
+    const faltando = [
+      !known.vehicle ? '**a marca e o modelo**' : null,
+      !known.year ? 'o **ano**' : null,
+      known.mileageKm === null ? 'a **quilometragem aproximada**' : null,
+    ].filter(Boolean);
+    const abertura = tradeInClarify ? `Desculpe a demora${nameGreeting}!` : `Perfeito${nameGreeting}!`;
+    // O aceite precisa ser reafirmado: quem escreve "????" está cobrando essa confirmação.
+    const aceite = ` **Sim, aceitamos ${known.vehicle ?? 'sua moto ou carro'} como entrada**, mediante avaliação da loja.`;
+    const anotado = registrados.length ? ` Já anotei **${registrados.join(' · ')}** para o avaliador.` : '';
+    const proximo = faltando.length
+      ? ` Para adiantar, me diz ${faltando.join(' e ')}?`
+      : ' A equipe confere o documento, a quilometragem e o estado do veículo antes de definir o valor. Qual moto ou carro do nosso estoque você quer negociar?';
     return {
       matched: true,
       isInstitutionalOnly: false,
-      text: `Desculpe a demora${nameGreeting}. **Sim, aceitamos ${offeredVehicle} como entrada**, mediante avaliação da loja. Qual é o **ano** do seu veículo? Se souber, pode me passar também a quilometragem.`,
+      text: `${abertura}${aceite}${anotado}${proximo}`,
       cards: [],
-      facts: [{ field: 'trade_in', quote: recentTradeIn.slice(0, 100) }],
-      handoffRequested: true,
-      handoffReason: 'trade_in',
-      handoffUrl: null,
-      checkedAt,
-    };
-  }
-  if (recentTradeIn && isTradeInYearFollowUp(text, recentTradeIn)) {
-    const year = v.match(/\b(?:19|20)\d{2}\b/)![0];
-    const mileageMatch = v.match(/\b(\d{1,3}(?:\.\d{3})*|\d{4,6})\s*km\b/);
-    const mileageKm = mileageMatch ? Number(mileageMatch[1]!.replace(/\./g, '')) : null;
-    const mileageLabel = mileageKm !== null ? formatKilometers(mileageKm) : null;
-    const offeredModel = [...catalog, ...INVENTORY_VEHICLES].find((item) => item.model &&
-      new RegExp(`\\b${normalizePlain(item.model)}\\b`).test(normalizePlain(recentTradeIn)));
-    const offeredVehicle = offeredModel
-      ? [offeredModel.brand, offeredModel.model].filter(Boolean).join(' ')
-      : 'seu veículo';
-    return {
-      matched: true,
-      isInstitutionalOnly: false,
-      text: mileageLabel
-        ? `Perfeito${nameGreeting}! Anotei os dados que você informou para avaliar sua **${offeredVehicle} como entrada**: **ano ${year}** e **${mileageLabel}**. A equipe confere o documento, a quilometragem e o estado do veículo antes de definir o valor. Qual moto ou carro do nosso estoque você quer negociar?`
-        : `Perfeito${nameGreeting}! Anotei **${offeredVehicle} ${year}** para avaliação como entrada. Se souber, me diga a **quilometragem aproximada** e qual moto ou carro do nosso estoque você quer negociar. A equipe confirma o valor da sua usada após a avaliação.`,
-      cards: [],
-      facts: [{ field: 'trade_in', quote: `${recentTradeIn.slice(0, 55)}; ano ${year}${mileageLabel ? `; ${mileageLabel}` : ''}`.slice(0, 100) }],
+      facts: [{ field: 'trade_in', quote: formatTradeInQuote(known) || recentTradeIn.slice(0, 100) }],
       handoffRequested: true,
       handoffReason: 'trade_in',
       handoffUrl: null,
@@ -740,6 +898,27 @@ export async function answerFromPlatformKnowledge(
       matched: true,
       isInstitutionalOnly: true,
       text: `${periodGreeting}${nameGreeting}! Tudo ótimo por aqui! Eu sou a **Dayse**, consultora virtual da **${STORE.name}** na ${STORE.district} (${STORE.city}/${STORE.state}). ${stockSummary}\n\nPosso te indicar a melhor opção pelo seu perfil (trabalho, Uber/99, dia a dia ou família), simular entrada/financiamento, avaliar seu usado na troca ou enviar nossa localização. Como posso te ajudar hoje?`,
+      cards: [],
+      facts: [],
+      handoffRequested: false,
+      handoffReason: null,
+      handoffUrl: null,
+      checkedAt,
+    };
+  }
+
+  // 1b. Agradecimento ou "vou pensar": encerra com cordialidade, sem empurrar estoque.
+  if (
+    intents.asksCourtesyClosing && !intents.asksGreetingOnly && !intents.asksTradeIn &&
+    !intents.asksFinancing && !intents.asksHuman && !intents.asksAddressOrLocation &&
+    !intents.asksPhoneOrWhatsapp && !intents.asksHoursOrVisit && !intents.asksAboutStoreOrTrust &&
+    !intents.asksToSellVehicle && !intents.asksAllInventory && !intents.wantsMoto &&
+    !intents.wantsCar && intents.budget === null && !intents.asksOutOfScopeProduct
+  ) {
+    return {
+      matched: true,
+      isInstitutionalOnly: true,
+      text: `Imagina${nameGreeting}, fico à disposição! Quando quiser retomar, me chama aqui que eu já levanto as opções do estoque e tiro suas dúvidas. 😊`,
       cards: [],
       facts: [],
       handoffRequested: false,
@@ -795,7 +974,7 @@ export async function answerFromPlatformKnowledge(
     const slugNorm = normalizePlain(item.slug.replace(/-/g, ' '));
     if (!modelNorm) return false;
     const mentionedModel =
-      new RegExp(`\\b${modelNorm}\\b`).test(v) ||
+      mentionsModelName(item.model, text, item.brand) ||
       (versionNorm && versionNorm.length >= 3 && new RegExp(`\\b${versionNorm}\\b`).test(v)) ||
       (slugNorm && v.includes(slugNorm));
     return mentionedModel && !isMentionedOnlyAsTradeIn(modelNorm, v);
@@ -831,7 +1010,7 @@ export async function answerFromPlatformKnowledge(
   );
 
   const requestedUnlistedModel = KNOWN_UNLISTED_MODELS.find(
-    (model) => new RegExp(`\\b${model}\\b`).test(v) && !isMentionedOnlyAsTradeIn(model, v),
+    (model) => mentionsModelName(model, text) && !isMentionedOnlyAsTradeIn(model, v),
   );
 
   if (matchedModels.length > 0 && matchedModels[0]?.model) {
@@ -1123,22 +1302,34 @@ export async function answerFromPlatformKnowledge(
 
   // 4. Troca e Financiamento (podem vir isolados ou combinados com busca de veículo)
   if (intents.asksTradeIn) {
-    facts.push({ field: 'trade_in', quote: text.trim().slice(0, 100) });
+    // O fato acumulado não pode ser sobrescrito por uma mensagem pobre: "aceita?" apagava
+    // "bicicleta elétrica; 2 mil reais" e a equipe perdia a proposta.
+    const knownTrade = mergeTradeInDetails(
+      extractTradeInDetails(context?.recentTradeIn ?? ''),
+      extractTradeInDetails(text),
+    );
+    const accumulatedQuote = formatTradeInQuote(knownTrade);
+    facts.push({
+      field: 'trade_in',
+      quote: accumulatedQuote || context?.recentTradeIn?.slice(0, 100) || text.trim().slice(0, 100),
+    });
     const hasYearOrSpecificTrade = /\b(19\d{2}|20\d{2})\b/.test(v);
     const offeredModel = tradeOnly
       ? [...catalog, ...INVENTORY_VEHICLES].find((item) => item.model &&
-          new RegExp(`\\b${normalizePlain(item.model)}\\b`).test(v))
+          mentionsModelName(item.model, text, item.brand))
       : null;
     const offeredVehicleLabel = offeredModel
       ? [offeredModel.brand, offeredModel.model].filter(Boolean).join(' ')
       : null;
-    const followUpTradeQuestion = hasYearOrSpecificTrade
+    const followUpTradeQuestion = knownTrade.vehicle && knownTrade.year
+      ? `Já estou com os dados da sua **${knownTrade.vehicle} ${knownTrade.year}** anotados para o avaliador, então não preciso perguntar de novo. Quer que eu encaminhe para um vendedor fechar os valores?`
+      : hasYearOrSpecificTrade
       ? 'Já registrei os dados do seu veículo para o nosso avaliador! Qual moto ou carro do nosso estoque você quer colocar na negociação, ou prefere passar aqui na loja hoje?'
       : offeredVehicleLabel
         ? `Entendi que você tem uma **${offeredVehicleLabel}**. Qual é o **ano** dela? Se souber, me diga também a quilometragem aproximada para adiantar a avaliação.`
         : 'Me conta: **qual é o modelo e o ano** da sua moto ou carro? Assim já te explico como funciona a avaliação e deixo adiantado para a equipe!';
     paragraphs.push(
-      `🔄 **Sim, aceitamos seu veículo como entrada${nameGreeting}!** 😊\nAqui na **${STORE.name}** nós fazemos **compra, venda, troca e financiamento** — analisamos sua moto ou carro usado como entrada na negociação (tanto para abater no valor à vista quanto para reduzir as parcelas do financiamento).\n\nBasta trazer para avaliação aqui na loja na **${STORE_STREET_ADDRESS} — ${STORE.district}, ${STORE.city}/${STORE.state}** ou enviar os dados pelo WhatsApp **${STORE.phoneDisplay}**.\n${
+      `🔄 **Sim, aceitamos seu veículo como entrada${namePlain}!** 😊\nAqui na **${STORE.name}** nós fazemos **compra, venda, troca e financiamento** — analisamos sua moto ou carro usado como entrada na negociação (tanto para abater no valor à vista quanto para reduzir as parcelas do financiamento).\n\nBasta trazer para avaliação aqui na loja na **${STORE_STREET_ADDRESS} — ${STORE.district}, ${STORE.city}/${STORE.state}** ou enviar os dados pelo WhatsApp **${STORE.phoneDisplay}**.\n${
         !intents.asksAddressOrLocation ? MAP_URL : ''
       }\n\n${followUpTradeQuestion}`.trim(),
     );
@@ -1159,7 +1350,7 @@ export async function answerFromPlatformKnowledge(
       entrySimulationText = `\n\nCom uma entrada de **${formatPrice(entryBRL)}**, a aprovação pelos bancos parceiros fica ainda mais fácil e reduz bastante o valor das parcelas (em até 48x mediante análise de crédito).`;
     }
     paragraphs.push(
-      `💳 **Sobre financiamento e parcelamento${nameGreeting}:**\nTrabalhamos com financiamentos pelos bancos parceiros (em até 48x) e parcelamento no cartão, sujeitos à análise de crédito de acordo com o seu perfil e valor de entrada, sem prometer aprovação prévia automática.${entrySimulationText}\n\nNosso consultor pode rodar sua simulação sem compromisso no WhatsApp **${STORE.phoneDisplay}**. Qual veículo você gostaria de simular?`,
+      `💳 **Sobre financiamento e parcelamento${namePlain}:**\nTrabalhamos com financiamentos pelos bancos parceiros (em até 48x) e parcelamento no cartão, sujeitos à análise de crédito de acordo com o seu perfil e valor de entrada, sem prometer aprovação prévia automática.${entrySimulationText}\n\nNosso consultor pode rodar sua simulação sem compromisso no WhatsApp **${STORE.phoneDisplay}**. Qual veículo você gostaria de simular?`,
     );
     handoffRequested = true;
     handoffReason = handoffReason ?? 'financing';

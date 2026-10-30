@@ -12,6 +12,7 @@ import {
   hasInstitutionalQuestion,
   isKnowledgeOrSpecificCatalogQuery,
   isTradeInClarification,
+  isTradeInDataFollowUp,
   isTradeInYearFollowUp,
   normalizePlain,
   type KnowledgeReply,
@@ -213,7 +214,7 @@ async function smartKnowledgeOrChoiceReply(
   recentTradeIn: string | null = null,
 ): Promise<AutomatedReply> {
   if (isKnowledgeOrSpecificCatalogQuery(body) || isTradeInYearFollowUp(body, recentTradeIn) ||
-    isTradeInClarification(body, recentTradeIn)) {
+    isTradeInClarification(body, recentTradeIn) || isTradeInDataFollowUp(body, recentTradeIn)) {
     const kb = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
     if (kb.matched) {
       return {
@@ -262,7 +263,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   if (mode === 'deterministic') {
     if (routed) return choiceReply(deps, routed);
     if (hasInstitutionalQuestion(body) || isTradeInYearFollowUp(body, recentTradeIn) ||
-      isTradeInClarification(body, recentTradeIn)) {
+      isTradeInClarification(body, recentTradeIn) || isTradeInDataFollowUp(body, recentTradeIn)) {
       const kb = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
       if (kb.matched) {
         return {
@@ -282,7 +283,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   // Perguntas institucionais da plataforma (endereço, localização, telefone, horário, avaliação, venda)
   // e consultas diretas à base de conhecimento/catálogo em produção respondem com 100% de precisão.
   if (hasInstitutionalQuestion(body) || isTradeInYearFollowUp(body, recentTradeIn) ||
-    isTradeInClarification(body, recentTradeIn) ||
+    isTradeInClarification(body, recentTradeIn) || isTradeInDataFollowUp(body, recentTradeIn) ||
     (isDefaultAgent && isKnowledgeOrSpecificCatalogQuery(body))) {
     const kb = await deps.knowledge(body, { recentModelOrTitle, recentTradeIn, customerName });
     if (kb.matched) {

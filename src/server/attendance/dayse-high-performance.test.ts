@@ -105,7 +105,9 @@ describe('Dayse Alta Performance — conversa real do teste com a IA concorrente
       customerName: 'Ronald',
     });
     expect(res.matched).toBe(true);
-    expect(res.text).toContain('Sim, aceitamos seu veículo como entrada, **Ronald**');
+    // Dentro de um trecho em negrito o nome entra sem marcação: `**..., **Ronald**!**` quebraria
+    // o markdown do site e viraria `*..., *Ronald*!*` na tela do WhatsApp.
+    expect(res.text).toContain('Sim, aceitamos seu veículo como entrada, Ronald!');
     expect(res.text).toContain('R. Elcias Lopes, 334, loja A');
     expect(res.text).toContain('Parangaba');
     expect(res.text).toContain('https://www.google.com/maps/search/');
@@ -117,9 +119,14 @@ describe('Dayse Alta Performance — conversa real do teste com a IA concorrente
 
   it('quando o cliente já informa a moto da troca com ano, avança a negociação em vez de repetir a pergunta', async () => {
     const res = await answerFromPlatformKnowledge('Tenho uma Fan 2018 para dar na troca', mockSearchCatalog);
-    expect(res.text).toContain('Já registrei os dados do seu veículo');
+    // A redação é livre; o que importa é nomear o veículo com o ano e não repetir a pergunta.
+    expect(res.text).toContain('Honda Fan 2018');
     expect(res.text).not.toContain('qual é o modelo e o ano');
-    expect(res.facts.some((f) => f.field === 'trade_in' && f.quote.includes('Fan 2018'))).toBe(true);
+    // O fato guarda a troca em forma canônica ("Honda Fan; ano 2018") justamente para ser
+    // relido nos turnos seguintes e acumular o que faltar.
+    const trade = res.facts.find((f) => f.field === 'trade_in');
+    expect(trade?.quote).toContain('Fan');
+    expect(trade?.quote).toContain('2018');
   });
 });
 
@@ -147,7 +154,8 @@ describe('Dayse Alta Performance — financiamento, nome e WhatsApp', () => {
     const res = await answerFromPlatformKnowledge('2018', mockSearchCatalog, {
       recentTradeIn: 'Tenho uma Honda Pop pra dar de entrada', recentModelOrTitle: 'Yamaha Fazer',
     });
-    expect(res.text).toContain('Honda Pop 2018');
+    expect(res.text).toContain('Honda Pop');
+    expect(res.text).toContain('2018');
     expect(res.text).toContain('quilometragem aproximada');
     expect(res.text).not.toContain('Yamaha Fazer');
     expect(res.cards).toHaveLength(0);

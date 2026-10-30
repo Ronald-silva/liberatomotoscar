@@ -1,4 +1,5 @@
 import { SITE_URL, STORE } from '@/data/store';
+import { buildVehicleTitle } from '@/lib/vehicle-title';
 import { searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
 import { detectMessageIntents } from './knowledge';
 
@@ -48,7 +49,7 @@ export async function deterministicAnswer(choice: DeterministicChoice,
     });
     const cards = items.flatMap((item) => item.brand && item.model && item.priceCents ? [{
       id: item.id,
-      title: [item.brand, item.model, item.version].filter(Boolean).join(' '),
+      title: buildVehicleTitle(item.brand, item.model, item.version),
       year: item.year,
       priceCents: item.priceCents,
       href: `/veiculos/${item.slug}`,

@@ -233,7 +233,8 @@ describe('orquestração de atendimento do site (P3)', () => {
     }, deps);
     expect(second.view.messages).toHaveLength(4);
     expect(second.view.messages.at(-1)?.sender).toBe('bot');
-    expect(second.view.messages.at(-1)?.body).toContain('Honda Pop 2018');
+    expect(second.view.messages.at(-1)?.body).toContain('Honda Pop');
+    expect(second.view.messages.at(-1)?.body).toContain('2018');
     expect(second.view.conversation?.owner).toBe('automation');
     expect(handoffPausesAutomation('visitor_request')).toBe(true);
     expect(handoffPausesAutomation('financing')).toBe(false);

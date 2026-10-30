@@ -80,6 +80,9 @@ export function formatDayseWhatsAppReply(
   if (!cards.length) return text;
   const cardLines = cards.slice(0, 4).map((card) => {
     const fullUrl = new URL(card.href, SITE_URL).toString();
+    // Quando a resposta já descreveu o anúncio, repetir preço e ano faz o cliente ler o mesmo
+    // veículo duas vezes no WhatsApp. Nesse caso sobra só o link, que é o que falta no texto.
+    if (text.includes(card.title)) return `• *${card.title}*: ${fullUrl}`;
     const yearLabel = card.year ? ` (${card.year})` : '';
     return `• *${card.title}*${yearLabel} — ${brl.format(card.priceCents / 100)}\n  Fotos e detalhes: ${fullUrl}`;
   });
