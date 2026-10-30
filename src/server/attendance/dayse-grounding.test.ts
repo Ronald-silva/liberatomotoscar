@@ -420,3 +420,46 @@ describe('Varredura — falsos positivos que envergonham', () => {
     }
   });
 });
+
+describe('Varredura — objeções, histórico e acompanhamento', () => {
+  it('pergunta sobre o passado do veículo não vira oferta de vitrine', () => {
+    const historico = detectMessageIntents('ja foi de aplicativo?');
+    expect(historico.asksWorkOrAppUseCase).toBe(false);
+    expect(detectMessageIntents('o motor ja foi retificado?').asksSpecificAttribute.engineOrSpecs).toBe(false);
+    expect(detectMessageIntents('essa moto ja bateu?').asksSpecificAttribute.engineOrSpecs).toBe(false);
+  });
+
+  it('objeção de preço comparando com concorrente não pede o mais barato do estoque', () => {
+    expect(detectMessageIntents('vi mais barato em outra loja').asksCheapest).toBe(false);
+    expect(detectMessageIntents('achei mais barato em outro lugar').asksCheapest).toBe(false);
+    // Pedido legítimo pelo mais barato continua valendo.
+    expect(detectMessageIntents('qual a moto mais barata?').asksCheapest).toBe(true);
+  });
+
+  it('"e o ano?" é acompanhamento tão válido quanto "quantos km?"', () => {
+    for (const m of ['e o ano?', 'qual ano?', 'ano?', 'qual o ano dela?']) {
+      expect(detectMessageIntents(m).asksSpecificAttribute.year).toBe(true);
+    }
+  });
+
+  it('resolve km, cor e ano em sequência sobre o veículo em foco', async () => {
+    const contexto = { recentModelOrTitle: 'Honda Titan', customerName: 'Ronald' };
+    const km = await answerFromPlatformKnowledge('quantos km?', mockSearchCatalog, contexto);
+    const cor = await answerFromPlatformKnowledge('qual a cor?', mockSearchCatalog, contexto);
+    const ano = await answerFromPlatformKnowledge('e o ano?', mockSearchCatalog, contexto);
+    expect(km.text).toContain('Honda Titan');
+    expect(cor.text).toContain('Honda Titan');
+    expect(ano.text).toContain('Honda Titan');
+    expect(ano.text).toMatch(/20\d{2}/);
+  });
+});
+
+describe('Varredura — contexto não pode ser contaminado', () => {
+  it('frase solta do cliente não vira "modelo do veículo" no contexto', () => {
+    // O modelo chegou a devolver a mensagem inteira como se fosse o modelo procurado.
+    expect(detectMentionedCatalogTerms('posso levar meu mecanico?').mentionsAnyModel).toBe(false);
+    expect(detectMentionedCatalogTerms('to procurando minha primeira moto').mentionsAnyModel).toBe(false);
+    // Um modelo de verdade continua valendo como contexto.
+    expect(detectMentionedCatalogTerms('gostei da Titan').mentionsAnyModel).toBe(true);
+  });
+});

@@ -50,6 +50,15 @@ const CENARIOS: Record<string, { titulo: string; nome: string; mensagens: string
       'quero trocar na Fazer, dando 3 mil de entrada também',
     ],
   },
+  primeira: {
+    titulo: 'Primeira moto — acompanhamento e objeções',
+    nome: 'Ronald',
+    mensagens: [
+      'oi', 'to procurando minha primeira moto', 'qual vc indica?',
+      'quantos km ela tem?', 'e o ano?', 'ja foi de aplicativo?',
+      'vi mais barato em outra loja', 'posso levar meu mecanico?', 'obrigado',
+    ],
+  },
   bicicleta: {
     titulo: 'Troca fora do nicho — bicicleta elétrica como entrada',
     nome: 'Ronald',

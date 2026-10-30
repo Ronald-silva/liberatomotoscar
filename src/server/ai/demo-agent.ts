@@ -156,7 +156,9 @@ export async function runDemoAgent(session: DemoSession, message: string,
       output: Output.object({ schema: agentOutputSchema }),
       maxOutputTokens: 800,
       temperature: 0.3,
-      maxRetries: 0,
+      // O provedor às vezes devolve saída estruturada inválida; uma segunda tentativa custa
+      // pouco e evita cair no texto genérico no meio da conversa.
+      maxRetries: 1,
       timeout: { totalMs: 20_000, stepMs: 15_000 },
       abortSignal,
       onStepFinish: () => onProgress?.('preparing_answer'),

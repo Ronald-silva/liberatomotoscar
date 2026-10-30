@@ -558,6 +558,20 @@ export function detectMessageIntents(text: string): DetectedIntents {
       v,
     );
 
+  // Pergunta sobre o passado do veículo (batida, leilão, retífica, donos, laudo) é dúvida de
+  // procedência, não filtro de compra: "o motor já foi retificado?" não pede a vitrine e
+  // "já foi de aplicativo?" não é pedido de moto para rodar em aplicativo.
+  const asksVehicleHistory =
+    /\b(ja foi|ja teve|ja rodou|bateu|batid\w*|sinistr\w*|acident\w*|leilao|retificad\w*|fundid\w*|quantos donos|procedenc\w*|laudo|cautelar|chassi|remarcad\w*|recuperad\w*|pendenc\w*|detran)\b/.test(
+      v,
+    );
+
+  // Objeção de preço comparando com a concorrência não é pedido do mais barato do estoque.
+  const asksPriceObjection =
+    /\b(em outra loja|noutra loja|outro lugar|outra revenda|concorrenc\w*|vi (?:mais )?barat\w*|achei (?:mais )?barat\w*|cobre\w* (?:a )?oferta|cobrem oferta)\b/.test(
+      v,
+    );
+
   const asksToSellVehicle =
     /\b(quero vender|vender minha moto|vender meu carro|voces compram|loja compra|compram moto|compram carro|vender meu veiculo)\b/.test(
       v,
@@ -593,7 +607,8 @@ export function detectMessageIntents(text: string): DetectedIntents {
     );
 
   const asksCheapest =
-    /\b(mais barat\w*|menor preco|menor valor|mais em conta|mais acessive\w*)\b/.test(v);
+    /\b(mais barat\w*|menor preco|menor valor|mais em conta|mais acessive\w*)\b/.test(v) &&
+    !asksPriceObjection;
 
   const asksMostExpensive =
     /\b(mais car\w*|maior preco|maior valor)\b/.test(v);
@@ -623,7 +638,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
   const asksWorkOrAppUseCase =
     /\b(uber|99|aplicativo|app|ifood|entreg\w*|motoboy|frete|custo beneficio|custo-beneficio|melhor custo|economica|para rodar|rodar na|rodar no|para trabalhar)\b/.test(
       v,
-    );
+    ) && !asksVehicleHistory;
 
   const asksLongDistanceUseCase =
     /\b(viagem|viagens|viajar|viajando|estrada|rodovia|longa distancia|longas distancias)\b/.test(v);
@@ -634,9 +649,12 @@ export function detectMessageIntents(text: string): DetectedIntents {
   const asksSpecificAttribute = {
     mileage: /\b(km|quilometragem|rodad\w*|quantos km)\b/.test(v),
     color: /\b(cor|cores|branc\w*|pret\w*|vermelh\w*|cinza|prata|azul)\b/.test(v),
-    year: /\b(qual o ano|que ano|ano dela|ano dele|ano da|ano do)\b/.test(v),
+    // "e o ano?" é a continuação mais natural depois de km e cor, e não era reconhecida.
+    year: /\b(qual o ano|qual ano|que ano|ano dela|ano dele|ano da|ano do|e o ano|o ano e)\b/.test(v) ||
+      /^ano\s*\??$/.test(v),
     price: /\b(quanto custa|qual o preco|qual o valor|quanto ta|quanto esta|valor da|valor do|preco da|preco do)\b/.test(v),
-    engineOrSpecs: /\b(motor\w*|potencia|cavalo\w*|cv|cambio|marcha\w*|combustivel|flex|cacamba|ficha tecnica|especificac\w*|ar[- ]condicionado|direcao hidraulica|vidro eletrico|trava eletrica|airbag|abs|som|multimidia)\b/.test(v),
+    engineOrSpecs: /\b(motor\w*|potencia|cavalo\w*|cv|cambio|marcha\w*|combustivel|flex|cacamba|ficha tecnica|especificac\w*|ar[- ]condicionado|direcao hidraulica|vidro eletrico|trava eletrica|airbag|abs|som|multimidia)\b/.test(v) &&
+      !asksVehicleHistory,
   };
 
   const wantsMoto =

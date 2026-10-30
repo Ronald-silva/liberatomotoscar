@@ -7,6 +7,7 @@ import { deterministicAnswer, deterministicChoices, deterministicMenuText, hando
   routeDeterministicText, type DeterministicChoice } from './deterministic';
 import {
   answerFromPlatformKnowledge,
+  detectMentionedCatalogTerms,
   detectMessageIntents,
   extractCustomerFirstName,
   hasInstitutionalQuestion,
@@ -177,8 +178,12 @@ function extractRecentModelContext(conversation: ConversationRow | null, history
   const options = extractRecentCardOptions(history);
   if (options.length > 1) return null;
   if (options.length === 1) return options[0] ?? null;
+  // O modelo às vezes devolve a frase inteira do cliente como se fosse o modelo do veículo
+  // ("posso levar meu mecanico?"). Usar isso como contexto contamina todos os turnos seguintes.
   const modelFact = conversation?.facts?.find((f) => f.field === 'model');
-  return modelFact?.quote ?? null;
+  const quote = modelFact?.quote?.trim();
+  if (!quote || !detectMentionedCatalogTerms(quote).mentionsAnyModel) return null;
+  return quote;
 }
 
 function ambiguousVehicleQuestion(body: string, options: string[]): boolean {
@@ -289,7 +294,10 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
   const messages = await deps.listMessages(conversation.id, 40).catch(() => []);
   const history = messages.at(-1)?.sender === 'visitor' && messages.at(-1)?.body === body ? messages.slice(0, -1) : messages;
   const recentOptions = extractRecentCardOptions(history);
-  if (ambiguousVehicleQuestion(body, recentOptions)) {
+  // Perguntar "qual deles?" duas vezes seguidas trava a conversa. Se a última resposta já foi
+  // essa pergunta, segue para a base ou o modelo e responde com o que tiver.
+  const jaPerguntouQual = /^Você quer saber de /.test(history.at(-1)?.body ?? '');
+  if (!jaPerguntouQual && ambiguousVehicleQuestion(body, recentOptions)) {
     return { sender: 'bot', body: `Você quer saber de ${recentOptions.map((title) => `**${title}**`).join(' ou ')}?`, cards: [] };
   }
   const recentModelOrTitle = extractRecentModelContext(conversation, history);
