@@ -152,3 +152,31 @@ describe('"vale" quase nunca é preço', () => {
     expect(v.ok, frase).toBe(false);
   });
 });
+
+describe('"mil" nem sempre é dinheiro', () => {
+  it('deixa passar quilometragem escrita com "mil"', () => {
+    // Conversa real: cliente escreveu "tem 40 mil km" e a resposta foi bloqueada.
+    const cliente = 'tem 40 mil km';
+    for (const frase of [
+      'Anotei: 40 mil km na sua Titan.',
+      'Anotei: 40.000 km na sua Titan.',
+      'Sua Titan com 40 mil quilômetros, já passei ao vendedor.',
+    ]) {
+      const v = checkAgentReply({ text: frase, finishReason: 'stop',
+        state: createAgentTurnState(), customerText: cliente });
+      expect(v.ok, frase + (v.ok ? '' : ' -> ' + v.violation + '/' + v.detail)).toBe(true);
+    }
+  });
+
+  it('continua bloqueando valor em reais escrito com "mil"', () => {
+    const v = checkAgentReply({ text: 'Sua Titan vale uns 40 mil reais.', finishReason: 'stop',
+      state: createAgentTurnState(), customerText: 'tem 40 mil km' });
+    expect(v.ok).toBe(false);
+  });
+
+  it('entende o número que o cliente escreveu por extenso', () => {
+    const v = checkAgentReply({ text: 'Anotei: 15.000 km rodados.', finishReason: 'stop',
+      state: createAgentTurnState(), customerText: 'ela tem 15 mil km' });
+    expect(v.ok, !v.ok ? v.violation + '/' + v.detail : '').toBe(true);
+  });
+});

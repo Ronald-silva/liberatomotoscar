@@ -90,22 +90,46 @@ export function buildAgentMessages(history: MessageRow[], message: string) {
   return messages;
 }
 
+/** Trecho que indica que a moto citada é a DO CLIENTE, não uma oferta da loja. */
+const MENCAO_DO_CLIENTE = /\b(anotei|sua|seu|do seu|da sua|na troca|para a troca|pra troca|de entrada|que voce tem|voce falou|voce disse)\b/;
+
 /**
  * Cartões são renderizados pelo servidor a partir do retorno da ferramenta (princípio 3), e só
- * para o veículo que a resposta realmente cita: cartão de veículo que o texto não menciona
- * confunde quem lê.
+ * para o veículo que a resposta realmente OFERECE.
+ *
+ * Duas regras vieram de uma conversa real em que o cliente disse "Titan 2002", falando da
+ * própria moto para troca, e recebeu o cartão da Titan 2013 da loja por R$ 11.500 — como se o
+ * agente estivesse vendendo o que ele acabou de dizer que quer entregar:
+ *
+ * 1. A frase que cita o modelo não pode estar falando do veículo do cliente.
+ * 2. Se um ano aparece colado ao modelo e não é o do cadastro, é outro veículo.
  */
-function cardsFor(text: string, vehicles: Iterable<VerifiedVehicle>): MessageCard[] {
-  const plano = semAcento(text);
-  return [...vehicles]
-    .filter((veiculo) => plano.includes(semAcento(veiculo.modelo)) || plano.includes(semAcento(veiculo.titulo)))
-    .map((veiculo) => ({
-      id: veiculo.id,
-      title: veiculo.titulo,
-      year: veiculo.ano,
-      priceCents: veiculo.precoCentavos,
-      href: `/veiculos/${veiculo.slug}`,
-    }));
+export function cardsFor(text: string, vehicles: Iterable<VerifiedVehicle>): MessageCard[] {
+  const frases = semAcento(text).split(/(?<=[.!?…])\s+|\n+/).filter((f) => f.trim());
+  const vistos = new Set<string>();
+
+  return [...vehicles].filter((veiculo) => {
+    const nome = semAcento(veiculo.modelo);
+    const titulo = semAcento(veiculo.titulo);
+    const ofertado = frases.some((frase) => {
+      const indice = frase.indexOf(nome) >= 0 ? frase.indexOf(nome) : frase.indexOf(titulo);
+      if (indice < 0) return false;
+      if (MENCAO_DO_CLIENTE.test(frase)) return false;
+      // Ano colado ao modelo que não bate com o cadastro: o cliente está falando de outra moto.
+      const depois = frase.slice(indice, indice + nome.length + 12);
+      const ano = depois.match(/\b(19|20)\d{2}\b/);
+      return !ano || Number(ano[0]) === veiculo.ano;
+    });
+    if (!ofertado || vistos.has(titulo)) return false;
+    vistos.add(titulo);
+    return true;
+  }).map((veiculo) => ({
+    id: veiculo.id,
+    title: veiculo.titulo,
+    year: veiculo.ano,
+    priceCents: veiculo.precoCentavos,
+    href: `/veiculos/${veiculo.slug}`,
+  }));
 }
 
 /**

@@ -103,7 +103,8 @@ const MARCADOR_DE_DINHEIRO = /r\$|\b(reais|real|mil|conto|valor|preco|custa|sai 
  * R$ 10.500,00" — a listagem correta do estoque — porque o "3" virava um preço a conferir.
  */
 const GOVERNA_VALOR = /(r\$|fica em|fica por|sai por|sai a|custa|custam|custando|entrada de|parcela de|parcelas de|valor de|por apenas|a vista por|desconto de)\s*$/;
-const SEGUE_VALOR = /^\s*(reais|real|conto|mil|pila)\b/;
+// "mil" só é dinheiro quando não vem seguido de unidade: "40 mil km" é distância, não preço.
+const SEGUE_VALOR = /^\s*(reais|real|conto|pila)\b|^\s*mil\b(?!\s*(km|quilometr\w*|kilometr\w*))/;
 
 function ehDinheiro(frase: string, inicio: number, fim: number) {
   return GOVERNA_VALOR.test(frase.slice(Math.max(0, inicio - 20), inicio))
@@ -296,9 +297,20 @@ function avaliar({ text, finishReason, state, customerText }: GuardInput): Guard
 
   // ---- 3.1 valor que nenhuma ferramenta devolveu ----
   const nomes = digitosDeNome(veiculosCitaveis(state));
-  const ditosPeloCliente = new Set(
-    (customerText?.match(/\d[\d.,]*/g) ?? []).map(apenasDigitos).filter(Boolean),
-  );
+  /**
+   * Números que o cliente escreveu, incluindo a forma por extenso. Quem escreve "40 mil km"
+   * espera ouvir "40.000 km" de volta; sem expandir, a confirmação do dado dele era recusada
+   * como número inventado.
+   */
+  const ditosPeloCliente = new Set<string>();
+  for (const bruto of customerText?.match(/\d[\d.,]*/g) ?? []) {
+    const digitos = apenasDigitos(bruto);
+    if (digitos) ditosPeloCliente.add(digitos);
+  }
+  for (const [, numero] of (customerText ?? '').matchAll(/(\d[\d.,]*)\s*mil\b/gi)) {
+    const base = Number(apenasDigitos(numero));
+    if (Number.isSafeInteger(base) && base > 0) ditosPeloCliente.add(String(base * 1000));
+  }
   for (const frase of frasesPlanas) {
     const temMarcadorDeDinheiro = MARCADOR_DE_DINHEIRO.test(frase);
     const citados = veiculosCitadosEm(frase, state);
@@ -308,7 +320,8 @@ function avaliar({ text, finishReason, state, customerText }: GuardInput): Guard
     const precos = precosDe(escopo);
     const outros = outrosNumerosDe(escopo);
 
-    if (temMarcadorDeDinheiro && NUMERO_POR_EXTENSO.test(frase)) {
+    const porExtensoEmKm = /\b(mil|milhao|milhoes)\b\s*(km|quilometr\w*|kilometr\w*)/.test(frase);
+    if (temMarcadorDeDinheiro && !porExtensoEmKm && NUMERO_POR_EXTENSO.test(frase)) {
       return { ok: false, violation: 'valor_nao_verificado',
         detail: 'valor por extenso, que nenhuma ferramenta pode confirmar' };
     }
