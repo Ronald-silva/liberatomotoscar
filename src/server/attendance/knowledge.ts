@@ -259,9 +259,12 @@ const OUT_OF_SCOPE_PRODUCTS = [
   'notebook', 'computador', 'impressora', 'camisa', 'calca', 'sapato', 'tenis', 'pizza',
   'hamburguer', 'lanche', 'acai', 'cerveja', 'refrigerante', 'doce de coco', 'doce',
   'sorvete', 'comida', 'apartamento', 'terreno',
-  'bicicleta', 'patinete', 'ar-condicionado', 'ar condicionado', 'maquina de lavar',
+  'bicicleta', 'patinete', 'maquina de lavar',
   'ventilador', 'liquidificador', 'airfryer', 'panela',
 ];
+// "tem ar condicionado?" pergunta por item do veículo, não por eletrodoméstico. Estava na lista
+// de fora do nicho e virava "ar condicionado não temos por aqui" — numa das perguntas mais
+// comuns sobre um carro.
 
 /**
  * Nomes de modelo que colidem com palavra comum do português. "fazer uma proposta" não é a
@@ -532,8 +535,10 @@ export function detectMessageIntents(text: string): DetectedIntents {
       v,
     );
 
+  // "vendem celular?" cita o aparelho como produto, não pede o contato da loja.
   const asksPhoneOrWhatsapp =
-    /\b(telefone|whatsapp|zap|wpp|numero|contato|ligar|celular)\b/.test(v);
+    /\b(telefone|whatsapp|zap|wpp|numero|contato|ligar|celular)\b/.test(v) &&
+    !/\b(vend\w*|compra\w*|tem|teria|possui)\s+(?:\w+\s+){0,2}(celular|telefone)\b/.test(v);
 
   const asksHoursOrVisit =
     /\b(horario\w*|funciona\w*|abre|abrem|aberto|aberta|fecha\w*|sabado|domingo|feriado|visita\w*|ir na loja|ir ai|ir agora|ir hoje|posso ir|posso passar|pode ir|pode passar|conhecer a loja)\b/.test(
@@ -631,7 +636,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
     color: /\b(cor|cores|branc\w*|pret\w*|vermelh\w*|cinza|prata|azul)\b/.test(v),
     year: /\b(qual o ano|que ano|ano dela|ano dele|ano da|ano do)\b/.test(v),
     price: /\b(quanto custa|qual o preco|qual o valor|quanto ta|quanto esta|valor da|valor do|preco da|preco do)\b/.test(v),
-    engineOrSpecs: /\b(motor\w*|potencia|cavalo\w*|cv|cambio|marcha\w*|combustivel|flex|cacamba|ficha tecnica|especificac\w*)\b/.test(v),
+    engineOrSpecs: /\b(motor\w*|potencia|cavalo\w*|cv|cambio|marcha\w*|combustivel|flex|cacamba|ficha tecnica|especificac\w*|ar[- ]condicionado|direcao hidraulica|vidro eletrico|trava eletrica|airbag|abs|som|multimidia)\b/.test(v),
   };
 
   const wantsMoto =
@@ -1111,9 +1116,16 @@ export async function answerFromPlatformKnowledge(
     b.aliases.some((alias) => new RegExp(`\\b${alias}\\b`).test(v) && !isMentionedOnlyAsTradeIn(alias, v)),
   );
 
+  // Um modelo citado que não está publicado hoje precisa de resposta honesta, venha ele da lista
+  // de mercado ou do catálogo estático: despejar o estoque inteiro não responde a pergunta.
   const requestedUnlistedModel = KNOWN_UNLISTED_MODELS.find(
     (model) => mentionsModelName(model, text) && !isMentionedOnlyAsTradeIn(model, v),
-  );
+  ) ?? (matchedModels.length === 0
+    ? INVENTORY_VEHICLES.find(
+      (item) => mentionsModelName(item.model, text, item.brand) &&
+        !isMentionedOnlyAsTradeIn(normalizePlain(item.model), v),
+    )?.model
+    : undefined);
 
   if (matchedModels.length > 0 && matchedModels[0]?.model) {
     facts.push({ field: 'model', quote: matchedModels[0].model });
@@ -1144,7 +1156,16 @@ export async function answerFromPlatformKnowledge(
     facts.push({ field: 'purpose', quote: 'viagens longas' });
   }
 
-  const hasCatalogIntent = !tradeOnly && (
+  // Pergunta de preço sem veículo citado, dentro de assunto de financiamento, é sobre a entrada
+  // e não um pedido de vitrine: listar o estoque inteiro aqui não responde nada.
+  const priceOnlyAboutFinancing = intents.asksFinancing && matchedModels.length === 0 &&
+    !requestedBrand && !requestedUnlistedModel && !intents.wantsMoto && !intents.wantsCar &&
+    intents.budget === null && !intents.asksAllInventory &&
+    intents.asksSpecificAttribute.price && !intents.asksSpecificAttribute.mileage &&
+    !intents.asksSpecificAttribute.year && !intents.asksSpecificAttribute.color &&
+    !intents.asksSpecificAttribute.engineOrSpecs;
+
+  const hasCatalogIntent = !tradeOnly && !priceOnlyAboutFinancing && (
     matchedModels.length > 0 ||
     Boolean(requestedBrand) ||
     Boolean(requestedUnlistedModel) ||

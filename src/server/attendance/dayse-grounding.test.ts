@@ -366,3 +366,57 @@ describe('Proposta de item fora do nicho continua aberta enquanto o cliente fala
     expect(res.cards.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Casos achados varrendo dezenas de mensagens reais de uma vez, em vez de uma por conversa
+ * do cliente. São os que mais constrangem numa demonstração.
+ */
+describe('Varredura — falsos positivos que envergonham', () => {
+  it('"tem ar condicionado?" pergunta por item do carro, não por eletrodoméstico', async () => {
+    expect(detectMessageIntents('tem ar condicionado?').asksOutOfScopeProduct).toBeNull();
+    const res = await answerFromPlatformKnowledge('a saveiro tem ar condicionado?', mockSearchCatalog,
+      { customerName: 'Ronald' });
+    expect(res.text).not.toContain('não temos por aqui');
+    expect(res.text).toContain('Saveiro');
+  });
+
+  it.each(['direcao hidraulica', 'vidro eletrico', 'airbag', 'abs'])(
+    '"%s" conta como ficha do veículo', (item) => {
+      expect(detectMessageIntents(`a strada tem ${item}?`).asksSpecificAttribute.engineOrSpecs).toBe(true);
+    },
+  );
+
+  it('"vocês vendem celular?" não devolve o telefone da loja', () => {
+    expect(detectMessageIntents('voces vendem celular?').asksPhoneOrWhatsapp).toBe(false);
+    // Pedir o contato continua funcionando.
+    expect(detectMessageIntents('qual o telefone de voces?').asksPhoneOrWhatsapp).toBe(true);
+    expect(detectMessageIntents('qual o numero do whatsapp?').asksPhoneOrWhatsapp).toBe(true);
+  });
+
+  it('modelo conhecido mas sem anúncio publicado recebe resposta honesta, não a vitrine inteira', async () => {
+    // Em produção a Fan está no catálogo estático mas não entre os anúncios publicados.
+    const semFan: typeof searchAvailableVehicles = vi.fn(async (input) => {
+      const base = await mockSearchCatalog(input);
+      return { ...base, items: base.items.filter((i) => !/fan/i.test(i.model ?? '')) };
+    });
+    const res = await answerFromPlatformKnowledge('qual o preco da fan', semFan, { customerName: 'Ronald' });
+    expect(res.text).toMatch(/não temos/i);
+    expect(res.text).toMatch(/fan/i);
+    // Continua oferecendo alternativas reais em vez de encerrar a conversa.
+    expect(res.cards.length).toBeGreaterThan(0);
+  });
+
+  it('"qual o valor da entrada?" é financiamento, não pedido de vitrine', async () => {
+    const res = await answerFromPlatformKnowledge('qual o valor da entrada?', mockSearchCatalog,
+      { customerName: 'Ronald' });
+    expect(res.text).toContain('análise de crédito');
+    expect(res.cards).toHaveLength(0);
+  });
+
+  it('itens realmente fora do nicho continuam bloqueados', async () => {
+    for (const item of ['tem cama box?', 'tem bicicleta?']) {
+      const res = await answerFromPlatformKnowledge(item, mockSearchCatalog, { customerName: 'Ronald' });
+      expect(res.text).toContain('não temos por aqui');
+    }
+  });
+});
