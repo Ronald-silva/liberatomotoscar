@@ -24,12 +24,12 @@ describe('política comercial da loja', () => {
     expect(texto).not.toMatch(/\d+\s*x|\d+\s*vezes|juros de/i);
   });
 
-  it('descreve a transferência sem citar valor de taxa', () => {
+  it('remete a transferência à loja, sem recitar o processo', () => {
     const texto = STORE_POLICY.documentacao!;
-    expect(texto).toContain('DETRAN-CE');
-    expect(texto).toContain('30 dias');
-    // As fontes pesquisadas divergiam no valor da taxa; nenhum número entra na boca do agente.
-    expect(texto).not.toMatch(/R\$|\breais\b/);
+    expect(texto).toMatch(/loja|Liberato/i);
+    // O processo do DETRAN inteiro estava aqui, e o agente o recitava para quem perguntava
+    // "o que precisa pra fechar negócio". Decisão do lojista: isso se resolve pessoalmente.
+    expect(texto).not.toMatch(/vistoria|DAE|30 dias|ATPV|CRV|R\$/i);
   });
 
   it('informa o horário confirmado', () => {

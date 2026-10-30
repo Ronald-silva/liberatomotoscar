@@ -107,11 +107,19 @@ const MENCAO_DO_CLIENTE = /\b(anotei|sua|seu|do seu|da sua|na troca|para a troca
  * 1. A frase que cita o modelo não pode estar falando do veículo do cliente.
  * 2. Se um ano aparece colado ao modelo e não é o do cadastro, é outro veículo.
  */
-export function cardsFor(text: string, vehicles: Iterable<VerifiedVehicle>): MessageCard[] {
+export function cardsFor(
+  text: string,
+  vehicles: Iterable<VerifiedVehicle>,
+  jaMostrados: readonly string[] = [],
+): MessageCard[] {
   const frases = semAcento(text).split(/(?<=[.!?…])\s+|\n+/).filter((f) => f.trim());
   const vistos = new Set<string>();
+  // Cartão que a conversa já mandou não volta. Numa conversa real a mesma Saveiro foi anexada
+  // em três mensagens seguidas: depois que a pessoa viu o preço e o link, repetir é ruído.
+  const repetido = new Set(jaMostrados);
 
   return [...vehicles].filter((veiculo) => {
+    if (repetido.has(veiculo.id)) return false;
     const nome = semAcento(veiculo.modelo);
     const titulo = semAcento(veiculo.titulo);
     const ofertado = frases.some((frase) => {
@@ -262,7 +270,8 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
     reply: {
       sender: 'ai',
       body: text,
-      cards: cardsFor(text, veiculosCitaveis(state)),
+      cards: cardsFor(text, veiculosCitaveis(state),
+        input.history.flatMap((m) => (m.cards ?? []).map((c) => c.id))),
       facts: state.facts,
       handoffReason: state.handoffReason,
     },

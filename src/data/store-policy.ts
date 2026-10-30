@@ -43,17 +43,12 @@ export const STORE_POLICY = {
   /** Confirmado pelo lojista em 30/10/2026. */
   horario: 'das 9h às 18h, fechado aos domingos' as string | null,
   /**
-   * Processo geral de transferência no Ceará, pesquisado em 30/10/2026. As fontes eram blogs e
-   * despachantes, NÃO o portal do DETRAN-CE, e os valores de taxa divergiam entre elas — por
-   * isso não há valor nenhum aqui. Taxa errada dita ao cliente é prejuízo da loja.
-   *
-   * O que a LOJA faz do processo (se encaminha despachante, quem paga o quê) não foi informado
-   * e continua indo ao vendedor.
+   * A transferência é tratada na loja, com o Liberato. Aqui havia o processo do DETRAN-CE
+   * inteiro — vistoria, débitos, DAE, prazo — e o agente o recitava para quem tinha perguntado
+   * "o que precisa pra fechar negócio". O lojista cortou: isso se resolve pessoalmente, e
+   * encher a mensagem com etapa de cartório afasta quem estava perto de comprar.
    */
-  documentacao: 'a transferência é feita no DETRAN-CE com o ATPV-e (ou o CRV assinado), '
-    + 'vistoria em empresa credenciada, débitos do veículo quitados e a taxa paga por DAE; '
-    + 'o prazo legal é de 30 dias a partir da assinatura. Valores e quem cuida de cada etapa '
-    + 'são confirmados na loja' as string | null,
+  documentacao: 'a transferência e a documentação são tratadas na loja, com o Liberato' as string | null,
 } as const;
 
 const ROTULOS: Record<string, string> = {
