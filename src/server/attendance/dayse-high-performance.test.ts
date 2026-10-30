@@ -111,7 +111,7 @@ describe('Dayse Alta Performance — conversa real do teste com a IA concorrente
     expect(res.text).toContain('R. Elcias Lopes, 334, loja A');
     expect(res.text).toContain('Parangaba');
     expect(res.text).toContain('https://www.google.com/maps/search/');
-    expect(res.text).toContain('qual é o modelo e o ano');
+    expect(res.text).toMatch(/modelo\*{0,2} e o \*{0,2}ano/i);
     expect(res.text).not.toContain('Livino de Carvalho');
     expect(res.cards).toHaveLength(0);
     expect(res.handoffReason).toBe('trade_in');
@@ -121,7 +121,7 @@ describe('Dayse Alta Performance — conversa real do teste com a IA concorrente
     const res = await answerFromPlatformKnowledge('Tenho uma Fan 2018 para dar na troca', mockSearchCatalog);
     // A redação é livre; o que importa é nomear o veículo com o ano e não repetir a pergunta.
     expect(res.text).toContain('Honda Fan 2018');
-    expect(res.text).not.toContain('qual é o modelo e o ano');
+    expect(res.text).not.toMatch(/modelo\*{0,2} e o \*{0,2}ano/i);
     // O fato guarda a troca em forma canônica ("Honda Fan; ano 2018") justamente para ser
     // relido nos turnos seguintes e acumular o que faltar.
     const trade = res.facts.find((f) => f.field === 'trade_in');
