@@ -15,7 +15,11 @@
   background: var(--attendance-bg);
   color: var(--attendance-ink);
 }
-.panel { width: min(100%, 960px); margin-inline: auto; }
+/* Largura de aplicação, não de artigo: a caixa de entrada é uma tela de trabalho e precisa do
+   espaço horizontal. Os blocos de texto e de formulário continuam numa coluna legível — texto
+   esticado em 1280px não se lê. */
+.panel { width: min(100%, 1280px); margin-inline: auto; }
+.panel h1, .intro, .form, .history { max-width: 72ch; }
 .back { display: inline-flex; min-height: 44px; align-items: center; color: var(--attendance-muted); text-underline-offset: 0.25em; }
 .back:hover { color: var(--attendance-ink); }
 .panel h1 { margin: var(--attendance-space-2) 0; font-size: clamp(1.8rem, 5vw, 2.3rem); }
@@ -52,7 +56,7 @@
 .filterNav { display: flex; flex-wrap: wrap; gap: var(--attendance-space-1); margin-top: var(--attendance-space-2); }
 .filterTab { display: inline-flex; align-items: center; min-height: 44px; padding: var(--attendance-space-1) var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 999px; color: var(--attendance-ink); text-decoration: none; font-size: 0.9375rem; }
 .filterTabActive { background: var(--attendance-accent); border-color: var(--attendance-accent); color: #fff; font-weight: 700; }
-.inboxGrid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--attendance-space-3); margin-top: var(--attendance-space-3); align-items: start; }
+.inboxGrid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: var(--attendance-space-3); margin-top: var(--attendance-space-3); align-items: start; }
 .conversationList { display: grid; gap: var(--attendance-space-1); margin: 0; padding: 0; list-style: none; }
 .conversationLink { display: grid; gap: 0.35rem; padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-surface); color: inherit; text-decoration: none; }
 .conversationLinkActive { border-color: var(--attendance-accent); box-shadow: inset 0 0 0 2px var(--attendance-accent); }
@@ -68,7 +72,7 @@
 .visita { display: grid; gap: 0.2rem; margin: 0; padding: var(--attendance-space-3); border: 1px solid rgba(37, 211, 102, 0.4); border-left: 4px solid #25d366; border-radius: 4px; background: rgba(37, 211, 102, 0.09); }
 .visitaRotulo { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6ee7a0; }
 .visitaValor { font-size: 1.1rem; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
-.ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; margin: 0; padding: 0; border: 1px solid var(--attendance-line); border-radius: 4px; background: var(--attendance-line); overflow: hidden; }
+.ficha { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; padding: 0; border: 1px solid var(--attendance-line); border-radius: 4px; background: var(--attendance-line); overflow: hidden; }
 .fichaLinha { display: grid; gap: 0.2rem; align-content: start; padding: 0.7rem 0.85rem; background: var(--attendance-surface); min-width: 0; }
 .fichaLinha dt { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--attendance-muted); }
 .fichaLinha dd { margin: 0; min-width: 0; font-size: 0.9375rem; line-height: 1.35; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -100,11 +104,14 @@
 .whatsappConnectBtn:focus-visible { outline: 3px solid #ffffff; outline-offset: 3px; }
 .eventList { display: grid; gap: 0.35rem; margin: 0; padding: var(--attendance-space-2) 0 0; border-top: 1px solid var(--attendance-line); list-style: none; font-size: 0.875rem; color: var(--attendance-muted); }
 
+@media (max-width: 1100px) {
+  .ficha { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 780px) {
   .inboxGrid { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   .screen { padding: var(--attendance-space-2); }
   .choices, .conversationDetail { padding: var(--attendance-space-2); }
-  .ficha { grid-template-columns: 1fr 1fr; }
+  .ficha { grid-template-columns: 1fr; }
 }
