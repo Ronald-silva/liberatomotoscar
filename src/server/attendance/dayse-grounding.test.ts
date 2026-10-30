@@ -509,3 +509,40 @@ describe('Varredura adversarial — palavra-gatilho em outro sentido', () => {
     expect(detectMessageIntents('qual o numero do whatsapp?').asksPhoneOrWhatsapp).toBe(true);
   });
 });
+
+/**
+ * Achados na conversa real de 23h: três respostas erradas, uma delas regressão introduzida
+ * ao restringir a palavra "cartão" na varredura anterior.
+ */
+describe('Conversa real — cartão, item fora do nicho e perfil de uso', () => {
+  it('"aceitam cartão?" é pagamento; "cartão do veículo" é documento', () => {
+    expect(detectMessageIntents('Aceitam cartão?').asksFinancing).toBe(true);
+    expect(detectMessageIntents('da pra pagar no cartao?').asksFinancing).toBe(true);
+    expect(detectMessageIntents('tem o cartao do veiculo?').asksFinancing).toBe(false);
+  });
+
+  it.each(['barco', 'jet ski', 'trator', 'playstation'])(
+    '%s oferecido como entrada recebe a política da loja, não uma recusa inventada',
+    async (item) => {
+      const res = await answerFromPlatformKnowledge(
+        `Aceitam um ${item} velho como entrada?`, mockSearchCatalog, { customerName: 'Ronald' },
+      );
+      expect(res.matched).toBe(true);
+      expect(res.text).toMatch(/vendedor precisa confirmar/i);
+      expect(res.text).not.toMatch(/não entra como entrada|não aceitamos/i);
+      expect(res.handoffReason).toBe('trade_in');
+    },
+  );
+
+  it('não vende picape como se fosse boa para aplicativo', async () => {
+    const uber = await answerFromPlatformKnowledge('Tem um carro bom e economico pra fazer Uber?',
+      mockSearchCatalog, { customerName: 'Ronald' });
+    expect(uber.text).toMatch(/econômico/i);
+    expect(uber.text).not.toMatch(/robustez mecânica|capacidade de caçamba/i);
+
+    // Quem quer carga continua recebendo o argumento de picape.
+    const carga = await answerFromPlatformKnowledge('quero um carro pra trabalhar com carga',
+      mockSearchCatalog, { customerName: 'Ronald' });
+    expect(carga.text).toMatch(/caçamba|robustez/i);
+  });
+});

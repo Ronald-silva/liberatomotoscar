@@ -259,7 +259,9 @@ const OUT_OF_SCOPE_PRODUCTS = [
   'notebook', 'computador', 'impressora', 'camisa', 'calca', 'sapato', 'tenis', 'pizza',
   'hamburguer', 'lanche', 'acai', 'cerveja', 'refrigerante', 'doce de coco', 'doce',
   'sorvete', 'comida', 'apartamento', 'terreno',
-  'bicicleta', 'patinete', 'maquina de lavar',
+  'bicicleta', 'patinete', 'maquina de lavar', 'barco', 'lancha', 'jet ski', 'jetski',
+  'caiaque', 'trator', 'quadriciclo', 'carroca', 'charrete', 'drone', 'console', 'playstation',
+  'xbox', 'violao', 'guitarra', 'relogio', 'joia', 'ouro',
   'ventilador', 'liquidificador', 'airfryer', 'panela',
 ];
 // "tem ar condicionado?" pergunta por item do veículo, não por eletrodoméstico. Estava na lista
@@ -607,7 +609,9 @@ export function detectMessageIntents(text: string): DetectedIntents {
   // quando aparecem junto de crédito, parcela ou financiamento.
   const asksFinancing =
     (/\b(financ\w*|parcel\w*|credito|simulac\w*|sem entrada|dar entrada|prestac\w*)\b/.test(v) ||
-      (/\b(banco|cartao)\b/.test(v) && /\b(financ\w*|parcel\w*|credito|pagar|pagamento|juros|aprovac\w*)\b/.test(v)) ||
+      // Cartão é meio de pagamento por padrão; só não é quando o cliente fala do documento.
+      (/\bcartao\b/.test(v) && !/\bcartao (?:do|da) (?:veiculo|carro|moto|crlv|documento)\b/.test(v)) ||
+      (/\bbanco\b/.test(v) && /\b(financ\w*|parcel\w*|credito|pagar|pagamento|juros|aprovac\w*)\b/.test(v)) ||
       (/\bentrada\b/.test(v) && !asksTradeIn && !/\bentrada da loja\b/.test(v))) &&
     !asksPolicyOrConsequence && !asksServiceOrParts;
 
@@ -1380,12 +1384,19 @@ export async function answerFromPlatformKnowledge(
         } else if (intents.asksWorkOrAppUseCase && intents.wantsCar) {
           selectedCards = filtered.slice(0, 3);
           const lines = selectedCards.map((item) => formatVehicleBullet(item, true));
+          // Quem vai rodar em aplicativo quer consumo baixo. Oferecer picape como se fosse a
+          // escolha certa é vender errado: se é só o que há, o honesto é dizer isso.
+          const paraAplicativo = /\b(uber|99|aplicativo|app|ifood)\b/.test(v);
+          const todasPicapes = selectedCards.every((item) =>
+            /picape|caminhonete/.test(normalizePlain(item.categoryLabel)));
           paragraphs.push(
-            `Para **trabalho, carga ou rotina profissional**${nameGreeting}, nossas picapes utilitárias entregam robustez mecânica e excelente capacidade de caçamba:\n${lines.join('\n')}${
-              !intents.asksTradeIn && !intents.asksFinancing
-                ? '\n\nVocê pretende negociar à vista, financiar ou dar algum veículo como entrada?'
-                : ''
-            }`,
+            paraAplicativo && todasPicapes
+              ? `Para rodar em aplicativo o ideal é um carro econômico${nameGreeting}, e hoje nossos carros publicados são picapes — gastam mais combustível do que um hatch ou sedã de entrada:\n${lines.join('\n')}\n\nPosso te avisar quando entrar algo mais econômico, ou quer ver nossas motos, que saem bem mais em conta para rodar?`
+              : `Para **trabalho, carga ou rotina profissional**${nameGreeting}, nossas picapes utilitárias entregam robustez mecânica e excelente capacidade de caçamba:\n${lines.join('\n')}${
+                !intents.asksTradeIn && !intents.asksFinancing
+                  ? '\n\nVocê pretende negociar à vista, financiar ou dar algum veículo como entrada?'
+                  : ''
+              }`,
           );
         } else {
           selectedCards = filtered.slice(0, 3);
