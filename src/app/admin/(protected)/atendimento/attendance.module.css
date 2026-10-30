@@ -57,8 +57,12 @@
 .filterTab { display: inline-flex; align-items: center; min-height: 44px; padding: var(--attendance-space-1) var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 999px; color: var(--attendance-ink); text-decoration: none; font-size: 0.9375rem; }
 .filterTabActive { background: var(--attendance-accent); border-color: var(--attendance-accent); color: #fff; font-weight: 700; }
 .inboxGrid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: var(--attendance-space-3); margin-top: var(--attendance-space-3); align-items: start; }
-.conversationList { display: grid; gap: var(--attendance-space-1); margin: 0; padding: 0; list-style: none; }
-.conversationLink { display: grid; gap: 0.35rem; padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-surface); color: inherit; text-decoration: none; }
+/* A lista ganha contêiner próprio: com uma conversa só, o cartão solto deixava 400px de vazio
+   ao lado da ficha e o conjunto parecia desalinhado mesmo estando alinhado. Dentro de uma
+   moldura, o espaço livre lê como fila vazia, que é o que é. */
+.conversationList { display: grid; gap: var(--attendance-space-1); margin: 0; padding: var(--attendance-space-2); list-style: none; border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: rgba(255, 255, 255, 0.02); align-content: start; }
+.conversationList:empty { display: none; }
+.conversationLink { display: grid; gap: 0.3rem; padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 10px; background: var(--attendance-surface); color: inherit; text-decoration: none; font-size: 0.9375rem; }
 .conversationLinkActive { border-color: var(--attendance-accent); box-shadow: inset 0 0 0 2px var(--attendance-accent); }
 .conversationMeta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--attendance-space-1); font-size: 0.875rem; color: var(--attendance-muted); }
 .conversationDetail { display: grid; gap: var(--attendance-space-2); padding: var(--attendance-space-3); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-surface); }
