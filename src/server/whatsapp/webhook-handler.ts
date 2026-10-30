@@ -1,15 +1,12 @@
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
-import { hashConversationToken, RETENTION_NO_LEAD_DAYS } from '@/server/attendance/conversation-repository';
-import { recordWhatsappAiTokens, reserveWhatsappAiRequest } from '@/server/attendance/limits';
-import { handleSiteTurn, siteChatDeps, type SiteChatDeps } from '@/server/attendance/site-chat';
-import { readWhatsappSetting } from '@/server/attendance/settings';
+import { appendVisitorMessage, hashConversationToken, RETENTION_NO_LEAD_DAYS } from '@/server/attendance/conversation-repository';
 import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
 import { decryptAccessToken, deterministicUuidFromWaMessageId } from './crypto';
 import { findActiveTenantByPhoneNumberId, type WhatsappTenantRow } from './embedded-signup';
-import { formatDayseWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
+import { normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
 import { TEST_TENANT_ID } from './test-number';
 
 type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPhoneNumberId' | 'isActive'> & {
@@ -163,7 +160,11 @@ export type WebhookHandlerDeps = {
   }) => Promise<{ messageId: string | null }>;
 };
 
-async function defaultRunAgentTurn(params: {
+/**
+ * Registra a mensagem recebida na conversa do cliente e não responde: o atendimento
+ * automático foi removido, então o turno fica na caixa de entrada para um vendedor assumir.
+ */
+async function defaultRecordIncomingMessage(params: {
   tenant: WebhookTenant;
   customerWaId: string;
   customerName?: string | null;
@@ -173,31 +174,12 @@ async function defaultRunAgentTurn(params: {
   const token = whatsappConversationToken(params.tenant.tenantId, params.customerWaId);
   const conversation = await ensureWhatsappConversation(token);
   if (!conversation) throw new Error('Não foi possível criar a conversa do WhatsApp.');
-  const clientMessageId = deterministicUuidFromWaMessageId(params.waMessageId);
-
-  const deps: SiteChatDeps = {
-    ...siteChatDeps,
-    readSetting: readWhatsappSetting,
-    reserveAi: reserveWhatsappAiRequest,
-    recordTokens: recordWhatsappAiTokens,
-    maxVisitorTurns: params.tenant.tenantId === TEST_TENANT_ID ? 200 : undefined,
-    failClosedOnPersistenceError: true,
-    skipViewAfterTurn: true,
-    create: async () => { throw new Error('Conversa do WhatsApp indisponível.'); },
-  };
-
-  const result = await handleSiteTurn(token, {
-    message: params.text.slice(0, 1000),
-    clientMessageId,
-    customerName: params.customerName,
-  }, deps);
-
-  const reply = result.view.messages.find((message) => message.id === result.replyMessageId);
-  if (!reply || (reply.sender !== 'ai' && reply.sender !== 'bot')) {
-    return null;
-  }
-
-  return formatDayseWhatsAppReply(reply.body, reply.cards);
+  await appendVisitorMessage(
+    conversation.id,
+    params.text.slice(0, 1000),
+    deterministicUuidFromWaMessageId(params.waMessageId),
+  );
+  return null;
 }
 
 /**
@@ -217,7 +199,7 @@ export async function processMetaWebhookPayload(
   const findTenant = deps.findTenant ?? ((id: string, wabaId?: string) => resolveWebhookTenant(id, findActiveTenantByPhoneNumberId, wabaId));
   const decrypt = deps.decryptToken ?? ((enc: string) => decryptAccessToken(enc));
   const pauseEcho = deps.pauseOnSellerEcho ?? pauseAutomationOnSellerEcho;
-  const runAgent = deps.runAgentTurn ?? defaultRunAgentTurn;
+  const recordIncoming = deps.runAgentTurn ?? defaultRecordIncomingMessage;
   const sendOutbound = deps.sendOutbound ?? sendWhatsAppTextMessage;
 
   let processedMessages = 0;
@@ -277,7 +259,7 @@ export async function processMetaWebhookPayload(
           value?.contacts?.find((c) => c.wa_id === incoming.from) ?? value?.contacts?.[0];
         const customerName = contactMatch?.profile?.name?.trim() || null;
 
-        const replyBody = await runAgent({
+        const replyBody = await recordIncoming({
           tenant,
           customerWaId: incoming.from,
           customerName,

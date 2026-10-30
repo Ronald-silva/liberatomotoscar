@@ -7,7 +7,7 @@ import {
   listInbox,
   type InboxFilter,
 } from '@/server/attendance/inbox';
-import { protocolOf } from '@/server/attendance/site-chat';
+import { protocolOf } from '@/server/attendance/protocol';
 import { readAdminSiteSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { TEST_TENANT_ID, TEST_WEBHOOK_URL } from '@/server/whatsapp/test-number';
