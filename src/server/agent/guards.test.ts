@@ -24,6 +24,11 @@ function verifica(text: string, opcoes: { finishReason?: string; veiculos?: Veri
   });
 }
 
+/**
+ * Promessa, estimativa de troca e afirmação de estoque saíram desta suíte: são decisão
+ * semântica, e agora é `judge.ts` quem decide, medido por `npm run eval:judge`. O que sobra
+ * aqui é conferência de fato.
+ */
 describe('guardas de saída do agente', () => {
   it('3.1 bloqueia valor em reais que nenhuma ferramenta devolveu', () => {
     const v = verifica('Essa moto sai por R$ 8.000 hoje.');
@@ -44,39 +49,12 @@ describe('guardas de saída do agente', () => {
     expect(v.ok).toBe(false);
   });
 
-  it('3.2 bloqueia promessa de aprovação e de aceite', () => {
-    for (const frase of [
-      'Seu financiamento já está aprovado.',
-      'Garantido que a loja aceita sua moto.',
-      'Com certeza aceitamos seu carro na troca.',
-      'Posso garantir a entrega amanhã.',
-    ]) {
-      const v = verifica(frase);
-      expect(v.ok, frase).toBe(false);
-    }
-  });
 
-  it('3.2 bloqueia estimativa de valor de troca, mesmo sem citar número', () => {
-    for (const frase of [
-      'Sua moto vale bem mais do que isso.',
-      'Pago um bom valor pela sua.',
-      'Consigo te dar um desconto nessa.',
-      'Avalio sua moto por foto, manda aí.',
-    ]) {
-      const v = verifica(frase);
-      expect(v.ok, frase).toBe(false);
-    }
-  });
 
   it('3.2 deixa passar troca condicionada à avaliação presencial', () => {
     expect(verifica('A loja trabalha com troca, mediante avaliação presencial aqui na loja.').ok).toBe(true);
   });
 
-  it('3.3 bloqueia veículo que nenhuma ferramenta devolveu', () => {
-    const v = verifica('Temos uma Yamaha Fazer 250 disponível.');
-    expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.violation).toBe('veiculo_nao_verificado');
-  });
 
   it('3.3 deixa passar o veículo que a ferramenta devolveu', () => {
     expect(verifica('Temos uma Honda CG 160 Start aqui na loja.').ok).toBe(true);
@@ -152,11 +130,4 @@ describe('marca citada depois de uma busca sem resultado', () => {
     expect(v.ok).toBe(true);
   });
 
-  it('continua bloqueando marca que o modelo nunca buscou nem recebeu', () => {
-    const state = createAgentTurnState();
-    state.searchedBrands.add('yamaha');
-    const v = checkAgentReply({ text: 'Temos uma Suzuki muito boa aqui.', finishReason: 'stop', state });
-    expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.violation).toBe('veiculo_nao_verificado');
-  });
 });

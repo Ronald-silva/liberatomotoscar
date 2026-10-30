@@ -47,18 +47,18 @@ function describeCause(cause: unknown): string {
   return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause).slice(0, 300);
 }
 
-export function getAgentProviderConfig() {
+export function getAgentProviderConfig(modelOverride?: string) {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new AgentProviderError('missing_key');
-  const modelId = process.env.OPENROUTER_MODEL?.trim() || DEFAULT_AGENT_MODEL;
+  const modelId = modelOverride?.trim() || process.env.OPENROUTER_MODEL?.trim() || DEFAULT_AGENT_MODEL;
   if (!/^[a-z0-9][a-z0-9-]*\/[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(modelId)) {
     throw new AgentProviderError('unsupported_model');
   }
   return { apiKey, modelId };
 }
 
-export function getAgentLanguageModel() {
-  const { apiKey, modelId } = getAgentProviderConfig();
+export function getAgentLanguageModel(modelOverride?: string) {
+  const { apiKey, modelId } = getAgentProviderConfig(modelOverride);
   const provider = createOpenRouter({
     apiKey,
     compatibility: 'strict',

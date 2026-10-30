@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "eval": "tsx evals/run.ts",
+    "eval:judge": "tsx evals/judge.ts",
     "db:check": "tsx scripts/check-neon-connection.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

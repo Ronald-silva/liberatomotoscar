@@ -3,6 +3,7 @@ import type { getVehicleDetails, searchAvailableVehicles } from '@/server/vehicl
 import type { AutomatedReply, MessageCard, MessageRow } from '@/server/attendance/conversation-repository';
 import type { AgentTurnState } from './tools';
 import { checkAgentReply, type GuardVerdict } from './guards';
+import { judgeAgentReply } from './judge';
 import { AGENT_SYSTEM_PROMPT } from './prompt';
 import { getAgentLanguageModel, normalizeProviderError } from './provider';
 import {
@@ -45,6 +46,8 @@ export type AgentTurnInput = {
 export type AgentTurnDeps = {
   model?: ReturnType<typeof getAgentLanguageModel>['model'];
   modelId?: string;
+  /** Juiz de política. Injetável para teste; em produção usa o modelo barato de `judge.ts`. */
+  judge?: typeof judgeAgentReply;
   searchVehicles?: typeof searchAvailableVehicles;
   readVehicle?: typeof getVehicleDetails;
 };
@@ -230,14 +233,30 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   };
   const toolsUsed = result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName));
   const text = result.text.trim();
+  const customerText = [...input.history.filter((m) => m.sender === 'visitor').map((m) => m.body),
+    input.message].join('\n');
+
+  // 1) Conferência mecânica: número fora do catálogo, link de terceiro, id vazado, resposta
+  //    vazia ou truncada. Determinística, barata e sem falso positivo.
   const guard = checkAgentReply({
     text, finishReason: result.finishReason, state, conversationId: input.conversationId,
-    // O que o cliente escreveu neste turno e nos anteriores: repetir de volta um número que
-    // ele mesmo deu é confirmar que anotou, não inventar dado.
-    customerText: [...input.history.filter((m) => m.sender === 'visitor').map((m) => m.body),
-      input.message].join('\n'),
+    customerText,
   });
   if (!guard.ok) return fallback(guard, usage, toolsUsed, text);
+
+  // 2) Julgamento de política, por modelo. Promessa, negociação, estimativa de troca e estoque
+  //    inventado são questões de SENTIDO, e decidir sentido por regex foi o que produziu 41% de
+  //    falso positivo — a arquitetura que o próprio plano manda não repetir (seção 1.2).
+  const julgamento = await (deps.judge ?? judgeAgentReply)({
+    reply: text, veiculos: veiculosCitaveis(state), customerText,
+  });
+  if (!julgamento.ok) {
+    console.warn('[agente] juiz reprovou', JSON.stringify({
+      evento: 'juiz_reprovou', violacao: julgamento.violation, detalhe: julgamento.detail,
+      conversationId: input.conversationId, saidaOriginal: text, em: new Date().toISOString(),
+    }));
+    return fallback(julgamento, usage, toolsUsed, text);
+  }
 
   return {
     reply: {
