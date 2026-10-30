@@ -38,6 +38,11 @@ export type AgentTurnResult = {
   modelId: string;
   /** Nomes das ferramentas chamadas no turno, na ordem. Insumo dos critérios da eval (4.3). */
   toolsUsed: string[];
+  /**
+   * O que o modelo escreveu, antes das guardas. Null quando o provedor nem respondeu. É o que o
+   * relatório da eval precisa mostrar: dizer que o fallback foi reprovado não diagnostica nada.
+   */
+  modelText: string | null;
 };
 
 /**
@@ -123,6 +128,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
     guard: GuardVerdict,
     usage: { inputTokens: number; outputTokens: number },
     toolsUsed: string[] = [],
+    modelText: string | null = null,
   ): AgentTurnResult => ({
     reply: {
       sender: 'ai',
@@ -132,7 +138,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
       facts: state.facts,
       handoffReason: state.handoffReason ?? 'ai_suggested',
     },
-    usage, guard, fallback: true, modelId: resolved.modelId, toolsUsed,
+    usage, guard, fallback: true, modelId: resolved.modelId, toolsUsed, modelText,
   });
 
   let result: Awaited<ReturnType<typeof generateText<typeof tools>>>;
@@ -167,7 +173,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   const guard = checkAgentReply({
     text, finishReason: result.finishReason, state, conversationId: input.conversationId,
   });
-  if (!guard.ok) return fallback(guard, usage, toolsUsed);
+  if (!guard.ok) return fallback(guard, usage, toolsUsed, text);
 
   return {
     reply: {
@@ -177,6 +183,6 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
       facts: state.facts,
       handoffReason: state.handoffReason,
     },
-    usage, guard, fallback: false, modelId: resolved.modelId, toolsUsed,
+    usage, guard, fallback: false, modelId: resolved.modelId, toolsUsed, modelText: text,
   };
 }

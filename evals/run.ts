@@ -43,6 +43,7 @@ async function rodarCaso(runAgentTurn: RunAgentTurn, caso: CorpusCase): Promise<
     });
     turns.push({
       body: r.reply.body,
+      modelText: r.modelText,
       fallback: r.fallback,
       guardViolation: r.guard.ok ? null : r.guard.violation,
       toolsUsed: r.toolsUsed,

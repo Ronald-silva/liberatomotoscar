@@ -11,6 +11,19 @@ export function semAcento(valor: string) {
 
 /** Teto do schema de `vehicleSearchInput`; pedir mais que isso faz o parse falhar. */
 const MAX_RESULTADOS = 5;
+/**
+ * Marca, modelo, versão e cor são texto livre digitado no painel e viajam até o contexto do
+ * modelo com cara de dado oficial do catálogo. O corte não impede uma instrução curta de
+ * chegar lá — para isso serve a regra do prompt de tratar resultado de ferramenta como dado —
+ * mas impede que um campo colado com um texto inteiro domine o contexto do turno.
+ */
+const MAX_TEXTO_DE_CADASTRO = 60;
+
+function cortar(valor: string | null): string | null {
+  if (valor === null) return null;
+  const limpo = valor.replace(/\s+/g, ' ').trim();
+  return limpo.length > MAX_TEXTO_DE_CADASTRO ? limpo.slice(0, MAX_TEXTO_DE_CADASTRO) : limpo;
+}
 
 /**
  * Campos que a caixa de entrada sabe rotular (`factLabels` em `atendimento/page.tsx`).
@@ -126,15 +139,17 @@ type CatalogRow = Awaited<ReturnType<typeof searchAvailableVehicles>>['items'][n
  */
 function toVerified(row: CatalogRow): VerifiedVehicle | null {
   if (!row.brand || !row.model || !row.priceCents || row.priceCents <= 0) return null;
+  const marca = cortar(row.brand)!;
+  const modelo = cortar(row.model)!;
   return {
     id: row.id,
-    titulo: buildVehicleTitle(row.brand, row.model, row.version),
-    marca: row.brand,
-    modelo: row.model,
+    titulo: buildVehicleTitle(marca, modelo, cortar(row.version)),
+    marca,
+    modelo,
     tipo: row.type,
     ano: row.year,
     quilometragem: row.mileageKm,
-    cor: row.color,
+    cor: cortar(row.color),
     precoCentavos: row.priceCents,
     slug: row.slug,
   };

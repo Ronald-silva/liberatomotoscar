@@ -118,6 +118,8 @@ export type WebhookHandlerDeps = {
     to: string;
     body: string;
   }) => Promise<{ messageId: string | null }>;
+  /** Chamado quando a Meta não confirma a entrega: a conversa passa a esperar um humano. */
+  onSendFailed?: (conversationId: string, erro: unknown) => Promise<void>;
 };
 
 /**
@@ -141,7 +143,21 @@ async function defaultRunAgentTurn(params: {
   // A Meta reentrega o mesmo evento quando o webhook demora. Sem esta saída o cliente
   // receberia duas respostas para a mesma frase.
   if (!conversationId) return null;
+  ultimaConversa = conversationId;
   return runWhatsappAgentTurn({ conversationId, message: params.text.slice(0, 1000) });
+}
+
+/**
+ * Id da conversa do turno em curso. O contrato de `runAgentTurn` devolve só o texto a enviar,
+ * e o handler precisa do id para marcar a conversa quando o envio falha.
+ */
+let ultimaConversa: string | null = null;
+
+/** Falha de envio: um vendedor assume, porque o cliente está esperando e não recebeu nada. */
+async function defaultOnSendFailed(conversationId: string) {
+  if (!conversationId) return;
+  const { requestHumanTakeover } = await import('@/server/attendance/conversation-repository');
+  await requestHumanTakeover(conversationId, 'ai_suggested');
 }
 
 /**
@@ -162,6 +178,7 @@ export async function processMetaWebhookPayload(
   const decrypt = deps.decryptToken ?? ((enc: string) => decryptAccessToken(enc));
   const pauseEcho = deps.pauseOnSellerEcho ?? pauseAutomationOnSellerEcho;
   const runTurn = deps.runAgentTurn ?? defaultRunAgentTurn;
+  const onSendFailed = deps.onSendFailed ?? defaultOnSendFailed;
   const sendOutbound = deps.sendOutbound ?? sendWhatsAppTextMessage;
 
   let processedMessages = 0;
@@ -221,6 +238,7 @@ export async function processMetaWebhookPayload(
           value?.contacts?.find((c) => c.wa_id === incoming.from) ?? value?.contacts?.[0];
         const customerName = contactMatch?.profile?.name?.trim() || null;
 
+        ultimaConversa = null;
         const replyBody = await runTurn({
           tenant,
           customerWaId: incoming.from,
@@ -232,14 +250,27 @@ export async function processMetaWebhookPayload(
         if (replyBody) {
           const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
           if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
-          const sent = await sendOutbound({
-            phoneNumberId: tenant.whatsappPhoneNumberId,
-            accessToken,
-            to: normalizeWhatsAppRecipient(incoming.from),
-            body: replyBody,
-          });
-          if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta do agente.');
-          processedMessages += 1;
+          // A resposta já foi gravada na conversa. Se o envio falhar e nós lançarmos, a Meta
+          // reentrega o evento e a deduplicação engole a retentativa: o banco fica com uma
+          // resposta que o cliente nunca recebeu, e ninguém é avisado. Por isso a falha vira
+          // um pedido de atendimento humano, não uma exceção.
+          try {
+            const sent = await sendOutbound({
+              phoneNumberId: tenant.whatsappPhoneNumberId,
+              accessToken,
+              to: normalizeWhatsAppRecipient(incoming.from),
+              body: replyBody,
+            });
+            if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta do agente.');
+            processedMessages += 1;
+          } catch (erro) {
+            console.error('[agente] envio ao WhatsApp falhou', JSON.stringify({
+              evento: 'envio_falhou', conversationId: ultimaConversa,
+              detalhe: erro instanceof Error ? erro.message : String(erro),
+              em: new Date().toISOString(),
+            }));
+            await onSendFailed(ultimaConversa ?? '', erro);
+          }
         } else {
           console.info('Webhook WhatsApp: conversa sem resposta automática (modo desativado, vendedor ativo ou mensagem duplicada).');
         }

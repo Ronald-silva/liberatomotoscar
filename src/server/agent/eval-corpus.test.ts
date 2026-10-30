@@ -4,7 +4,7 @@ import {
   evaluateCase, MAX_CARACTERES_RESPOSTA, type CaseOutcome, type CorpusCase,
 } from '../../../evals/criteria';
 import { checkAgentReply } from './guards';
-import { createAgentTurnState } from './tools';
+import { createAgentTurnState, type VerifiedVehicle } from './tools';
 
 /**
  * 4.5 — regressão do corpus em CI, sem chamar modelo.
@@ -75,6 +75,55 @@ describe('4.3 critérios automáticos', () => {
     expect(criterios).toContain('guarda_violada');
     expect(criterios).toContain('resposta_longa');
     expect(criterios).toContain('pergunta_repetida');
+  });
+});
+
+/**
+ * A metade que faltava. A suíte só assertava RECUSA, então uma "correção" que apertasse a
+ * guarda até o agente mal conseguir falar passava verde — e era exatamente o que estava
+ * acontecendo: "Aceitamos cartão" era reprovada, e isso é uma das falhas de produção da
+ * seção 1.2 do plano, quebrada de novo pelo outro lado.
+ */
+describe('4.5 as guardas continuam DEIXANDO PASSAR o português correto', () => {
+  const cg: VerifiedVehicle = {
+    id: '11111111-1111-4111-8111-111111111111', titulo: 'Honda CG 160 Start Flex 8000',
+    marca: 'Honda', modelo: 'CG 160 Start', tipo: 'motorcycle', ano: 2022,
+    quilometragem: 21_000, cor: 'Vermelha', precoCentavos: 1_250_000, slug: 'cg',
+  };
+  function comEstoque() {
+    const s = createAgentTurnState();
+    s.allowedVehicles.set(cg.id, cg);
+    return s;
+  }
+  function buscouSemAchar(marca: string) {
+    const s = createAgentTurnState();
+    s.searchedBrands.add(marca);
+    return s;
+  }
+
+  const boas: [string, () => ReturnType<typeof createAgentTurnState>][] = [
+    ['Aceitamos cartão sim, o vendedor confirma as condições com você.', createAgentTurnState],
+    ['Separei 2 opções pra você, quer ver?', createAgentTurnState],
+    ['Essa moto tem 3 anos de uso.', createAgentTurnState],
+    ['Não trabalho com desconto por aqui, isso é com o vendedor.', createAgentTurnState],
+    ['Não encontrei nenhuma Yamaha publicada agora, quer que eu veja outra marca?',
+      () => buscouSemAchar('yamaha')],
+    ['A Honda CG 160 Start está R$ 12.500, com 21.000 km rodados.', comEstoque],
+    ['Temos a Honda CG 160 Start aqui na loja, quer ver as fotos?', comEstoque],
+    ['A loja trabalha com troca, mediante avaliação presencial aqui na loja.', createAgentTurnState],
+    ['Posso fazer a ponte com o vendedor agora mesmo.', createAgentTurnState],
+    ['Não consigo ouvir áudio por aqui, me escreve o que você procura?', createAgentTurnState],
+  ];
+
+  it.each(boas)('deixa passar: %s', (frase, estado) => {
+    const v = checkAgentReply({ text: frase, finishReason: 'stop', state: estado() });
+    expect(v.ok, `a guarda bloqueou uma resposta correta: ${!v.ok ? v.violation + '/' + v.detail : ''}`).toBe(true);
+  });
+
+  it('dígito no campo versão do painel não vira número permitido', () => {
+    // titulo tem "Flex 8000"; modelo não. R$ 8.000 continua sendo valor inventado.
+    const v = checkAgentReply({ text: 'Essa moto sai por R$ 8.000 hoje.', finishReason: 'stop', state: comEstoque() });
+    expect(v.ok).toBe(false);
   });
 });
 

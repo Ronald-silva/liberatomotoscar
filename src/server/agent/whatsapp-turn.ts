@@ -1,6 +1,8 @@
 import {
   commitAutomatedReply, listConversationMessages, releaseAutomatedTurn, reserveAutomatedTurn,
+  type MessageRow,
 } from '@/server/attendance/conversation-repository';
+import { consumeRateLimit } from '@/server/attendance/limits';
 import {
   recordWhatsappAiTokens, recordWhatsappGuardRejection, reserveWhatsappAiRequest,
 } from '@/server/attendance/limits';
@@ -15,6 +17,37 @@ import { runAgentTurn, type AgentTurnDeps } from './run';
 async function readWhatsappModeDefault(): Promise<{ mode: string }> {
   const { readWhatsappSetting } = await import('@/server/attendance/settings');
   return readWhatsappSetting();
+}
+
+/**
+ * Teto por conversa. A decisão 0.3 fixou 150 chamadas/dia para a LOJA; sem um teto por conversa,
+ * um número só consome tudo e todos os outros clientes do dia recebem a mensagem de sem-cota.
+ */
+const MAX_TURNOS_POR_CONVERSA_DIA = 40;
+const UM_DIA_MS = 24 * 60 * 60 * 1000;
+
+async function consumeConversationQuotaDefault(conversationId: string) {
+  return consumeRateLimit(`wa-conv:${conversationId}`, MAX_TURNOS_POR_CONVERSA_DIA, UM_DIA_MS);
+}
+
+/**
+ * Mensagens do turno. As mensagens do visitante no FIM do histórico são as que ainda não foram
+ * respondidas — o cliente que divide a frase em dois balões é a norma, não exceção. Elas entram
+ * juntas, na ordem em que foram escritas.
+ *
+ * A versão anterior filtrava o histórico comparando TEXTO com a mensagem atual, e com isso
+ * apagava uma ocorrência anterior igual: quem escrevia "oi" duas vezes fazia o modelo esquecer
+ * que já tinha respondido.
+ */
+export function splitPendingMessages(history: MessageRow[]): { anteriores: MessageRow[]; atual: string } {
+  const comTexto = history.filter((row) => row.body.trim());
+  let corte = comTexto.length;
+  while (corte > 0 && comTexto[corte - 1].sender === 'visitor') corte -= 1;
+  const pendentes = comTexto.slice(corte);
+  return {
+    anteriores: comTexto.slice(0, corte),
+    atual: pendentes.map((row) => row.body.trim()).join('\n'),
+  };
 }
 
 /** Sem cota diária o cliente não fica sem resposta: a conversa vai para o vendedor (5.4). */
@@ -35,6 +68,11 @@ export type WhatsappAgentTurnDeps = AgentTurnDeps & {
   reserveQuota?: typeof reserveWhatsappAiRequest;
   recordTokens?: typeof recordWhatsappAiTokens;
   recordGuardRejection?: typeof recordWhatsappGuardRejection;
+  /** Teto por conversa, para um número só não queimar a cota do dia inteiro (I8). */
+  consumeConversationQuota?: (conversationId: string) => Promise<boolean>;
+  /** Chamado pelo webhook quando a Meta recusa o envio: a conversa vai para um humano (I4). */
+  markSendFailure?: (conversationId: string, erro: unknown) => Promise<void>;
+  onSendFailed?: (conversationId: string, erro: unknown) => Promise<void>;
   readSetting?: () => Promise<{ mode: string }>;
 };
 
@@ -55,9 +93,18 @@ export async function runWhatsappAgentTurn(
   const recordTokens = deps.recordTokens ?? recordWhatsappAiTokens;
   const recordGuard = deps.recordGuardRejection ?? recordWhatsappGuardRejection;
   const readSetting = deps.readSetting ?? readWhatsappModeDefault;
+  const consumeConversationQuota = deps.consumeConversationQuota ?? consumeConversationQuotaDefault;
 
   const setting = await readSetting();
   if (setting.mode !== 'ai') return null;
+
+  // Teto por conversa antes da cota global: quem estourou o próprio limite não gasta a da loja.
+  if (!await consumeConversationQuota(input.conversationId)) {
+    console.warn('[agente] conversa acima do teto diário próprio', JSON.stringify({
+      evento: 'teto_por_conversa', conversationId: input.conversationId, em: new Date().toISOString(),
+    }));
+    return null;
+  }
 
   // A reserva é o que impede duas instâncias de responderem o mesmo turno.
   const reserved = await reserveTurn(input.conversationId);
@@ -73,12 +120,13 @@ export async function runWhatsappAgentTurn(
     }
 
     const history = await listMessages(input.conversationId);
-    // A mensagem atual já está no histórico: o webhook a persistiu antes. Tirá-la de lá evita
-    // o modelo ver a mesma frase duas vezes, como histórico e como mensagem do turno.
-    const anteriores = history.filter((row) => row.body.trim() !== input.message.trim());
+    // A mensagem atual já está no histórico: o webhook a persistiu antes.
+    const { anteriores, atual } = splitPendingMessages(history);
 
     const turn = await runAgentTurn({
-      conversationId: input.conversationId, message: input.message, history: anteriores,
+      conversationId: input.conversationId,
+      message: atual || input.message,
+      history: anteriores,
     }, deps);
 
     if (turn.usage.inputTokens || turn.usage.outputTokens) {

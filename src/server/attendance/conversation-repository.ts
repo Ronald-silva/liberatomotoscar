@@ -148,6 +148,25 @@ export async function commitAutomatedReply(conversationId: string, reply: Automa
   });
 }
 
+/**
+ * Põe a conversa na fila do vendedor sem passar por uma resposta automática. Usado quando o
+ * envio ao WhatsApp falha: o cliente está esperando, a resposta não chegou, e alguém precisa ver.
+ */
+export async function requestHumanTakeover(conversationId: string, reason: HandoffReason, now = new Date()) {
+  return getDb().transaction(async (tx) => {
+    const [current] = await tx.select().from(conversations)
+      .where(eq(conversations.id, conversationId)).for('update').limit(1);
+    if (!current || current.status !== 'open') return null;
+    const [row] = await tx.update(conversations)
+      .set({ owner: 'human', handoffRequestedAt: current.handoffRequestedAt ?? now, turnLockedUntil: null })
+      .where(eq(conversations.id, conversationId)).returning();
+    if (!current.handoffRequestedAt) {
+      await tx.insert(handoffs).values({ conversationId, event: 'requested', reason, occurredAt: now });
+    }
+    return row ?? null;
+  });
+}
+
 export async function readConversation(conversationId: string) {
   const [row] = await getDb().select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
   return row ?? null;
