@@ -1,6 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { GOOGLE_PROFILE, MAP_URL, STORE, STORE_ADDRESS_LINE } from '@/data/store';
+import { resumoDaPolitica } from '@/data/store-policy';
 import { buildVehicleTitle } from '@/lib/vehicle-title';
 import type { HandoffReason, LeadFact } from '@/server/attendance/conversation-repository';
 import { getVehicleDetails, searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
@@ -195,6 +196,7 @@ export function createAgentToolFunctions(state: AgentTurnState, deps: AgentToolD
     },
 
     dadosDaLoja() {
+      const politica = resumoDaPolitica();
       return {
         nome: STORE.name,
         endereco: STORE_ADDRESS_LINE,
@@ -202,8 +204,11 @@ export function createAgentToolFunctions(state: AgentTurnState, deps: AgentToolD
         telefone: STORE.phoneDisplay,
         mapa: MAP_URL,
         avaliacaoGoogle: `${GOOGLE_PROFILE.rating} (${GOOGLE_PROFILE.reviewCount} avaliações)`,
-        // O horário nunca foi confirmado pela loja; afirmar um seria inventar política.
-        horario: 'não confirmado pela loja — um vendedor confirma',
+        // A separação é o ponto: o que está em `podeAfirmar` o agente responde sozinho; só o
+        // que está em `precisaConfirmarComAloja` vai ao vendedor. Sem ela o agente encaminhava
+        // até "aceitam cartão?", e cliente nenhum espera vendedor para isso.
+        podeAfirmar: politica.confirmado,
+        precisaConfirmarComAloja: politica.naoConfirmado,
       };
     },
 
@@ -239,8 +244,9 @@ export function createAgentTools(state: AgentTurnState, deps: AgentToolDeps = {}
       execute: fn.detalharVeiculo,
     }),
     dados_da_loja: tool({
-      description: 'Endereço, telefone, mapa e avaliação da loja. Use quando perguntarem onde ficam, '
-        + 'como chegar, qual o telefone ou se a loja é confiável.',
+      description: 'Tudo sobre a LOJA: endereço, telefone, mapa, avaliação, formas de pagamento '
+        + 'aceitas, serviços e o que ainda não foi confirmado. Chame SEMPRE que perguntarem sobre '
+        + 'pagamento, cartão, Pix, financiamento, troca, horário, garantia, onde ficam ou como chegar.',
       inputSchema: z.object({}),
       execute: async () => fn.dadosDaLoja(),
     }),
