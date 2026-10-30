@@ -13,7 +13,7 @@ import {
   verifyMetaWebhookSignature,
 } from './crypto';
 import { completeEmbeddedSignup, type WhatsappTenantRow } from './embedded-signup';
-import { formatDayseWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
+import { formatAgentWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
 import { processMetaWebhookPayload, resolveWebhookTenant, whatsappConversationToken } from './webhook-handler';
 import { TEST_TENANT_ID } from './test-number';
 
@@ -214,7 +214,7 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
         decryptToken: (enc) => decryptAccessToken(enc, TEST_HEX_KEY),
         pauseOnSellerEcho,
         runAgentTurn: async ({ text }) =>
-          formatDayseWhatsAppReply(`Olá! Sou a Dayse. Você perguntou: ${text}`, [
+          formatAgentWhatsAppReply(`Olá! Sou a Dayse. Você perguntou: ${text}`, [
             { title: 'Honda CG 160 Titan', year: 2023, priceCents: 1690000, href: '/veiculos/honda-titan' },
           ]),
         sendOutbound,

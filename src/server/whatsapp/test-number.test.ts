@@ -8,7 +8,7 @@ vi.mock('@/server/authz', () => ({
 
 import { decryptAccessToken, encryptAccessToken } from './crypto';
 import type { EmbeddedSignupDeps, listWhatsappTenants } from './embedded-signup';
-import { formatDayseWhatsAppReply, toWhatsAppMarkup } from './outbound';
+import { formatAgentWhatsAppReply, toWhatsAppMarkup } from './outbound';
 import { activateConfiguredMetaTestNumber, activateSavedMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber, TEST_TENANT_ID } from './test-number';
 
 const KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -22,7 +22,7 @@ describe('Formatação das respostas da Dayse para o WhatsApp', () => {
   });
 
   it('formata os cartões com link completo da página do veículo', () => {
-    const out = formatDayseWhatsAppReply('Separei as **3 melhores**:', [
+    const out = formatAgentWhatsAppReply('Separei as **3 melhores**:', [
       { title: 'Honda Fan', year: 2015, priceCents: 1_099_000, href: '/veiculos/honda-fan-2015' },
     ]);
     expect(out).not.toContain('**');

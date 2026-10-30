@@ -78,18 +78,27 @@ export function toWhatsAppMarkup(text: string): string {
     .trim();
 }
 
-/** Formata a resposta da Dayse + cartões de veículos publicados para leitura direta no WhatsApp. */
-export function formatDayseWhatsAppReply(
+/**
+ * Formata a resposta do agente + cartões de veículos publicados para leitura direta no WhatsApp.
+ * O canal não renderiza cartão, então é aqui que o preço verificado chega ao cliente — vindo do
+ * retorno da ferramenta, nunca da prosa do modelo.
+ */
+export function formatAgentWhatsAppReply(
   body: string,
   cards: Array<{ title: string; year: number | null; priceCents: number; href: string }>,
 ): string {
   const text = toWhatsAppMarkup(body);
   if (!cards.length) return text;
+  const digitosDoTexto = text.replace(/\D/g, '');
   const cardLines = cards.slice(0, 4).map((card) => {
     const fullUrl = new URL(card.href, SITE_URL).toString();
-    // Quando a resposta já descreveu o anúncio, repetir preço e ano faz o cliente ler o mesmo
-    // veículo duas vezes no WhatsApp. Nesse caso sobra só o link, que é o que falta no texto.
-    if (text.includes(card.title)) return `• *${card.title}*: ${fullUrl}`;
+    // A supressão olha o PREÇO, não o título. Com a regra antiga, uma frase que citava o veículo
+    // sem dizer o valor fazia o preço desaparecer da mensagem — e o mystery shop de 100
+    // concessionárias mostrou que dar o preço final é o que quase nenhuma faz. Repetir o valor
+    // é que polui; omiti-lo é perder o diferencial.
+    if (digitosDoTexto.includes(String(Math.round(card.priceCents / 100)))) {
+      return `• *${card.title}*: ${fullUrl}`;
+    }
     const yearLabel = card.year ? ` (${card.year})` : '';
     return `• *${card.title}*${yearLabel} — ${brl.format(card.priceCents / 100)}\n  Fotos e detalhes: ${fullUrl}`;
   });
