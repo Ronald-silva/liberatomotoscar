@@ -8,6 +8,7 @@ import {
   type InboxFilter,
 } from '@/server/attendance/inbox';
 import { protocolOf } from '@/server/attendance/protocol';
+import { organizarFicha, semGritar } from './ficha';
 import { readAdminSiteSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { TEST_TENANT_ID, TEST_WEBHOOK_URL } from '@/server/whatsapp/test-number';
@@ -39,35 +40,6 @@ const reasonLabels = {
   ai_suggested: 'encaminhamento da Dayse',
   operator: 'ação do vendedor',
 } as const;
-const factLabels: Record<string, string> = {
-  category: 'Categoria',
-  model: 'Modelo',
-  budget: 'Orçamento',
-  payment: 'Pagamento',
-  trade_in: 'Troca',
-  timeline: 'Prazo',
-  visit: 'Visita',
-  negotiation: 'Negociação',
-  purpose: 'Finalidade',
-};
-
-/**
- * Ordem de leitura da ficha, pensada para quem vai ligar para o cliente: primeiro o que ele
- * quer e quanto pode gastar, depois como pretende pagar. A visita sai desta lista e ganha
- * destaque próprio — é o compromisso marcado, não mais um dado entre outros.
- */
-const ORDEM_DA_FICHA = ['purpose', 'category', 'model', 'budget', 'trade_in',
-  'payment', 'timeline', 'negotiation'] as const;
-
-function organizarFicha(facts: { field: string; quote: string }[]) {
-  const porCampo = new Map(facts.map((f) => [f.field, f.quote]));
-  return {
-    visita: porCampo.get('visit') ?? null,
-    linhas: ORDEM_DA_FICHA
-      .filter((campo) => porCampo.has(campo))
-      .map((campo) => ({ campo, rotulo: factLabels[campo] ?? campo, valor: porCampo.get(campo)! })),
-  };
-}
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
@@ -247,7 +219,9 @@ export default async function AttendancePage({
                         {ficha.visita ? (
                           <p className={attendanceStyles.visita}>
                             <span className={attendanceStyles.visitaRotulo}>Visita combinada</span>
-                            <span className={attendanceStyles.visitaValor}>{ficha.visita}</span>
+                            <span className={attendanceStyles.visitaValor} title={ficha.visita}>
+                              {semGritar(ficha.visita)}
+                            </span>
                           </p>
                         ) : null}
                         {ficha.linhas.length > 0 ? (
@@ -255,7 +229,7 @@ export default async function AttendancePage({
                             {ficha.linhas.map(({ campo, rotulo, valor }) => (
                               <div key={campo} className={attendanceStyles.fichaLinha}>
                                 <dt>{rotulo}</dt>
-                                <dd title={valor}>{valor}</dd>
+                                <dd title={valor}>{semGritar(valor)}</dd>
                               </div>
                             ))}
                           </dl>
@@ -264,6 +238,7 @@ export default async function AttendancePage({
                     );
                   })()}
 
+                  <p className={attendanceStyles.conversaTitulo}>Conversa</p>
                   <div className={attendanceStyles.messageStream} aria-label="Histórico de mensagens">
                     {detail.messages.length === 0 ? (
                       <p className={attendanceStyles.current}>Nenhuma mensagem registrada.</p>
