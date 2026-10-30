@@ -530,20 +530,31 @@ export function detectMessageIntents(text: string): DetectedIntents {
   const v = normalizePlain(text);
   const entryCents = extractEntryCents(text);
 
-  const asksAddressOrLocation =
-    /\b(endereco|onde fica\w*|fica\w* onde|onde voces|onde e a loja|onde esta\w*|localiza\w*|bairro|cidade|cep|como chegar|mapa|maps|rua|elcias lopes|parangaba|fortaleza|loja fisica|ponto de referencia)\b/.test(
+  // Serviço, peça e manutenção não são compra: "troca de óleo" não é troca de veículo e
+  // "o banco está rasgado" não é pergunta sobre banco financiador.
+  const asksServiceOrParts =
+    /\b(oleo|pneu|pastilha|freio|corrente|relacao|vela|filtro|escapamento|retrovisor|banco|assento|estofamento|peca|pecas|oficina|conserto|consertar|manutencao|revisao|barulho|ruido|nao liga|nao pega|visita tecnica)\b/.test(
       v,
     );
 
+
+  const asksAddressOrLocation =
+    /\b(endereco|onde fica\w*|fica\w* onde|onde voces|onde e a loja|onde esta\w*|localiza\w*|cep|como chegar|mapa|maps|elcias lopes|parangaba|loja fisica|ponto de referencia)\b/.test(v) ||
+    // "moro na rua X" e "sou de Fortaleza" dizem de onde o cliente vem, não pedem o endereço.
+    (/\b(bairro|cidade|rua|fortaleza)\b/.test(v) &&
+      !/\b(moro|morar|sou de|venho de|estou em|aqui (?:em|no|na)|minha rua|meu bairro|minha cidade)\b/.test(v));
+
   // "vendem celular?" cita o aparelho como produto, não pede o contato da loja.
   const asksPhoneOrWhatsapp =
-    /\b(telefone|whatsapp|zap|wpp|numero|contato|ligar|celular)\b/.test(v) &&
+    (/\b(telefone|whatsapp|zap|wpp|contato|celular)\b/.test(v) ||
+      (/\bnumero\b/.test(v) && !/\bnumero (?:do |da )?(?:chassi|placa|motor|documento|renavam)\b/.test(v)) ||
+      (/\bligar\b/.test(v) && /\b(telefone|whatsapp|contato|voces|loja|agora)\b/.test(v))) &&
     !/\b(vend\w*|compra\w*|tem|teria|possui)\s+(?:\w+\s+){0,2}(celular|telefone)\b/.test(v);
 
   const asksHoursOrVisit =
     /\b(horario\w*|funciona\w*|abre|abrem|aberto|aberta|fecha\w*|sabado|domingo|feriado|visita\w*|ir na loja|ir ai|ir agora|ir hoje|posso ir|posso passar|pode ir|pode passar|conhecer a loja)\b/.test(
       v,
-    );
+    ) && !asksServiceOrParts;
 
   const asksAboutStoreOrTrust =
     /\b(quem e voce|quem fala|dayse|sobre a loja|liberato motos|avaliac\w*|estrelas|google|confiavel|historia)\b/.test(
@@ -589,12 +600,16 @@ export function detectMessageIntents(text: string): DetectedIntents {
   // "posso trocar se eu não gostar" é devolução, não entrada: só vale como troca quando o
   // cliente aponta um veículo próprio.
   const offersOwnVehicle = mentionsKnownModel || /\b(?:tenho|possuo|meu|minha|aceita\w*)\b/.test(v);
-  const asksTradeIn = mentionsTradeInPhrase && !(asksPolicyOrConsequence && !offersOwnVehicle);
+  const asksTradeIn = mentionsTradeInPhrase && !asksServiceOrParts &&
+    !(asksPolicyOrConsequence && !offersOwnVehicle);
 
+  // "banco" e "cartão" sozinhos são peça do veículo e documento; só contam como pagamento
+  // quando aparecem junto de crédito, parcela ou financiamento.
   const asksFinancing =
-    (/\b(financ\w*|parcel\w*|credito|simulac\w*|banco|cartao|sem entrada|dar entrada|prestac\w*)\b/.test(
-      v,
-    ) || (/\bentrada\b/.test(v) && !asksTradeIn)) && !asksPolicyOrConsequence;
+    (/\b(financ\w*|parcel\w*|credito|simulac\w*|sem entrada|dar entrada|prestac\w*)\b/.test(v) ||
+      (/\b(banco|cartao)\b/.test(v) && /\b(financ\w*|parcel\w*|credito|pagar|pagamento|juros|aprovac\w*)\b/.test(v)) ||
+      (/\bentrada\b/.test(v) && !asksTradeIn && !/\bentrada da loja\b/.test(v))) &&
+    !asksPolicyOrConsequence && !asksServiceOrParts;
 
   const asksHuman =
     /\b(falar com vendedor|falar com atendente|chamar vendedor|atendente humano|falar com uma pessoa|atendimento humano|quero um vendedor)\b/.test(
@@ -604,7 +619,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
   const asksAllInventory =
     /\b(estoque|catalogo|todos os veiculos|quais veiculos|o que tem hoje|o que voces tem|opcoes disponiveis|mostrar tudo|ver todos|quantos veiculos|lista de veiculos)\b/.test(
       v,
-    );
+    ) && !asksServiceOrParts;
 
   const asksCheapest =
     /\b(mais barat\w*|menor preco|menor valor|mais em conta|mais acessive\w*)\b/.test(v) &&
@@ -636,9 +651,11 @@ export function detectMessageIntents(text: string): DetectedIntents {
     );
 
   const asksWorkOrAppUseCase =
-    /\b(uber|99|aplicativo|app|ifood|entreg\w*|motoboy|frete|custo beneficio|custo-beneficio|melhor custo|economica|para rodar|rodar na|rodar no|para trabalhar)\b/.test(
-      v,
-    ) && !asksVehicleHistory;
+    (/\b(uber|99|ifood|motoboy|custo beneficio|custo-beneficio|melhor custo|para rodar|rodar na|rodar no|para trabalhar|trabalhar com)\b/.test(v) ||
+      // "vocês entregam em casa?" é frete da loja, não perfil de quem vai fazer entregas.
+      (/\b(entreg\w*|frete|aplicativo|app)\b/.test(v) &&
+        /\b(rodar|trabalh\w*|fazer entrega\w*|uber|99|ifood|motoboy|dia a dia)\b/.test(v)) ||
+      (/\beconomica\b/.test(v) && !/\bcombustivel\b/.test(v))) && !asksVehicleHistory && !asksServiceOrParts;
 
   const asksLongDistanceUseCase =
     /\b(viagem|viagens|viajar|viajando|estrada|rodovia|longa distancia|longas distancias)\b/.test(v);
@@ -654,7 +671,7 @@ export function detectMessageIntents(text: string): DetectedIntents {
       /^ano\s*\??$/.test(v),
     price: /\b(quanto custa|qual o preco|qual o valor|quanto ta|quanto esta|valor da|valor do|preco da|preco do)\b/.test(v),
     engineOrSpecs: /\b(motor\w*|potencia|cavalo\w*|cv|cambio|marcha\w*|combustivel|flex|cacamba|ficha tecnica|especificac\w*|ar[- ]condicionado|direcao hidraulica|vidro eletrico|trava eletrica|airbag|abs|som|multimidia)\b/.test(v) &&
-      !asksVehicleHistory,
+      !asksVehicleHistory && !asksServiceOrParts,
   };
 
   const wantsMoto =

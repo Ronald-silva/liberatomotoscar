@@ -463,3 +463,49 @@ describe('Varredura — contexto não pode ser contaminado', () => {
     expect(detectMentionedCatalogTerms('gostei da Titan').mentionsAnyModel).toBe(true);
   });
 });
+
+/**
+ * Varredura adversarial: cada mensagem usa, de propósito, uma palavra-gatilho no sentido que
+ * NÃO é intenção de compra. Foi a família por trás de quase todo defeito encontrado — "troca
+ * de óleo" virando troca de veículo, "banco rasgado" virando banco financiador.
+ */
+describe('Varredura adversarial — palavra-gatilho em outro sentido', () => {
+  it.each([
+    ['troca de óleo não é troca de veículo', 'voces fazem troca de oleo?', 'asksTradeIn'],
+    ['trocar pneu não é troca de veículo', 'precisa trocar o pneu?', 'asksTradeIn'],
+    ['banco rasgado não é banco financiador', 'o banco da moto ta rasgado?', 'asksFinancing'],
+    ['cartão do veículo não é cartão de crédito', 'tem o cartao do veiculo?', 'asksFinancing'],
+    ['entrada da loja não é entrada de pagamento', 'a entrada da loja e pela frente?', 'asksFinancing'],
+    ['entregar em casa não é perfil de entregador', 'voces entregam a moto em casa?', 'asksWorkOrAppUseCase'],
+    ['app do banco não é moto de aplicativo', 'posso pagar pelo app do banco?', 'asksWorkOrAppUseCase'],
+    ['peça em estoque não é vitrine', 'tem peca em estoque?', 'asksAllInventory'],
+    ['visita técnica não é visita à loja', 'voces fazem visita tecnica?', 'asksHoursOrVisit'],
+  ])('%s', (_motivo, mensagem, campo) => {
+    const intents = detectMessageIntents(mensagem) as unknown as Record<string, boolean>;
+    expect(intents[campo]).toBe(false);
+  });
+
+  it.each([
+    'qual o numero do chassi?',
+    'me passa o numero da placa',
+  ])('número de documento não devolve o telefone da loja: %j', (mensagem) => {
+    expect(detectMessageIntents(mensagem).asksPhoneOrWhatsapp).toBe(false);
+  });
+
+  it('cidade e rua citadas como origem do cliente não pedem o endereço da loja', () => {
+    expect(detectMessageIntents('moro na rua sao joao, voces vao ate la?').asksAddressOrLocation).toBe(false);
+    expect(detectMessageIntents('aqui em fortaleza tem muita moto').asksAddressOrLocation).toBe(false);
+    // Pedido real do endereço continua valendo.
+    expect(detectMessageIntents('qual o endereco de voces?').asksAddressOrLocation).toBe(true);
+    expect(detectMessageIntents('em que bairro fica a loja?').asksAddressOrLocation).toBe(true);
+  });
+
+  it('os pedidos legítimos continuam sendo atendidos pela base', () => {
+    expect(detectMessageIntents('aceitam troca?').asksTradeIn).toBe(true);
+    expect(detectMessageIntents('da pra parcelar no cartao de credito?').asksFinancing).toBe(true);
+    expect(detectMessageIntents('quero moto pra trabalhar com entregas').asksWorkOrAppUseCase).toBe(true);
+    expect(detectMessageIntents('quais veiculos voces tem?').asksAllInventory).toBe(true);
+    expect(detectMessageIntents('qual o horario de funcionamento?').asksHoursOrVisit).toBe(true);
+    expect(detectMessageIntents('qual o numero do whatsapp?').asksPhoneOrWhatsapp).toBe(true);
+  });
+});
