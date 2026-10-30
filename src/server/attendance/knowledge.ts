@@ -883,8 +883,11 @@ export async function answerFromPlatformKnowledge(
   const openNonVehicleOffer = context?.recentTradeIn
     ? OUT_OF_SCOPE_PRODUCTS.find((item) => new RegExp(`\\b${item}\\b`).test(normalizePlain(context.recentTradeIn!)))
     : undefined;
+  // Nomear uma moto ou carro encerra a descrição do item: o cliente está respondendo
+  // "qual veículo você tem em vista?", não falando mais da bicicleta.
   const continuesNonVehicleOffer = Boolean(openNonVehicleOffer) &&
-    !intents.wantsMoto && !intents.wantsCar && (
+    !intents.wantsMoto && !intents.wantsCar &&
+    !detectMentionedCatalogTerms(text).mentionsAnyModel && (
       isTradeInClarification(text, context?.recentTradeIn) ||
       isTradeInYearFollowUp(text, context?.recentTradeIn) ||
       isTradeInDataFollowUp(text, context?.recentTradeIn) ||
@@ -901,8 +904,8 @@ export async function answerFromPlatformKnowledge(
     return {
       matched: true, isInstitutionalOnly: false,
       text: apenasCobrança
-        ? `Ainda não tenho essa resposta${nameGreeting}: o uso de ${openNonVehicleOffer} como entrada precisa ser confirmado por um vendedor, e nem o aceite nem o valor saem antes da avaliação presencial na loja.`
-        : `Anotei${nameGreeting}: **${text.trim().slice(0, 120)}**. Já passei os dados para o vendedor, mas o aceite de ${openNonVehicleOffer} como entrada precisa ser confirmado por ele, junto com o valor, na avaliação presencial aqui na loja. Enquanto isso, qual moto ou carro do nosso estoque você tem em vista?`,
+        ? `Ainda não tenho${nameGreeting}: o aceite de ${openNonVehicleOffer} precisa ser confirmado por um vendedor, na avaliação aqui na loja.`
+        : `Anotei${nameGreeting}: **${text.trim().slice(0, 120)}**. Passei para o vendedor — o aceite e o valor ele confirma na avaliação, aqui na loja. Qual moto ou carro você tem em vista?`,
       cards: [], facts: [{ field: 'trade_in', quote: tradeSource.slice(0, 160) }],
       handoffRequested: true, handoffReason: 'trade_in', handoffUrl: null,
       checkedAt: new Date().toISOString(),
@@ -969,7 +972,11 @@ export async function answerFromPlatformKnowledge(
 
   const recentTradeIn = context?.recentTradeIn;
   const tradeInClarify = isTradeInClarification(text, recentTradeIn);
-  const tradeInData = isTradeInDataFollowUp(text, recentTradeIn);
+  // Com uma proposta de item fora do nicho em aberto, citar uma moto ou carro é responder
+  // "qual veículo você tem em vista?" — nunca oferecer esse veículo na troca. Sem isso a Bros
+  // virava o bem oferecido e apagava a bicicleta já anotada.
+  const tradeInData = isTradeInDataFollowUp(text, recentTradeIn) &&
+    !(openNonVehicleOffer && detectMentionedCatalogTerms(text).mentionsAnyModel);
   // Coleta acumulativa dos dados da troca. O fato `trade_in` carrega o que já foi dito, a
   // mensagem atual acrescenta o que falta, e nada disso consulta o estoque: "é uma Honda Pop"
   // identifica o veículo do cliente, não um anúncio da loja.
@@ -998,7 +1005,7 @@ export async function answerFromPlatformKnowledge(
       ? ` Para adiantar, me diz ${faltando.join(' e ')}?`
       // Essenciais completos: o avaliador já tem com o que trabalhar, então a conversa passa a
       // puxar a visita — a avaliação é presencial e quem define o valor é a loja.
-      : ` A equipe confere o documento, a quilometragem e o estado do veículo antes de definir o valor, e isso é feito aqui na loja com o avaliador.${
+      : ` A equipe confere documento, quilometragem e estado na avaliação, aqui na loja.${
         complementoFaltando.length ? ` Se souber, me adianta **${complementoFaltando[0]}**.` : ''
       } Quer combinar um horário para passar, ou prefere que eu já chame um vendedor?`;
     return {
@@ -1034,12 +1041,12 @@ export async function answerFromPlatformKnowledge(
           : 'Olá';
     const stockSummary =
       catalog.length > 0
-        ? `Hoje temos **${catalog.length} veículos publicados** na vitrine (${motosCount} motos e ${carsCount} carros).`
-        : 'Estou pronta para consultar nosso estoque em tempo real.';
+        ? `Hoje temos **${motosCount} motos e ${carsCount} carros** na vitrine (${catalog.length} veículos publicados).`
+        : 'Já consulto nosso estoque para você.';
     return {
       matched: true,
       isInstitutionalOnly: true,
-      text: `${periodGreeting}${nameGreeting}! Tudo ótimo por aqui! Eu sou a **Dayse**, consultora virtual da **${STORE.name}** na ${STORE.district} (${STORE.city}/${STORE.state}). ${stockSummary}\n\nPosso te indicar a melhor opção pelo seu perfil (trabalho, Uber/99, dia a dia ou família), simular entrada/financiamento, avaliar seu usado na troca ou enviar nossa localização. Como posso te ajudar hoje?`,
+      text: `${periodGreeting}${nameGreeting}! Sou a **Dayse**, da **${STORE.name}**. ${stockSummary} Me conta o que você procura?`,
       cards: [],
       facts: [],
       handoffRequested: false,
@@ -1485,10 +1492,10 @@ export async function answerFromPlatformKnowledge(
       ? 'Já registrei os dados do seu veículo para o nosso avaliador! Qual moto ou carro do nosso estoque você quer colocar na negociação, ou prefere passar aqui na loja hoje?'
       : offeredVehicleLabel
         ? `Entendi que você tem uma **${offeredVehicleLabel}**. Qual é o **ano** dela? Se souber, me diga também a quilometragem aproximada para adiantar a avaliação.`
-        : 'Me conta: **qual é o modelo e o ano** da sua moto ou carro? Assim já te explico como funciona a avaliação e deixo adiantado para a equipe!';
+        : 'Qual é o **modelo e o ano** da sua moto ou carro?';
     paragraphs.push(
-      `🔄 **Sim, aceitamos seu veículo como entrada${namePlain}!** 😊\nAqui na **${STORE.name}** nós fazemos **compra, venda, troca e financiamento** — analisamos sua moto ou carro usado como entrada na negociação (tanto para abater no valor à vista quanto para reduzir as parcelas do financiamento).\n\nBasta trazer para avaliação aqui na loja na **${STORE_STREET_ADDRESS} — ${STORE.district}, ${STORE.city}/${STORE.state}** ou enviar os dados pelo WhatsApp **${STORE.phoneDisplay}**.\n${
-        !intents.asksAddressOrLocation ? MAP_URL : ''
+      `**Sim, aceitamos seu veículo como entrada${namePlain}!** A avaliação é aqui na loja, na ${STORE_STREET_ADDRESS} — ${STORE.district}.${
+        !intents.asksAddressOrLocation ? `\n${MAP_URL}` : ''
       }\n\n${followUpTradeQuestion}`.trim(),
     );
     handoffRequested = true;
@@ -1517,7 +1524,7 @@ export async function answerFromPlatformKnowledge(
       entrySimulationText = `\n\nCom uma entrada de **${formatPrice(entryBRL)}**, a aprovação pelos bancos parceiros fica ainda mais fácil e reduz bastante o valor das parcelas (em até 48x mediante análise de crédito).`;
     }
     paragraphs.push(
-      `💳 **Sobre financiamento e parcelamento${namePlain}:**\nTrabalhamos com financiamentos pelos bancos parceiros (em até 48x) e parcelamento no cartão, sujeitos à análise de crédito de acordo com o seu perfil e valor de entrada, sem prometer aprovação prévia automática.${entrySimulationText}\n\nNosso consultor pode rodar sua simulação sem compromisso no WhatsApp **${STORE.phoneDisplay}**. Qual veículo você gostaria de simular?`,
+      `Trabalhamos com financiamento em até 48x pelos bancos parceiros e parcelamento no cartão${namePlain}, sempre sujeito à análise de crédito.${entrySimulationText}\n\nQual veículo você quer simular?`,
     );
     handoffRequested = true;
     handoffReason = handoffReason ?? 'financing';

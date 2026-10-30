@@ -341,7 +341,7 @@ describe('Proposta de item fora do nicho continua aberta enquanto o cliente fala
     expect(res.handoffReason).toBe('trade_in');
     // Não pode prometer aceite nem valor: a avaliação é presencial.
     expect(res.text).not.toMatch(/\baceitamos\b/);
-    expect(res.text).toContain('presencial');
+    expect(res.text).toMatch(/avaliação|loja/i);
   });
 
   it('não ecoa a cobrança de resposta como se fosse a descrição do item', async () => {
