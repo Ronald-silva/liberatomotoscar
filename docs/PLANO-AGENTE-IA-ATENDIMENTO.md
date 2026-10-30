@@ -127,15 +127,15 @@ Cliente (WhatsApp / site)
 Cada tarefa é independente e tem critério de aceite verificável. Execute em ordem dentro de
 cada fase; as fases 1 e 2 são pré-requisito do resto.
 
-### Fase 0 — Decisões (humano, antes de codar)
+### Fase 0 — Decisões (humano, antes de codar) — **DECIDIDA em 29/10/2026**
 
-| # | Tarefa | Saída esperada |
+| # | Decisão tomada | Onde vive no código |
 |---|---|---|
-| 0.1 | Definir escopo do agente: só qualificar e encaminhar, ou também negociar? | Uma frase escrita |
-| 0.2 | Definir política de troca: a avaliação é presencial? o agente pode estimar valor? | Regras escritas |
-| 0.3 | Definir orçamento mensal de tokens e limite diário | Número |
-| 0.4 | Escolher modelo (ver 0.5) | Modelo + fallback |
-| 0.5 | Rodar comparação de modelos no mesmo corpus (tarefa 4.2) antes de fixar | Tabela de custo × qualidade |
+| 0.1 | **Escopo: qualificar e encaminhar.** O agente entende o que a pessoa procura, responde com dado verificado, informa preço real e passa ao vendedor na hora de negociar. **Não negocia desconto.** | `agent/prompt.ts` + guarda `promessa_nao_autorizada` |
+| 0.2 | **Troca: nunca estimar valor.** Nem valor, nem faixa, nem percentual, nem "uns tantos". A avaliação é sempre presencial, na loja. Pode dizer que a loja trabalha com troca, sempre junto de "mediante avaliação". Nunca avaliar por foto, mensagem ou à distância. | `agent/prompt.ts` + guardas de `vale`/`pago`/avaliação remota |
+| 0.3 | **Teto diário: 150 chamadas de IA no WhatsApp.** Estourado, o cliente recebe mensagem honesta e vai ao vendedor. | `WHATSAPP_AI_DAILY_LIMIT` (default já no código) |
+| 0.4 | **Modelo: `anthropic/claude-sonnet-5-5`** via OpenRouter. Troca sem mexer em código por `OPENROUTER_MODEL`. | `agent/provider.ts` |
+| 0.5 | Pendente — rodar `npm run eval` com chave real para a tabela de custo × qualidade antes de fixar em definitivo. | `evals/run.ts` |
 
 **Sobre modelo:** o projeto usa OpenRouter, o que permite trocar sem mexer em código
 (`OPENROUTER_MODEL`). O modelo anterior era `deepseek/deepseek-v4-pro-0813`, que apresentou
@@ -143,6 +143,33 @@ cada fase; as fases 1 e 2 são pré-requisito do resto.
 final, avalie os modelos Claude mais recentes (`claude-sonnet-5-5`, `claude-opus-5-5`) —
 tendem a ser mais confiáveis em uso de ferramentas e em seguir política. **Decida com a
 medição da tarefa 4.2, não por suposição.**
+
+> **Estado da execução (29/10/2026, branch `feat/agente-atendimento`).** Fases 1 a 6 implementadas
+> e verificadas: `npm test` → 375 passando, `npm run typecheck` e `npm run lint` limpos. Pendências
+> que dependem de pessoa, não de código:
+>
+> - **4.1 (parte):** o corpus tem 60 casos reais extraíveis. As ~100 mensagens reais de cliente só
+>   existem nas conversas da loja. **É a tarefa de maior valor que sobrou** — e não depende de código.
+> - **4.4:** revisão humana amostral de 20 conversas, nota 1–5.
+> - **0.5 / 4.2:** rodar `npm run eval` com `OPENROUTER_API_KEY` real para a tabela de custo × qualidade.
+> - **2.1:** o prompt está escrito e precisa de leitura de quem conhece a loja (`src/server/agent/prompt.ts`).
+> - **6.x:** as consultas existem como módulo (`attendance/metrics.ts`); não há tela de admin ainda.
+>
+> Mapa do que foi construído:
+>
+> | Arquivo | O que faz |
+> |---|---|
+> | `src/server/agent/tools.ts` | As 5 ferramentas + `AgentTurnState` (o que o modelo pode citar) |
+> | `src/server/agent/guards.ts` | As 6 guardas de saída + log estruturado |
+> | `src/server/agent/prompt.ts` | Identidade e política comercial (0.1/0.2) |
+> | `src/server/agent/provider.ts` | OpenRouter, modelo e normalização de erro |
+> | `src/server/agent/run.ts` | O laço: ferramentas → guardas → resposta ou fallback |
+> | `src/server/agent/whatsapp-turn.ts` | Turno no canal: reserva, cota, tokens, commit |
+> | `src/server/agent/incoming.ts` | Entrada da mensagem e deduplicação do reenvio da Meta |
+> | `evals/corpus.jsonl` | 60 casos, cada um dizendo qual defeito documenta |
+> | `evals/criteria.ts` | Critérios automáticos da 4.3 |
+> | `evals/run.ts` | `npm run eval` — corpus contra modelo real |
+> | `src/server/attendance/metrics.ts` | Fase 6 |
 
 ### Fase 1 — Ferramentas sobre o catálogo existente
 
