@@ -14,14 +14,27 @@ describe('política comercial da loja', () => {
     expect(r.confirmado.pagamento).toContain('cartão de crédito');
     // Prazo de parcelamento, horário e garantia nunca foram informados pela loja: o agente
     // precisa saber que não sabe, em vez de inventar ou de calar sobre o que sabe.
-    expect(r.naoConfirmado).toEqual(expect.arrayContaining([
-      'parcelamento no cartão', 'horário de funcionamento',
-    ]));
+    // Só as financeiras parceiras seguem sem informação.
+    expect(r.naoConfirmado).toEqual(['bancos e financeiras parceiros']);
   });
 
-  it('não inventa prazo nem número de parcelas', () => {
-    expect(STORE_POLICY.pagamento.parcelasNoCartao).toBeNull();
-    expect(STORE_POLICY.horario).toBeNull();
+  it('fala do cartão sem inventar número de parcelas nem juros', () => {
+    const texto = STORE_POLICY.pagamento.parcelasNoCartao!;
+    expect(texto).toContain('Liberato');
+    expect(texto).not.toMatch(/\d+\s*x|\d+\s*vezes|juros de/i);
+  });
+
+  it('descreve a transferência sem citar valor de taxa', () => {
+    const texto = STORE_POLICY.documentacao!;
+    expect(texto).toContain('DETRAN-CE');
+    expect(texto).toContain('30 dias');
+    // As fontes pesquisadas divergiam no valor da taxa; nenhum número entra na boca do agente.
+    expect(texto).not.toMatch(/R\$|\breais\b/);
+  });
+
+  it('informa o horário confirmado', () => {
+    expect(STORE_POLICY.horario).toContain('9h às 18h');
+    expect(STORE_POLICY.horario).toContain('domingos');
   });
 
   it('a garantia é a legal do consumidor, sem prometer cobertura própria', () => {

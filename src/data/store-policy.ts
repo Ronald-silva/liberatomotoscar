@@ -23,8 +23,13 @@ export const STORE_POLICY = {
       'financiamento com análise de crédito',
       'veículo na troca, mediante avaliação presencial',
     ],
-    /** Em quantas vezes no cartão, e se há juros. Não informado. */
-    parcelasNoCartao: null as string | null,
+    /**
+     * Confirmado pelo lojista em 30/10/2026. O agente afirma que a loja aceita cartão e que as
+     * condições são tratadas na loja — e NÃO cita número de parcelas nem juros, que ninguém
+     * informou. Dizer "o Liberato vê com você" é resposta; "vou chamar um vendedor" não é.
+     */
+    parcelasNoCartao: 'a loja aceita cartão; o parcelamento e as condições são tratados '
+      + 'pessoalmente com o Liberato, na loja' as string | null,
     /** Com quais bancos ou financeiras a loja trabalha. Não informado. */
     financeiras: null as string | null,
   },
@@ -35,10 +40,20 @@ export const STORE_POLICY = {
    */
   garantia: 'a garantia legal prevista no Código de Defesa do Consumidor; a loja não oferece '
     + 'garantia contratual própria além dela' as string | null,
-  /** Dias e horários de atendimento presencial. Não informado. */
-  horario: null as string | null,
-  /** Como funciona a transferência e a documentação. Não informado. */
-  documentacao: null as string | null,
+  /** Confirmado pelo lojista em 30/10/2026. */
+  horario: 'das 9h às 18h, fechado aos domingos' as string | null,
+  /**
+   * Processo geral de transferência no Ceará, pesquisado em 30/10/2026. As fontes eram blogs e
+   * despachantes, NÃO o portal do DETRAN-CE, e os valores de taxa divergiam entre elas — por
+   * isso não há valor nenhum aqui. Taxa errada dita ao cliente é prejuízo da loja.
+   *
+   * O que a LOJA faz do processo (se encaminha despachante, quem paga o quê) não foi informado
+   * e continua indo ao vendedor.
+   */
+  documentacao: 'a transferência é feita no DETRAN-CE com o ATPV-e (ou o CRV assinado), '
+    + 'vistoria em empresa credenciada, débitos do veículo quitados e a taxa paga por DAE; '
+    + 'o prazo legal é de 30 dias a partir da assinatura. Valores e quem cuida de cada etapa '
+    + 'são confirmados na loja' as string | null,
 } as const;
 
 const ROTULOS: Record<string, string> = {

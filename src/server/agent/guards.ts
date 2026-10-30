@@ -204,8 +204,11 @@ function avaliar({ text, finishReason, state, customerText }: GuardInput): Guard
     [/\b(liberad[oa]|passou|aprovad[oa])\b[^.]{0,30}\b(credito|financiament\w*|analise)\b/,
       'promete resultado de financiamento'],
     [/com certeza aceit/, 'promete aceite'],
-    // "vale a pena" não é estimativa de valor, e é das expressões mais comuns do português.
-    [/\bvale\b(?!\s+(a|muito a|bem a)\s+pena)|\bvaleria\b|\bvalem\b/, 'estima valor do veículo do cliente'],
+    // "vale" quase nunca é preço: "vale a garantia legal", "vale a pena", "vale lembrar". O que
+    // a política 0.2 proíbe é estimar o valor do veículo DO CLIENTE, então a regra exige o
+    // possessivo por perto. Bloquear a palavra solta reprovava a resposta correta sobre garantia.
+    [/\b(sua|seu|minha|meu)\b[^.]{0,25}\b(vale|valeria|valem)\b|\b(vale|valeria|valem)\b[^.]{0,25}\b(sua|seu)\b/,
+      'estima valor do veículo do cliente'],
     [/avalio em|\bpago\b|\bpagamos\b|\bpagaria\b/, 'oferece pagamento'],
     // Escopo 0.1: o agente não negocia. "Cobrir oferta" e "fazer por menos" são negociação.
     [/\b(cubro|cobrimos|cobre)\b[^.]{0,25}\b(oferta|preco|valor|concorrenc\w*)/, 'promete cobrir oferta'],

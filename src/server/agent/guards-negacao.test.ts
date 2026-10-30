@@ -131,3 +131,24 @@ describe('quantidade não é preço só porque a frase cita preço', () => {
       finishReason: 'stop', state: estoqueReal() }).ok).toBe(false);
   });
 });
+
+describe('"vale" quase nunca é preço', () => {
+  it.each([
+    'Vale a garantia legal do Código de Defesa do Consumidor.',
+    'Para esse caso vale o que diz o CDC.',
+    'A Honda Titan vale a pena dar uma olhada.',
+    'Vale lembrar que a loja fecha aos domingos.',
+  ])('deixa passar: %s', (frase) => {
+    const v = checkAgentReply({ text: frase, finishReason: 'stop', state: createAgentTurnState() });
+    expect(v.ok, !v.ok ? v.violation + '/' + v.detail : '').toBe(true);
+  });
+
+  it.each([
+    'Sua moto vale bem mais do que isso.',
+    'Seu carro vale uns doze mil tranquilo.',
+    'Pelo que você descreveu, a sua vale bastante.',
+  ])('continua bloqueando a estimativa do veículo do cliente: %s', (frase) => {
+    const v = checkAgentReply({ text: frase, finishReason: 'stop', state: createAgentTurnState() });
+    expect(v.ok, frase).toBe(false);
+  });
+});
