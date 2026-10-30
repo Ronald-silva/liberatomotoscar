@@ -90,3 +90,44 @@ describe('encaminhar ao vendedor é recusa, em qualquer verbo', () => {
       finishReason: 'stop', state: createAgentTurnState() }).ok).toBe(false);
   });
 });
+
+describe('quantidade não é preço só porque a frase cita preço', () => {
+  const moto = (id: string, marca: string, modelo: string, ano: number, km: number, preco: number): VerifiedVehicle =>
+    ({ id, titulo: `${marca} ${modelo}`, marca, modelo, tipo: 'motorcycle', ano,
+      quilometragem: km, cor: 'Preta', precoCentavos: preco, slug: id });
+
+  function estoqueReal() {
+    const s = createAgentTurnState();
+    for (const v of [
+      moto('a', 'Yamaha', 'Fazer', 2014, 72_000, 1_050_000),
+      moto('b', 'Honda', 'Titan', 2013, 70_760, 1_150_000),
+      moto('c', 'Yamaha', 'Lander 250', 2023, 23_218, 2_530_000),
+    ]) s.allowedVehicles.set(v.id, v);
+    return s;
+  }
+
+  it('deixa passar a listagem completa do estoque', () => {
+    // Saiu de uma conversa real e foi reprovada pelo "3" de "tenho 3 agora".
+    const texto = 'Ronald, no estoque de motos tenho 3 agora: a Yamaha Fazer 2014 por R$ 10.500,00 '
+      + '(72.000 km), a Honda Titan 2013 por R$ 11.500,00 (70.760 km) e a Yamaha Lander 250 2023 '
+      + 'por R$ 25.300,00 (23.218 km). Qual te interessa?';
+    const v = checkAgentReply({ text: texto, finishReason: 'stop', state: estoqueReal() });
+    expect(v.ok, !v.ok ? v.violation + '/' + v.detail : '').toBe(true);
+  });
+
+  it('continua bloqueando valor que não é de nenhum veículo', () => {
+    expect(checkAgentReply({ text: 'A Yamaha Fazer 2014 sai por R$ 8.000,00.',
+      finishReason: 'stop', state: estoqueReal() }).ok).toBe(false);
+  });
+
+  it('continua bloqueando parcela e entrada inventadas', () => {
+    for (const f of ['A parcela fica em 1.999 por mês.', 'A entrada fica em R$ 1.950.']) {
+      expect(checkAgentReply({ text: f, finishReason: 'stop', state: estoqueReal() }).ok, f).toBe(false);
+    }
+  });
+
+  it('continua bloqueando quilometragem que não é do cadastro', () => {
+    expect(checkAgentReply({ text: 'A Honda Titan 2013 tem 9.000 km rodados.',
+      finishReason: 'stop', state: estoqueReal() }).ok).toBe(false);
+  });
+});

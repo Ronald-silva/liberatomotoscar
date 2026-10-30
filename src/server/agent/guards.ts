@@ -97,6 +97,19 @@ function fraseNegada(frase: string) {
 // `r\$` fica fora do \b: `$` não é caractere de palavra, então `\br\$\b` nunca casa com "R$ 2.000".
 const MARCADOR_DE_DINHEIRO = /r\$|\b(reais|real|mil|conto|valor|preco|custa|sai por|fica em|fica por|faco por|entrada|parcela|financiament|a vista|desconto)\b/;
 
+/**
+ * Um número é VALOR pelo que está colado nele, não por a frase mencionar preço em algum lugar.
+ * Tratar a frase inteira como contexto de dinheiro reprovava "tenho 3 agora: a Yamaha Fazer por
+ * R$ 10.500,00" — a listagem correta do estoque — porque o "3" virava um preço a conferir.
+ */
+const GOVERNA_VALOR = /(r\$|fica em|fica por|sai por|sai a|custa|custam|custando|entrada de|parcela de|parcelas de|valor de|por apenas|a vista por|desconto de)\s*$/;
+const SEGUE_VALOR = /^\s*(reais|real|conto|mil|pila)\b/;
+
+function ehDinheiro(frase: string, inicio: number, fim: number) {
+  return GOVERNA_VALOR.test(frase.slice(Math.max(0, inicio - 20), inicio))
+    || SEGUE_VALOR.test(frase.slice(fim, fim + 10));
+}
+
 /** Valor escrito por extenso. Não há como verificar, então em contexto de dinheiro é recusa. */
 const NUMERO_POR_EXTENSO = /\b(um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|trezentos|quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos)\b[^.]{0,20}\b(mil|milhao|milhoes)\b/;
 
@@ -301,18 +314,19 @@ function avaliar({ text, finishReason, state, customerText }: GuardInput): Guard
         detail: 'cita valor para o veículo do cliente; a avaliação é presencial (0.2)' };
     }
 
-    for (const bruto of frase.match(/\d[\d.,]*/g) ?? []) {
-      const digitos = apenasDigitos(bruto);
+    for (const achado of frase.matchAll(/\d[\d.,]*/g)) {
+      const digitos = apenasDigitos(achado[0]);
       if (!digitos) continue;
       if (nomes.has(digitos)) continue;          // número que faz parte do nome do veículo
       if (ditosPeloCliente.has(digitos)) continue; // número que o próprio cliente informou
       if (precos.has(digitos) || outros.has(digitos)) continue;
       const numero = Number(digitos);
+      const dinheiro = ehDinheiro(frase, achado.index, achado.index + achado[0].length);
       // Ano de modelo só passa fora de contexto de dinheiro: a faixa 1900–2099 é exatamente a
       // de uma entrada ou parcela inventada, e passava como se fosse ano.
-      if (!temMarcadorDeDinheiro && digitos.length === 4 && numero >= 1900 && numero <= 2099) continue;
-      // Quantidade do dia a dia ("3 anos", "2 opções") fora de contexto de dinheiro.
-      if (!temMarcadorDeDinheiro && numero < 1000) continue;
+      if (!dinheiro && digitos.length === 4 && numero >= 1900 && numero <= 2099) continue;
+      // Quantidade do dia a dia ("tenho 3 agora", "2 opções", "3 anos").
+      if (!dinheiro && numero < 1000) continue;
       return { ok: false, violation: 'valor_nao_verificado',
         detail: `número ${digitos} não veio de nenhuma ferramenta` };
     }

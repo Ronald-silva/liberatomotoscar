@@ -10,16 +10,31 @@ import {
   type VerifiedVehicle,
 } from './tools';
 
-/** Passos suficientes para buscar, detalhar, anotar e responder; o bastante para não girar à toa. */
-const MAX_PASSOS = 6;
 /**
- * 500 cortava o modelo no meio e a guarda reprovava a frase pela metade — a resposta não ia ao
- * cliente justamente por ser mais completa. O teto de caracteres da guarda é 900, então 700
- * tokens é o que cabe sem que os dois limites briguem entre si.
+ * Passos do laço. Com reconferência, busca, ficha, anotação de lead e chamada de vendedor, 6
+ * apertava: o turno acabava no limite ainda chamando ferramenta, sem ter escrito uma frase.
  */
-const MAX_TOKENS_SAIDA = 700;
+const MAX_PASSOS = 8;
+/**
+ * Teto de saída POR PASSO, não por mensagem. Quem limita o tamanho do que vai ao cliente é a
+ * guarda de 900 caracteres e o prompt, que pede 2 ou 3 frases.
+ *
+ * Em 700 o modelo estourava o passo em raciocínio e chamadas de ferramenta antes de escrever a
+ * primeira frase: o turno terminava com finishReason=length e texto VAZIO em quase 30% das
+ * vezes, e o cliente recebia "prefiro não responder" para um "oi". Uma segunda tentativa não
+ * resolvia, porque a causa não era azar de amostragem — era o teto. Folga aqui não encarece: a
+ * cobrança é por token gerado, e o que limita a geração é a instrução, não este número.
+ */
+const MAX_TOKENS_SAIDA = 4000;
 /** Quantos veículos já mostrados reconferir no início do turno. */
 const MAX_VEICULOS_RECONFERIDOS = 3;
+/**
+ * Mensagens anteriores que o modelo vê. A conversa de teste em produção chegou a 59 mensagens,
+ * quase todas do sistema de regex anterior — e o modelo imitava aquele estilo verboso, escrevia
+ * longo demais e era cortado no limite de tokens, entregando resposta VAZIA em 10% dos turnos.
+ * Janela curta também é o que o plano pede na seção 1.4: "o custo é o token".
+ */
+export const JANELA_DE_HISTORICO = 16;
 
 export type AgentTurnInput = {
   conversationId: string;
@@ -66,6 +81,7 @@ const FALLBACK_BODY = 'Essa eu prefiro não responder por aqui sem confirmar, pa
 export function buildAgentMessages(history: MessageRow[], message: string) {
   const messages = history
     .filter((row) => row.body.trim())
+    .slice(-JANELA_DE_HISTORICO)
     .map((row) => ({
       role: row.sender === 'visitor' ? ('user' as const) : ('assistant' as const),
       content: row.body,
@@ -146,19 +162,34 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
     usage, guard, fallback: true, modelId: resolved.modelId, toolsUsed, modelText,
   });
 
+  const messages = buildAgentMessages(input.history, input.message);
+  const gerar = () => generateText({
+    model: resolved.model,
+    system: AGENT_SYSTEM_PROMPT,
+    messages,
+    tools,
+    stopWhen: isStepCount(MAX_PASSOS),
+    maxOutputTokens: MAX_TOKENS_SAIDA,
+    temperature: 0.4,
+    maxRetries: 1,
+    timeout: { totalMs: 25_000, stepMs: 15_000 },
+  });
+
   let result: Awaited<ReturnType<typeof generateText<typeof tools>>>;
   try {
-    result = await generateText({
-      model: resolved.model,
-      system: AGENT_SYSTEM_PROMPT,
-      messages: buildAgentMessages(input.history, input.message),
-      tools,
-      stopWhen: isStepCount(MAX_PASSOS),
-      maxOutputTokens: MAX_TOKENS_SAIDA,
-      temperature: 0.4,
-      maxRetries: 1,
-      timeout: { totalMs: 25_000, stepMs: 15_000 },
-    });
+    result = await gerar();
+    // Terminar sem escrever nada não é resposta ruim: é resposta nenhuma. Mandar o fallback
+    // aqui desperdiça um turno do cliente por um problema que uma segunda amostra costuma
+    // resolver — eram 10% dos turnos em produção, com o cliente lendo "prefiro não responder"
+    // para um "oi". Vale para qualquer motivo: cortado no limite ou passos esgotados em
+    // chamadas de ferramenta.
+    if (!result.text.trim()) {
+      console.warn('[agente] turno sem texto; tentando de novo', JSON.stringify({
+        evento: 'saida_vazia_retentada', motivo: result.finishReason,
+        conversationId: input.conversationId, em: new Date().toISOString(),
+      }));
+      result = await gerar();
+    }
   } catch (error) {
     const normalized = normalizeProviderError(error);
     console.warn('[agente] provedor indisponível', JSON.stringify({
