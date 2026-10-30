@@ -34,6 +34,8 @@ export type AgentTurnResult = {
   /** true quando o cliente recebeu a mensagem honesta em vez da resposta do modelo. */
   fallback: boolean;
   modelId: string;
+  /** Nomes das ferramentas chamadas no turno, na ordem. Insumo dos critérios da eval (4.3). */
+  toolsUsed: string[];
 };
 
 /**
@@ -113,7 +115,11 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   const tools = createAgentTools(state, catalogDeps);
   await reconferirVeiculosJaMostrados(input.history, createAgentToolFunctions(state, catalogDeps));
 
-  const fallback = (guard: GuardVerdict, usage: { inputTokens: number; outputTokens: number }): AgentTurnResult => ({
+  const fallback = (
+    guard: GuardVerdict,
+    usage: { inputTokens: number; outputTokens: number },
+    toolsUsed: string[] = [],
+  ): AgentTurnResult => ({
     reply: {
       sender: 'ai',
       body: FALLBACK_BODY,
@@ -122,7 +128,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
       facts: state.facts,
       handoffReason: state.handoffReason ?? 'ai_suggested',
     },
-    usage, guard, fallback: true, modelId: resolved.modelId,
+    usage, guard, fallback: true, modelId: resolved.modelId, toolsUsed,
   });
 
   let result: Awaited<ReturnType<typeof generateText<typeof tools>>>;
@@ -152,11 +158,12 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
     inputTokens: result.totalUsage.inputTokens ?? 0,
     outputTokens: result.totalUsage.outputTokens ?? 0,
   };
+  const toolsUsed = result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName));
   const text = result.text.trim();
   const guard = checkAgentReply({
     text, finishReason: result.finishReason, state, conversationId: input.conversationId,
   });
-  if (!guard.ok) return fallback(guard, usage);
+  if (!guard.ok) return fallback(guard, usage, toolsUsed);
 
   return {
     reply: {
@@ -166,6 +173,6 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
       facts: state.facts,
       handoffReason: state.handoffReason,
     },
-    usage, guard, fallback: false, modelId: resolved.modelId,
+    usage, guard, fallback: false, modelId: resolved.modelId, toolsUsed,
   };
 }

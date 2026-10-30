@@ -107,7 +107,11 @@ function avaliar({ text, finishReason, state }: GuardInput): GuardVerdict {
     [/\bvale\b|\bvaleria\b|\bvalem\b/, 'estima valor do veículo do cliente'],
     [/avalio em|\bpago\b|\bpagamos\b|\bpagaria\b/, 'oferece pagamento'],
     [/\bdesconto\b|\babatimento\b|\bpercentual\b|%/, 'negocia desconto, fora do escopo'],
-    [/(?:avali\w*|analis\w*)[^.]{0,45}(?:por foto|pelas foto|por mensagem|por whats|a distancia|remotament|online|sem precisar (?:ir|passar|vir))/,
+    // As duas ordens: "avaliar por foto" e "pela foto consigo avaliar". A versão anterior só
+    // cobria a primeira, e o corpus achou a segunda.
+    [/(?:avali\w*|analis\w*)[^.]{0,45}(?:por foto|pelas? foto|por mensagem|por whats|a distancia|remotament|online|sem precisar (?:ir|passar|vir))/,
+      'promete avaliação à distância'],
+    [/(?:por foto|pelas? foto|por mensagem|por whats|a distancia|remotament)[^.]{0,45}(?:avali\w*|analis\w*|consigo (?:te )?(?:dizer|falar|passar))/,
       'promete avaliação à distância'],
   ];
   for (const [padrao, motivo] of promessas) {

@@ -180,6 +180,12 @@ describe('laço do agente', () => {
     expect(r.reply.handoffReason).toBe('financing');
   });
 
+  it('reporta quais ferramentas o turno chamou, insumo dos critérios da eval', async () => {
+    const deps = depsCom(modeloQueBusca('Temos a Honda CG 160 Start 2022 por R$ 14.500,00. Quer ver?'));
+    const r = await runAgentTurn(entradaBase, deps);
+    expect(r.toolsUsed).toEqual(['buscar_veiculos']);
+  });
+
   it('reporta o consumo de tokens para a contagem diária', async () => {
     const r = await runAgentTurn(entradaBase, depsCom(modeloQueResponde('Você procura moto ou carro?')));
     expect(r.usage.inputTokens).toBeGreaterThan(0);
