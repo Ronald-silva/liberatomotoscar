@@ -62,6 +62,7 @@ function depsDoTurno(over: Partial<WhatsappAgentTurnDeps> = {}): WhatsappAgentTu
     commitReply: vi.fn(async (_id: string, reply: { body: string }) => ({ id: 'msg-1', body: reply.body })) as never,
     reserveQuota: vi.fn(async () => ({ dayUtc: '2026-10-29' })) as never,
     recordTokens: vi.fn(async () => {}) as never,
+    recordGuardRejection: vi.fn(async () => {}) as never,
     searchVehicles: vi.fn(async () => ({ items: [], checkedAt: '2026-10-29T12:00:00.000Z' })) as never,
     readVehicle: vi.fn(async () => ({ item: null, checkedAt: '2026-10-29T12:00:00.000Z' })) as never,
     ...over,
@@ -105,6 +106,20 @@ describe('turno do agente no WhatsApp', () => {
     const deps = depsDoTurno();
     await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'Oi' }, deps);
     expect(deps.recordTokens).toHaveBeenCalledWith('2026-10-29', 120, 40);
+  });
+
+  it('6.5 conta a guarda reprovada no dia, para a taxa sair do log', async () => {
+    const deps = depsDoTurno({
+      model: modeloQueResponde('Sai por R$ 8.000 e já está aprovado.') as unknown as WhatsappAgentTurnDeps['model'],
+    });
+    await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'quanto?' }, deps);
+    expect(deps.recordGuardRejection).toHaveBeenCalledWith('2026-10-29');
+  });
+
+  it('não conta guarda reprovada quando a resposta passa', async () => {
+    const deps = depsDoTurno();
+    await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'Oi' }, deps);
+    expect(deps.recordGuardRejection).not.toHaveBeenCalled();
   });
 
   it('libera a reserva do turno mesmo quando o provedor explode', async () => {

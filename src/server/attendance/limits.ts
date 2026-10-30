@@ -56,6 +56,22 @@ async function recordAiTokens(channel: 'site' | 'whatsapp', dayUtc: string, inpu
   }).where(and(eq(attendanceUsage.channel, channel), eq(attendanceUsage.dayUtc, dayUtc)));
 }
 
+/** Métrica 6.5 — a contagem fica ao lado das requisições do dia, para a taxa ser comparável. */
+async function recordGuardRejection(channel: 'site' | 'whatsapp', dayUtc: string) {
+  await ensureAttendanceTables();
+  await getDb().update(attendanceUsage)
+    .set({ guardRejections: sql`${attendanceUsage.guardRejections} + 1`, updatedAt: new Date() })
+    .where(and(eq(attendanceUsage.channel, channel), eq(attendanceUsage.dayUtc, dayUtc)));
+}
+
+export async function recordWhatsappGuardRejection(dayUtc: string) {
+  return recordGuardRejection('whatsapp', dayUtc);
+}
+
+export async function recordSiteGuardRejection(dayUtc: string) {
+  return recordGuardRejection('site', dayUtc);
+}
+
 export async function recordSiteAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {
   return recordAiTokens('site', dayUtc, inputTokens, outputTokens);
 }

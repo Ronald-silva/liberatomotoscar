@@ -81,9 +81,15 @@ export function ensureAttendanceTables(): Promise<void> {
             "ai_requests" integer DEFAULT 0 NOT NULL,
             "input_tokens" integer DEFAULT 0 NOT NULL,
             "output_tokens" integer DEFAULT 0 NOT NULL,
+            "guard_rejections" integer DEFAULT 0 NOT NULL,
             "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
             PRIMARY KEY ("channel", "day_utc")
           )
+        `);
+        // Banco criado antes da métrica 6.5 já tem a tabela; o CREATE acima não o alcança.
+        await db.execute(sql`
+          ALTER TABLE "attendance_usage"
+            ADD COLUMN IF NOT EXISTS "guard_rejections" integer DEFAULT 0 NOT NULL
         `);
         await db.execute(sql`
           CREATE TABLE IF NOT EXISTS "attendance_rate_limits" (

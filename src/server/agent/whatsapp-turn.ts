@@ -1,7 +1,9 @@
 import {
   commitAutomatedReply, listConversationMessages, releaseAutomatedTurn, reserveAutomatedTurn,
 } from '@/server/attendance/conversation-repository';
-import { recordWhatsappAiTokens, reserveWhatsappAiRequest } from '@/server/attendance/limits';
+import {
+  recordWhatsappAiTokens, recordWhatsappGuardRejection, reserveWhatsappAiRequest,
+} from '@/server/attendance/limits';
 import { formatAgentWhatsAppReply } from '@/server/whatsapp/outbound';
 import { runAgentTurn, type AgentTurnDeps } from './run';
 
@@ -32,6 +34,7 @@ export type WhatsappAgentTurnDeps = AgentTurnDeps & {
   commitReply?: typeof commitAutomatedReply;
   reserveQuota?: typeof reserveWhatsappAiRequest;
   recordTokens?: typeof recordWhatsappAiTokens;
+  recordGuardRejection?: typeof recordWhatsappGuardRejection;
   readSetting?: () => Promise<{ mode: string }>;
 };
 
@@ -50,6 +53,7 @@ export async function runWhatsappAgentTurn(
   const commitReply = deps.commitReply ?? commitAutomatedReply;
   const reserveQuota = deps.reserveQuota ?? reserveWhatsappAiRequest;
   const recordTokens = deps.recordTokens ?? recordWhatsappAiTokens;
+  const recordGuard = deps.recordGuardRejection ?? recordWhatsappGuardRejection;
   const readSetting = deps.readSetting ?? readWhatsappModeDefault;
 
   const setting = await readSetting();
@@ -80,6 +84,9 @@ export async function runWhatsappAgentTurn(
     if (turn.usage.inputTokens || turn.usage.outputTokens) {
       await recordTokens(quota.dayUtc, turn.usage.inputTokens, turn.usage.outputTokens);
     }
+    // 6.5 — a taxa de guarda reprovada é o que mostra se o agente está sendo contido com
+    // frequência. Sem contar, só existiria no log, que ninguém agrega.
+    if (!turn.guard.ok) await recordGuard(quota.dayUtc);
 
     // 5.1 — formatação do canal: negrito do WhatsApp e o preço verificado, que o canal não
     // renderiza como cartão. É o servidor que o escreve, a partir do retorno da ferramenta.
