@@ -52,7 +52,14 @@ export async function sendWhatsAppTextMessage(params: SendWhatsAppTextParams): P
     };
     const metaCode = Number.isInteger(data.error?.code) ? `, código Meta ${data.error?.code}` : '';
     const metaSubcode = Number.isInteger(data.error?.error_subcode) ? `, subcódigo ${data.error?.error_subcode}` : '';
-    throw new Error(`Falha ao enviar mensagem WhatsApp (HTTP ${response.status}${metaCode}${metaSubcode}).`);
+    // 190 é token inválido ou expirado. O token temporário do API Setup dura cerca de 24h, então
+    // esse é o erro mais frequente no número de teste: dizer o que fazer evita procurar o
+    // problema no webhook, na Dayse ou na hospedagem.
+    const acao = data.error?.code === 190
+      ? ' O token de acesso expirou ou foi invalidado: gere outro em WhatsApp → API Setup e salve'
+        + ' no painel de atendimento. Para não repetir todo dia, use um token de usuário do sistema.'
+      : '';
+    throw new Error(`Falha ao enviar mensagem WhatsApp (HTTP ${response.status}${metaCode}${metaSubcode}).${acao}`);
   }
 
   const data = (await response.json()) as { messages?: Array<{ id?: string }> };
