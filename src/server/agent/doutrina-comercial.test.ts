@@ -8,9 +8,10 @@ import { AGENT_SYSTEM_PROMPT as P } from './prompt';
  * que dar o preço final é o diferencial barato.
  */
 describe('objetivo da conversa', () => {
-  it('é levar à loja, porque é onde veículo se vende', () => {
+  it('é marcar a visita, porque a loja atende com hora marcada', () => {
+    // O lojista respondeu "sim, sempre agendar". Antes o objetivo era só "levar à loja".
     expect(P).toMatch(/O OBJETIVO DE TODA CONVERSA/);
-    expect(P).toMatch(/Levar a pessoa à loja/i);
+    expect(P).toMatch(/Marcar a visita/);
     expect(P).toMatch(/nenhuma conversa fecha no WhatsApp/i);
   });
 

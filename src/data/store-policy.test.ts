@@ -18,10 +18,13 @@ describe('política comercial da loja', () => {
     expect(r.naoConfirmado).toEqual(['bancos e financeiras parceiros']);
   });
 
-  it('fala do cartão sem inventar número de parcelas nem juros', () => {
+  it('cita o teto de parcelas que o lojista informou, sem inventar juros nem valor', () => {
+    // O lojista informou "até 18 vezes" em 30/10/2026. O teto é dele; juros e valor de parcela
+    // continuam sem ninguém confirmar, então não entram.
     const texto = STORE_POLICY.pagamento.parcelasNoCartao!;
-    expect(texto).toContain('Liberato');
-    expect(texto).not.toMatch(/\d+\s*x|\d+\s*vezes|juros de/i);
+    expect(texto).toMatch(/18 vezes/);
+    expect(texto).toMatch(/confirmadas na loja/);
+    expect(texto).not.toMatch(/juros|R\$|parcela de/i);
   });
 
   it('remete a transferência à loja, sem recitar o processo', () => {

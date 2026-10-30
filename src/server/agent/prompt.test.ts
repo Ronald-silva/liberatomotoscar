@@ -22,8 +22,10 @@ describe('prompt de sistema', () => {
     expect(AGENT_SYSTEM_PROMPT).toMatch(/não narre correções/i);
   });
 
-  it('fala o nome real da loja, não uma persona removida', () => {
+  it('usa o nome da loja e a persona que o lojista escolheu', () => {
+    // O nome Dayse voltou por decisão do lojista no questionário. O que foi removido em 36444eb
+    // foi o motor de regex, não o nome — são coisas diferentes.
     expect(AGENT_SYSTEM_PROMPT).toContain(STORE.name);
-    expect(AGENT_SYSTEM_PROMPT).not.toMatch(/\bDayse\b/);
+    expect(AGENT_SYSTEM_PROMPT).toMatch(/Você é a Dayse/);
   });
 });

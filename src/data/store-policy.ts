@@ -28,8 +28,14 @@ export const STORE_POLICY = {
      * condições são tratadas na loja — e NÃO cita número de parcelas nem juros, que ninguém
      * informou. Dizer "o Liberato vê com você" é resposta; "vou chamar um vendedor" não é.
      */
-    parcelasNoCartao: 'a loja aceita cartão; o parcelamento e as condições são tratados '
-      + 'pessoalmente com o Liberato, na loja' as string | null,
+    /**
+     * Informado pelo lojista em 30/10/2026, de segunda mão: veio de uma mensagem do outro
+     * atendente que o Liberato usa, não do Liberato diretamente. Por isso o agente diz "até 18
+     * vezes" como teto e manda confirmar as condições na loja, em vez de afirmar parcela, juros
+     * ou valor — que ninguém confirmou.
+     */
+    parcelasNoCartao: 'em até 18 vezes no cartão; as condições exatas são confirmadas na loja, '
+      + 'com o Liberato' as string | null,
     /** Com quais bancos ou financeiras a loja trabalha. Não informado. */
     financeiras: null as string | null,
   },
@@ -42,6 +48,30 @@ export const STORE_POLICY = {
     + 'garantia contratual própria além dela' as string | null,
   /** Confirmado pelo lojista em 30/10/2026. */
   horario: 'das 9h às 18h, fechado aos domingos' as string | null,
+  /** Confirmado em 30/10/2026: ver veículo é sempre com hora marcada. */
+  visitaExigeAgendamento: true,
+  /**
+   * Confirmado em 30/10/2026, e é o melhor argumento honesto que a loja tem: todo veículo passa
+   * por revisão antes de ir para a vitrine. Em seminovo, procedência é o que mais trava a venda.
+   */
+  revisaoAntesDaVitrine: 'todos os veículos passam por revisão antes de entrar na vitrine' as string | null,
+  /**
+   * Confirmado em 30/10/2026: a loja NÃO avisa quando chega o veículo que o cliente queria.
+   * O agente estava oferecendo isso. Prometer retorno que não acontece custa mais caro que não
+   * prometer nada — o cliente espera, não recebe, e não volta.
+   */
+  avisaQuandoChega: false,
+  troca: {
+    /** Confirmado em 30/10/2026. */
+    aceita: 'veículo com documento; outros bens o Liberato analisa caso a caso',
+    /**
+     * Escolha conservadora, a pedido do lojista. O agente NÃO declara o que a loja recusa: ele
+     * não tem como verificar restrição, sinistro ou financiamento em aberto por mensagem, e um
+     * "não aceitamos" errado perde uma troca que existiria. Ele coleta e a avaliação decide.
+     */
+    dadosQueOAvaliadorPrecisa: 'modelo, ano, quilometragem, estado geral, se a documentação '
+      + 'está em dia e no nome do cliente, e se ainda há financiamento em aberto',
+  },
   /**
    * A transferência é tratada na loja, com o Liberato. Aqui havia o processo do DETRAN-CE
    * inteiro — vistoria, débitos, DAE, prazo — e o agente o recitava para quem tinha perguntado
@@ -83,6 +113,10 @@ export function resumoDaPolitica() {
       pagamento: [...STORE_POLICY.pagamento.aceitos],
       servicos: ['compra', 'venda', 'troca mediante avaliação presencial'],
       ...(STORE_POLICY.rotatividade ? { rotatividade: STORE_POLICY.rotatividade } : {}),
+      ...(STORE_POLICY.revisaoAntesDaVitrine ? { revisao: STORE_POLICY.revisaoAntesDaVitrine } : {}),
+      visitaExigeAgendamento: STORE_POLICY.visitaExigeAgendamento,
+      avisaQuandoChega: STORE_POLICY.avisaQuandoChega,
+      troca: STORE_POLICY.troca,
       ...(STORE_POLICY.pagamento.parcelasNoCartao ? { parcelamento: STORE_POLICY.pagamento.parcelasNoCartao } : {}),
       ...(STORE_POLICY.garantia ? { garantia: STORE_POLICY.garantia } : {}),
       ...(STORE_POLICY.horario ? { horario: STORE_POLICY.horario } : {}),

@@ -8,11 +8,13 @@ describe('não ter o veículo hoje não é um "não"', () => {
     expect(resumoDaPolitica().confirmado).toHaveProperty('rotatividade');
   });
 
-  it('o prompt manda anotar o modelo e falar da rotatividade', () => {
+  it('manda anotar o modelo e falar da rotatividade, sem prometer retorno', () => {
+    // O lojista respondeu que a loja NÃO avisa quando chega. A oferta de aviso saiu.
     expect(AGENT_SYSTEM_PROMPT).toMatch(/QUANDO NÃO TEM O QUE A PESSOA QUER/);
-    expect(AGENT_SYSTEM_PROMPT).toMatch(/anote o modelo/i);
-    expect(AGENT_SYSTEM_PROMPT).toMatch(/rotatividade/i);
+    expect(AGENT_SYSTEM_PROMPT).toMatch(/Anote o modelo/i);
+    expect(AGENT_SYSTEM_PROMPT).toMatch(/estoque gira rápido/i);
     expect(AGENT_SYSTEM_PROMPT).toMatch(/nunca prometa data de chegada/i);
+    expect(AGENT_SYSTEM_PROMPT).toMatch(/NUNCA ofereça avisar quando chegar/);
   });
 });
 
