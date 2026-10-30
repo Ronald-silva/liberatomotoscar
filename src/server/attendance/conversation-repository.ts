@@ -96,9 +96,19 @@ export type AutomatedReply = {
   handoffReason?: HandoffReason | null;
 };
 
-/** Troca e financiamento entram na fila do vendedor enquanto a Dayse coleta os dados que faltam. */
+/**
+ * Troca e financiamento entram na fila do vendedor enquanto o agente coleta os dados que faltam.
+ *
+ * `ai_suggested` entrou nessa lista depois da revisão: ele é o motivo que o fallback usa quando
+ * uma guarda reprova ou o provedor falha. Pausando, um único falso positivo na mensagem 2 de 20
+ * tirava o agente da conversa inteira, e as outras 18 ficavam esperando um humano numa loja que
+ * não tem plantão. Pedido explícito de pessoa (`visitor_request`) continua pausando, que é o
+ * caso em que o cliente realmente quer parar de falar com a automação.
+ */
+const MOTIVOS_QUE_NAO_PAUSAM: ReadonlySet<HandoffReason> = new Set(['trade_in', 'financing', 'ai_suggested']);
+
 export function handoffPausesAutomation(reason: HandoffReason | null | undefined): boolean {
-  return reason !== null && reason !== undefined && reason !== 'trade_in' && reason !== 'financing';
+  return reason !== null && reason !== undefined && !MOTIVOS_QUE_NAO_PAUSAM.has(reason);
 }
 
 /**
@@ -135,6 +145,25 @@ export async function commitAutomatedReply(conversationId: string, reply: Automa
       await tx.insert(handoffs).values({ conversationId, event: 'requested', reason: reply.handoffReason!, occurredAt: now });
     }
     return message;
+  });
+}
+
+/**
+ * Põe a conversa na fila do vendedor sem passar por uma resposta automática. Usado quando o
+ * envio ao WhatsApp falha: o cliente está esperando, a resposta não chegou, e alguém precisa ver.
+ */
+export async function requestHumanTakeover(conversationId: string, reason: HandoffReason, now = new Date()) {
+  return getDb().transaction(async (tx) => {
+    const [current] = await tx.select().from(conversations)
+      .where(eq(conversations.id, conversationId)).for('update').limit(1);
+    if (!current || current.status !== 'open') return null;
+    const [row] = await tx.update(conversations)
+      .set({ owner: 'human', handoffRequestedAt: current.handoffRequestedAt ?? now, turnLockedUntil: null })
+      .where(eq(conversations.id, conversationId)).returning();
+    if (!current.handoffRequestedAt) {
+      await tx.insert(handoffs).values({ conversationId, event: 'requested', reason, occurredAt: now });
+    }
+    return row ?? null;
   });
 }
 

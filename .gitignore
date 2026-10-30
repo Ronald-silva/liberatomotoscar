@@ -67,3 +67,6 @@ public/__resp.html
 
 # cache do Python
 __pycache__/
+
+# Respostas gravadas pelo runner da eval: reflete um modelo e um momento do estoque.
+evals/resultados/

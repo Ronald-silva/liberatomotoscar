@@ -256,11 +256,13 @@ export const attendanceUsage = pgTable('attendance_usage', {
   aiRequests: integer('ai_requests').notNull().default(0),
   inputTokens: integer('input_tokens').notNull().default(0),
   outputTokens: integer('output_tokens').notNull().default(0),
+  /** Métrica 6.5: respostas que uma guarda de saída reprovou e não foram ao cliente. */
+  guardRejections: integer('guard_rejections').notNull().default(0),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   primaryKey({ columns: [table.channel, table.dayUtc] }),
   check('attendance_usage_day_format', sql`${table.dayUtc} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
-  check('attendance_usage_nonnegative', sql`${table.aiRequests} >= 0 AND ${table.inputTokens} >= 0 AND ${table.outputTokens} >= 0`),
+  check('attendance_usage_nonnegative', sql`${table.aiRequests} >= 0 AND ${table.inputTokens} >= 0 AND ${table.outputTokens} >= 0 AND ${table.guardRejections} >= 0`),
 ]);
 
 // Limite distribuído por janela fixa. A chave é um HMAC do IP: o endereço não é guardado.

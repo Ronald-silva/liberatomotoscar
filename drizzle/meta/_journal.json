@@ -64,6 +64,13 @@
       "when": 1793139468063,
       "tag": "0008_brave_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793335430869,
+      "tag": "0009_aspiring_human_robot",
+      "breakpoints": true
     }
   ]
 }

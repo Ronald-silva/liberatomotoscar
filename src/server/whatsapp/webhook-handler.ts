@@ -1,10 +1,13 @@
-import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
-import { appendVisitorMessage, hashConversationToken, RETENTION_NO_LEAD_DAYS } from '@/server/attendance/conversation-repository';
+import {
+  ensureWhatsappConversation, recordIncomingWhatsappMessage, whatsappConversationToken,
+} from '@/server/agent/incoming';
+import { runWhatsappAgentTurn } from '@/server/agent/whatsapp-turn';
 import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
-import { decryptAccessToken, deterministicUuidFromWaMessageId } from './crypto';
+import { decryptAccessToken } from './crypto';
+
+export { whatsappConversationToken };
 import { findActiveTenantByPhoneNumberId, type WhatsappTenantRow } from './embedded-signup';
 import { normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
 import { TEST_TENANT_ID } from './test-number';
@@ -81,49 +84,6 @@ export type MetaWebhookPayload = {
   }>;
 };
 
-/** Gera um token determinístico de 43 caracteres base64url por (tenantId + número do cliente). */
-export function whatsappConversationToken(tenantId: string, customerWaId: string): string {
-  return createHash('sha256')
-    .update(`wa:${tenantId}:${customerWaId.replace(/\D/g, '')}`)
-    .digest('base64url');
-}
-
-async function ensureWhatsappConversation(token: string, now = new Date()) {
-  await ensureAttendanceTables();
-  const db = getDb();
-  const tokenHash = hashConversationToken(token);
-  const expiresAt = new Date(now.getTime() + RETENTION_NO_LEAD_DAYS * 86_400_000);
-
-  const [existing] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.tokenHash, tokenHash))
-    .limit(1);
-
-  if (existing) {
-    if (existing.expiresAt > now) return existing;
-    const [renewed] = await db.update(conversations).set({ expiresAt })
-      .where(eq(conversations.id, existing.id)).returning();
-    return renewed ?? null;
-  }
-
-  const [created] = await db
-    .insert(conversations)
-    .values({
-      channel: 'whatsapp',
-      tokenHash,
-      owner: 'automation',
-      status: 'open',
-      createdAt: now,
-      lastMessageAt: now,
-      expiresAt,
-    })
-    .onConflictDoNothing()
-    .returning();
-
-  return created ?? null;
-}
-
 /** Quando o vendedor responde pelo celular da loja (Coexistence smb_message_echoes), pausa a IA para esse cliente. */
 async function pauseAutomationOnSellerEcho(tenantId: string, customerWaId: string, now = new Date()) {
   const token = whatsappConversationToken(tenantId, customerWaId);
@@ -158,35 +118,53 @@ export type WebhookHandlerDeps = {
     to: string;
     body: string;
   }) => Promise<{ messageId: string | null }>;
+  /** Chamado quando a Meta não confirma a entrega: a conversa passa a esperar um humano. */
+  onSendFailed?: (conversationId: string, erro: unknown) => Promise<void>;
 };
 
 /**
- * Registra a mensagem recebida na conversa do cliente e não responde: o atendimento
- * automático foi removido, então o turno fica na caixa de entrada para um vendedor assumir.
+ * Persiste a mensagem do cliente e devolve a resposta do agente, ou null quando não há resposta
+ * automática a dar: evento reentregue pela Meta, canal fora do modo ai, vendedor no comando, ou
+ * resposta descartada no commit porque um humano assumiu durante a geração.
  */
-async function defaultRecordIncomingMessage(params: {
+async function defaultRunAgentTurn(params: {
   tenant: WebhookTenant;
   customerWaId: string;
   customerName?: string | null;
   waMessageId: string;
   text: string;
 }): Promise<string | null> {
-  const token = whatsappConversationToken(params.tenant.tenantId, params.customerWaId);
-  const conversation = await ensureWhatsappConversation(token);
-  if (!conversation) throw new Error('Não foi possível criar a conversa do WhatsApp.');
-  await appendVisitorMessage(
-    conversation.id,
-    params.text.slice(0, 1000),
-    deterministicUuidFromWaMessageId(params.waMessageId),
-  );
-  return null;
+  const conversationId = await recordIncomingWhatsappMessage({
+    tenantId: params.tenant.tenantId,
+    customerWaId: params.customerWaId,
+    waMessageId: params.waMessageId,
+    text: params.text,
+  });
+  // A Meta reentrega o mesmo evento quando o webhook demora. Sem esta saída o cliente
+  // receberia duas respostas para a mesma frase.
+  if (!conversationId) return null;
+  ultimaConversa = conversationId;
+  return runWhatsappAgentTurn({ conversationId, message: params.text.slice(0, 1000) });
+}
+
+/**
+ * Id da conversa do turno em curso. O contrato de `runAgentTurn` devolve só o texto a enviar,
+ * e o handler precisa do id para marcar a conversa quando o envio falha.
+ */
+let ultimaConversa: string | null = null;
+
+/** Falha de envio: um vendedor assume, porque o cliente está esperando e não recebeu nada. */
+async function defaultOnSendFailed(conversationId: string) {
+  if (!conversationId) return;
+  const { requestHumanTakeover } = await import('@/server/attendance/conversation-repository');
+  await requestHumanTakeover(conversationId, 'ai_suggested');
 }
 
 /**
  * Processa eventos recebidos no Webhook da Meta Cloud API em modo Multi-Tenant:
  * - Identifica o tenant pelo `metadata.phone_number_id`
  * - Pausa a automação quando recebe `smb_message_echoes` (Coexistência com celular da loja)
- * - Responde mensagens de texto usando a Dayse e o token descriptografado do tenant
+ * - Responde mensagens de texto usando o agente e o token descriptografado do tenant
  */
 export async function processMetaWebhookPayload(
   payload: MetaWebhookPayload,
@@ -199,7 +177,8 @@ export async function processMetaWebhookPayload(
   const findTenant = deps.findTenant ?? ((id: string, wabaId?: string) => resolveWebhookTenant(id, findActiveTenantByPhoneNumberId, wabaId));
   const decrypt = deps.decryptToken ?? ((enc: string) => decryptAccessToken(enc));
   const pauseEcho = deps.pauseOnSellerEcho ?? pauseAutomationOnSellerEcho;
-  const recordIncoming = deps.runAgentTurn ?? defaultRecordIncomingMessage;
+  const runTurn = deps.runAgentTurn ?? defaultRunAgentTurn;
+  const onSendFailed = deps.onSendFailed ?? defaultOnSendFailed;
   const sendOutbound = deps.sendOutbound ?? sendWhatsAppTextMessage;
 
   let processedMessages = 0;
@@ -259,7 +238,8 @@ export async function processMetaWebhookPayload(
           value?.contacts?.find((c) => c.wa_id === incoming.from) ?? value?.contacts?.[0];
         const customerName = contactMatch?.profile?.name?.trim() || null;
 
-        const replyBody = await recordIncoming({
+        ultimaConversa = null;
+        const replyBody = await runTurn({
           tenant,
           customerWaId: incoming.from,
           customerName,
@@ -270,14 +250,27 @@ export async function processMetaWebhookPayload(
         if (replyBody) {
           const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
           if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
-          const sent = await sendOutbound({
-            phoneNumberId: tenant.whatsappPhoneNumberId,
-            accessToken,
-            to: normalizeWhatsAppRecipient(incoming.from),
-            body: replyBody,
-          });
-          if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta da Dayse.');
-          processedMessages += 1;
+          // A resposta já foi gravada na conversa. Se o envio falhar e nós lançarmos, a Meta
+          // reentrega o evento e a deduplicação engole a retentativa: o banco fica com uma
+          // resposta que o cliente nunca recebeu, e ninguém é avisado. Por isso a falha vira
+          // um pedido de atendimento humano, não uma exceção.
+          try {
+            const sent = await sendOutbound({
+              phoneNumberId: tenant.whatsappPhoneNumberId,
+              accessToken,
+              to: normalizeWhatsAppRecipient(incoming.from),
+              body: replyBody,
+            });
+            if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta do agente.');
+            processedMessages += 1;
+          } catch (erro) {
+            console.error('[agente] envio ao WhatsApp falhou', JSON.stringify({
+              evento: 'envio_falhou', conversationId: ultimaConversa,
+              detalhe: erro instanceof Error ? erro.message : String(erro),
+              em: new Date().toISOString(),
+            }));
+            await onSendFailed(ultimaConversa ?? '', erro);
+          }
         } else {
           console.info('Webhook WhatsApp: conversa sem resposta automática (modo desativado, vendedor ativo ou mensagem duplicada).');
         }

@@ -13,7 +13,7 @@ import {
   verifyMetaWebhookSignature,
 } from './crypto';
 import { completeEmbeddedSignup, type WhatsappTenantRow } from './embedded-signup';
-import { formatDayseWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
+import { formatAgentWhatsAppReply, normalizeWhatsAppRecipient, sendWhatsAppTextMessage } from './outbound';
 import { processMetaWebhookPayload, resolveWebhookTenant, whatsappConversationToken } from './webhook-handler';
 import { TEST_TENANT_ID } from './test-number';
 
@@ -214,7 +214,7 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
         decryptToken: (enc) => decryptAccessToken(enc, TEST_HEX_KEY),
         pauseOnSellerEcho,
         runAgentTurn: async ({ text }) =>
-          formatDayseWhatsAppReply(`Olá! Sou a Dayse. Você perguntou: ${text}`, [
+          formatAgentWhatsAppReply(`Olá! Sou a Dayse. Você perguntou: ${text}`, [
             { title: 'Honda CG 160 Titan', year: 2023, priceCents: 1690000, href: '/veiculos/honda-titan' },
           ]),
         sendOutbound,
@@ -338,7 +338,13 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
       tenantId: TEST_TENANT_ID, wabaId: '9876543210987', whatsappPhoneNumberId: '1234567890123',
       isActive: true, accessToken: 'TOKEN_DE_TESTE',
     };
-    await expect(processMetaWebhookPayload({
+    // O envio sem confirmação continua NÃO contando como entregue. O que mudou é o remédio:
+    // antes isto lançava, o webhook devolvia erro e a Meta reentregava o evento — mas a
+    // deduplicação por clientMessageId engolia a retentativa, então a conversa ficava com uma
+    // resposta no banco que o cliente nunca recebeu e ninguém era avisado. Agora a falha
+    // chama um humano, que é quem pode resolver.
+    const onSendFailed = vi.fn(async () => {});
+    const resultado = await processMetaWebhookPayload({
       object: 'whatsapp_business_account',
       entry: [{ id: '9876543210987', changes: [{ field: 'messages', value: {
         metadata: { phone_number_id: '1234567890123' },
@@ -348,7 +354,10 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
       findTenant: async () => tenant,
       runAgentTurn: async () => 'Olá!',
       sendOutbound: async () => ({ messageId: null }),
-    })).rejects.toThrow('não confirmou o envio');
+      onSendFailed,
+    });
+    expect(resultado.processedMessages).toBe(0);
+    expect(onSendFailed).toHaveBeenCalled();
   });
 
   it('envia mensagem via Meta Cloud API usando phone_number_id e access_token dinâmicos', async () => {
