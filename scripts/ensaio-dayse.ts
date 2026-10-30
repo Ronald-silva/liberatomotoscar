@@ -134,6 +134,7 @@ async function main() {
       readConversation: async () => conversa,
       listMessages: async (_id, limit = 60) => mensagens.slice(-limit),
       reserveAi: async () => { chamadasModelo += 1; return { dayUtc: new Date().toISOString().slice(0, 10) }; },
+      // rephrase vem de siteChatDeps pelo spread: a redação natural da troca é exercitada aqui.
       // Mesmo ponto onde a produção contabiliza o consumo do turno.
       recordTokens: async (_day, input, output) => { totalInput += input; totalOutput += output; },
     };

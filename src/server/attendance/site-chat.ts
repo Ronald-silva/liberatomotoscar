@@ -18,6 +18,7 @@ import {
   type KnowledgeReply,
 } from './knowledge';
 import { recordSiteAiTokens, reserveSiteAiRequest } from './limits';
+import { rephraseTradeIn } from './trade-in-phrasing';
 import { readSiteSetting, type AttendanceMode } from './settings';
 
 export class SiteChatError extends Error {
@@ -74,9 +75,12 @@ export const siteChatDeps = {
   runAgent: (session: DemoSession, message: string, signal?: AbortSignal) => runDemoAgent(session, message, undefined, signal),
   reserveAi: () => reserveSiteAiRequest(),
   recordTokens: recordSiteAiTokens,
+  rephrase: rephraseTradeIn,
 };
-export type SiteChatDeps = Omit<typeof siteChatDeps, 'readSetting'> & {
+export type SiteChatDeps = Omit<typeof siteChatDeps, 'readSetting' | 'rephrase'> & {
   readSetting: () => Promise<{ mode: AttendanceMode }>;
+  /** Ausente nos testes que não querem chamada de modelo: fica o texto determinístico. */
+  rephrase?: typeof rephraseTradeIn;
   maxVisitorTurns?: number;
   failClosedOnPersistenceError?: boolean;
   skipViewAfterTurn?: boolean;
@@ -242,6 +246,38 @@ async function smartKnowledgeOrChoiceReply(
     : 'Me conta um pouco mais do que você precisa. Está procurando uma moto, um carro ou quer falar com a equipe?', cards: [] };
 }
 
+/**
+ * Troca: o texto determinístico da base define o que a loja promete e já serve de resposta.
+ * Quando há cota de IA, o modelo reescreve a MESMA mensagem com naturalidade a partir do estado
+ * verificado; se a reserva falhar, o modelo cair ou a frase não passar na verificação, fica o
+ * texto determinístico. Fatos, cartões e handoff vêm sempre da base.
+ */
+async function withNaturalTradeInPhrasing(
+  deps: SiteChatDeps,
+  kb: KnowledgeReply,
+  body: string,
+  customerName: string | null,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!kb.tradeIn || !deps.rephrase) return kb.text;
+  // Reescrever uma resposta que também lista veículos ou explica financiamento perderia conteúdo.
+  if (!kb.tradeIn.soleTopic || kb.cards.length > 0) return kb.text;
+  const reservation = await deps.reserveAi();
+  if (!reservation) return kb.text;
+  const phrased = await deps.rephrase({
+    customerMessage: body,
+    customerName,
+    known: kb.tradeIn.known,
+    missing: kb.tradeIn.missing,
+    essentialsComplete: kb.tradeIn.essentialsComplete,
+    isNudge: kb.tradeIn.isNudge,
+  }, signal);
+  if (!phrased) return kb.text;
+  await deps.recordTokens(reservation.dayUtc, phrased.inputTokens, phrased.outputTokens)
+    .catch(() => console.error('Falha ao registrar tokens da redação da troca.'));
+  return phrased.text;
+}
+
 async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, 'disabled'>, conversation: ConversationRow,
   body: string, choice: DeterministicChoice | undefined, signal?: AbortSignal, explicitCustomerName?: string | null): Promise<AutomatedReply> {
   // Botões do menu nunca chamam o modelo, em nenhum modo.
@@ -289,7 +325,7 @@ async function generateReply(deps: SiteChatDeps, mode: Exclude<AttendanceMode, '
     if (kb.matched) {
       return {
         sender: 'ai',
-        body: kb.text,
+        body: await withNaturalTradeInPhrasing(deps, kb, body, customerName, signal),
         cards: kb.cards,
         facts: kb.facts.length ? kb.facts : undefined,
         handoffReason: kb.handoffReason,

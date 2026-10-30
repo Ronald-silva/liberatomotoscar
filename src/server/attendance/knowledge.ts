@@ -58,6 +58,22 @@ export type KnowledgeReply = {
   handoffReason: HandoffReason | null;
   handoffUrl: string | null;
   checkedAt: string;
+  /**
+   * Estado da troca quando o turno é de troca. O texto acima é o determinístico, que vale como
+   * fallback; com isso o orquestrador pode pedir ao modelo que reescreva a mesma mensagem com
+   * naturalidade, sem que o modelo decida o que a loja promete.
+   */
+  tradeIn?: {
+    known: TradeInDetails;
+    missing: string[];
+    essentialsComplete: boolean;
+    isNudge: boolean;
+    /**
+     * A troca é o único assunto da resposta. Quando falso, o texto também carrega catálogo ou
+     * financiamento, e reescrevê-lo por inteiro perderia essa informação.
+     */
+    soleTopic: boolean;
+  } | null;
 };
 
 export const STORE_KNOWLEDGE_SUMMARY = `DADOS OFICIAIS DA LOJA (${STORE.name}):
@@ -322,7 +338,40 @@ export function extractEntryCents(text: string): number | null {
   return null;
 }
 
-export type TradeInDetails = { vehicle: string | null; year: number | null; mileageKm: number | null };
+export type TradeInDetails = {
+  vehicle: string | null;
+  year: number | null;
+  mileageKm: number | null;
+  /** Estado de conservação relatado pelo cliente, nas palavras dele. */
+  condition: string | null;
+  /** Documentação em dia (IPVA/licenciamento), quando o cliente afirma ou nega. */
+  paperworkOk: boolean | null;
+  singleOwner: boolean | null;
+};
+
+/**
+ * Ordem em que o avaliador precisa dos dados. Marca, ano e quilometragem são essenciais: com
+ * eles o Liberato já consegue se antecipar e a conversa pode virar visita. Estado e documentação
+ * são complemento — valiosos, mas não a ponto de transformar o WhatsApp em interrogatório.
+ */
+export const TRADE_IN_SLOTS = [
+  { key: 'vehicle', pergunta: 'a marca e o modelo', essencial: true },
+  { key: 'year', pergunta: 'o ano', essencial: true },
+  { key: 'mileageKm', pergunta: 'a quilometragem aproximada', essencial: true },
+  { key: 'condition', pergunta: 'o estado de conservação', essencial: false },
+  { key: 'paperworkOk', pergunta: 'se a documentação está em dia', essencial: false },
+] as const;
+
+/** O que ainda falta para o avaliador, na ordem de prioridade. */
+export function missingTradeInSlots(
+  details: TradeInDetails,
+  filtro?: { essencial: boolean },
+): string[] {
+  return TRADE_IN_SLOTS
+    .filter((slot) => (filtro ? slot.essencial === filtro.essencial : true))
+    .filter(({ key }) => details[key] === null)
+    .map(({ pergunta }) => pergunta);
+}
 
 /**
  * Dados do veículo oferecido na troca presentes num texto — serve tanto para a mensagem do
@@ -352,10 +401,24 @@ export function extractTradeInDetails(text: string): TradeInDetails {
 
   const yearMatch = v.match(/\b(?:19|20)\d{2}\b/);
   const mileageMatch = v.match(/\b(\d{1,3}(?:\.\d{3})*|\d{4,6})\s*km\b/);
+
+  const conditionMatch = v.match(
+    /\b(nova|zerinho|zero|impecave\w*|conservad\w*|otimo estado|otima|bom estado|boa|regular|precisa de reparo|batid\w*|riscad\w*|amassad\w*|rodando|ruim)\b/,
+  );
+  const paperworkOk = /\b(documenta\w*|ipva|licenciamento|transferenc\w*)\b/.test(v)
+    ? !/\b(atrasad\w*|vencid\w*|devendo|debito|pendenc\w*|nao esta em dia|nao ta em dia|atraso)\b/.test(v)
+    : null;
+  const singleOwner = /\b(unico dono|primeiro dono|so eu usei|sempre fui o dono)\b/.test(v)
+    ? true
+    : /\b(segundo dono|terceiro dono|comprei usad\w*)\b/.test(v) ? false : null;
+
   return {
     vehicle: vehicle || null,
     year: yearMatch ? Number(yearMatch[0]) : null,
     mileageKm: mileageMatch ? Number(mileageMatch[1]!.replace(/\./g, '')) : null,
+    condition: conditionMatch?.[1] ?? null,
+    paperworkOk,
+    singleOwner,
   };
 }
 
@@ -365,6 +428,9 @@ export function mergeTradeInDetails(previous: TradeInDetails, next: TradeInDetai
     vehicle: next.vehicle ?? previous.vehicle,
     year: next.year ?? previous.year,
     mileageKm: next.mileageKm ?? previous.mileageKm,
+    condition: next.condition ?? previous.condition,
+    paperworkOk: next.paperworkOk ?? previous.paperworkOk,
+    singleOwner: next.singleOwner ?? previous.singleOwner,
   };
 }
 
@@ -374,7 +440,10 @@ export function formatTradeInQuote(details: TradeInDetails): string {
     details.vehicle,
     details.year ? `ano ${details.year}` : null,
     details.mileageKm !== null ? `${details.mileageKm} km` : null,
-  ].filter(Boolean).join('; ').slice(0, 100);
+    details.condition,
+    details.paperworkOk === null ? null : details.paperworkOk ? 'documentação em dia' : 'documentação pendente',
+    details.singleOwner ? 'único dono' : null,
+  ].filter(Boolean).join('; ').slice(0, 160);
 }
 
 /**
@@ -808,6 +877,7 @@ export async function answerFromPlatformKnowledge(
   const facts: LeadFact[] = [];
   let handoffRequested = false;
   let handoffReason: HandoffReason | null = null;
+  let tradeInState: KnowledgeReply['tradeIn'] = null;
 
   // 0. Mídia enviada pelo cliente no WhatsApp (Áudio, Foto, Vídeo ou Documento para avaliação)
   if (v.startsWith('[midia_whatsapp:audio]')) {
@@ -853,19 +923,25 @@ export async function answerFromPlatformKnowledge(
       known.vehicle,
       known.year ? `ano ${known.year}` : null,
       known.mileageKm !== null ? formatKilometers(known.mileageKm) : null,
+      known.condition,
+      known.paperworkOk === null ? null : known.paperworkOk ? 'documentação em dia' : 'documentação pendente',
+      known.singleOwner ? 'único dono' : null,
     ].filter(Boolean);
-    const faltando = [
-      !known.vehicle ? '**a marca e o modelo**' : null,
-      !known.year ? 'o **ano**' : null,
-      known.mileageKm === null ? 'a **quilometragem aproximada**' : null,
-    ].filter(Boolean);
+    // No máximo dois pedidos por turno: a lista inteira de uma vez afugenta o cliente.
+    const essenciaisFaltando = missingTradeInSlots(known, { essencial: true }).slice(0, 2);
+    const complementoFaltando = missingTradeInSlots(known, { essencial: false }).slice(0, 1);
+    const faltando = essenciaisFaltando.map((item) => `**${item}**`);
     const abertura = tradeInClarify ? `Desculpe a demora${nameGreeting}!` : `Perfeito${nameGreeting}!`;
     // O aceite precisa ser reafirmado: quem escreve "????" está cobrando essa confirmação.
     const aceite = ` **Sim, aceitamos ${known.vehicle ?? 'sua moto ou carro'} como entrada**, mediante avaliação da loja.`;
     const anotado = registrados.length ? ` Já anotei **${registrados.join(' · ')}** para o avaliador.` : '';
     const proximo = faltando.length
       ? ` Para adiantar, me diz ${faltando.join(' e ')}?`
-      : ' A equipe confere o documento, a quilometragem e o estado do veículo antes de definir o valor. Qual moto ou carro do nosso estoque você quer negociar?';
+      // Essenciais completos: o avaliador já tem com o que trabalhar, então a conversa passa a
+      // puxar a visita — a avaliação é presencial e quem define o valor é a loja.
+      : ` A equipe confere o documento, a quilometragem e o estado do veículo antes de definir o valor, e isso é feito aqui na loja com o avaliador.${
+        complementoFaltando.length ? ` Se souber, me adianta **${complementoFaltando[0]}**.` : ''
+      } Quer combinar um horário para passar, ou prefere que eu já chame um vendedor?`;
     return {
       matched: true,
       isInstitutionalOnly: false,
@@ -876,6 +952,13 @@ export async function answerFromPlatformKnowledge(
       handoffReason: 'trade_in',
       handoffUrl: null,
       checkedAt,
+      tradeIn: {
+        known,
+        missing: [...essenciaisFaltando, ...(essenciaisFaltando.length ? [] : complementoFaltando)],
+        essentialsComplete: essenciaisFaltando.length === 0,
+        isNudge: tradeInClarify,
+        soleTopic: true,
+      },
     };
   }
 
@@ -1335,6 +1418,15 @@ export async function answerFromPlatformKnowledge(
     );
     handoffRequested = true;
     handoffReason = 'trade_in';
+    const essenciaisFaltando = missingTradeInSlots(knownTrade, { essencial: true }).slice(0, 2);
+    tradeInState = {
+      known: knownTrade,
+      missing: essenciaisFaltando,
+      essentialsComplete: essenciaisFaltando.length === 0,
+      isNudge: false,
+      // Só a troca foi dita até aqui; catálogo ou financiamento acrescentam outros parágrafos.
+      soleTopic: paragraphs.length === 1,
+    };
   }
 
   if (intents.asksFinancing) {
@@ -1402,5 +1494,6 @@ export async function answerFromPlatformKnowledge(
       ? `https://wa.me/${STORE.whatsappNumber}?text=${encodeURIComponent(summary)}`
       : null,
     checkedAt,
+    tradeIn: tradeInState,
   };
 }
