@@ -230,7 +230,10 @@ describe('Registro do número de teste da Meta', () => {
     });
     await expect(registerMetaTestNumber(
       { phoneNumberId: '1234567890123', wabaId: '9876543210987', accessToken: TOKEN },
-      { fetchImpl: fetchMock as unknown as typeof fetch, upsertTenant, listTenants: async () => [], webhookVerifyToken: 'verify-token' },
+      // O callback vai explícito: o caso em teste é a Meta recusar a inscrição, não o
+      // endereço que o ambiente por acaso resolve.
+      { fetchImpl: fetchMock as unknown as typeof fetch, upsertTenant, listTenants: async () => [],
+        webhookVerifyToken: 'verify-token', webhookUrl: 'https://exemplo.test/api/webhooks/whatsapp' },
     )).rejects.toThrow('direcionar o webhook');
     expect(upsertTenant).not.toHaveBeenCalled();
   });

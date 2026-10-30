@@ -1,3 +1,4 @@
+import { SITE_URL } from '@/data/store';
 import { STORE } from '@/data/store';
 import { and, desc, eq } from 'drizzle-orm';
 import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
@@ -20,7 +21,12 @@ export type RegisterTestNumberDeps = Pick<EmbeddedSignupDeps, 'apiVersion' | 'en
 };
 
 export const TEST_TENANT_ID = 'liberato-motos-car-teste';
-export const TEST_WEBHOOK_URL = 'https://liberatomotoscar.vercel.app/api/webhooks/whatsapp';
+/**
+ * Último recurso do callback de teste. Usa o domínio público configurado — hardcodar o antigo
+ * endereço da Vercel fazia a ativação registrar na Meta um destino morto depois da migração.
+ * O caminho normal continua sendo WHATSAPP_WEBHOOK_CALLBACK_URL.
+ */
+export const TEST_WEBHOOK_URL = `${SITE_URL}/api/webhooks/whatsapp`;
 
 async function loadActiveTestTenant(): Promise<WhatsappTenantRow | null> {
   await ensureAttendanceTables();

@@ -26,6 +26,19 @@ function resolveEncryptionKey(explicitHexKey?: string): Buffer {
     throw new Error('WHATSAPP_TOKEN_ENCRYPTION_KEY deve conter 64 caracteres hexadecimais (32 bytes).');
   }
 
+  // A chave derivada de outro segredo é frágil: o token fica cifrado no banco, que sobrevive a
+  // uma troca de hospedagem, enquanto o segredo de origem não necessariamente acompanha. Quando
+  // isso acontece o token salvo vira ilegível sem nada ter mudado na Meta — foi assim na migração
+  // da Vercel para o Railway. Avisar alto evita caçar o problema no lugar errado.
+  if (process.env.NODE_ENV === 'production') {
+    console.error(
+      '\n*** WHATSAPP_TOKEN_ENCRYPTION_KEY não definida: a chave está sendo derivada de outro\n' +
+      '    segredo. Se esse segredo mudar, todo token do WhatsApp salvo no banco deixa de ser\n' +
+      '    legível e o envio para. Defina a variável com 64 caracteres hexadecimais e salve o\n' +
+      '    token novamente no painel. ***\n',
+    );
+  }
+
   return createHash('sha256').update(`whatsapp-token-aes256:${fallbackSeed}`).digest();
 }
 
