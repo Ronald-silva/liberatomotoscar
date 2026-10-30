@@ -1,4 +1,4 @@
-import { and, count, eq, gte, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import type { getDb } from '@/server/db/client';
 import { attendanceUsage, conversationMessages, conversations, handoffs } from '@/server/db/schema';
 
@@ -11,33 +11,51 @@ import { attendanceUsage, conversationMessages, conversations, handoffs } from '
 type Db = Pick<ReturnType<typeof getDb>, 'select'>;
 export type MetricsWindow = { channel: 'site' | 'whatsapp'; since: Date };
 
-/** 6.1, 6.2 e 6.3 numa passada: conversas, handoffs, visitas e total de mensagens. */
+/**
+ * 6.1, 6.2 e 6.3 numa passada: conversas, handoffs, visitas e total de mensagens.
+ *
+ * Todo contador usa `distinct`. `handoffs` tem UMA LINHA POR EVENTO (requested, assumed,
+ * released, closed), então o join multiplica: uma conversa escalada contava 3 ou 4 vezes no
+ * denominador e a taxa de resolução saía alta demais — enviesada para o lado que agrada o
+ * lojista, justamente na métrica que existe para provar valor a ele.
+ */
 export function buildConversationMetricsQuery(db: Db, { channel, since }: MetricsWindow) {
   return db.select({
-    conversas: count(conversations.id),
+    conversas: sql<number>`count(distinct ${conversations.id})`,
     // 6.1 — resolvida no canal é a conversa que nunca precisou de vendedor.
     conversasComHandoff: sql<number>`count(distinct ${handoffs.conversationId})`,
     // 6.2 — a visita é um fato anotado por registrar_lead, não uma coluna própria.
-    conversasComVisita: sql<number>`count(*) filter (where ${conversations.facts} @> '[{"field":"visit"}]'::jsonb)`,
-    mensagens: sql<number>`(select count(*) from ${conversationMessages}
-      where ${conversationMessages.conversationId} = any(array_agg(${conversations.id})))`,
+    conversasComVisita: sql<number>`count(distinct ${conversations.id})
+      filter (where ${conversations.facts} @> '[{"field":"visit"}]'::jsonb)`,
+    mensagens: sql<number>`count(distinct ${conversationMessages.id})`,
   }).from(conversations)
     .leftJoin(handoffs, eq(handoffs.conversationId, conversations.id))
+    .leftJoin(conversationMessages, eq(conversationMessages.conversationId, conversations.id))
     .where(and(eq(conversations.channel, channel), gte(conversations.createdAt, since)));
 }
 
-/** 6.4 — tempo até a primeira resposta, em segundos, medido por conversa e agregado. */
+/**
+ * 6.4 — tempo médio até a primeira resposta, em segundos.
+ *
+ * A latência é por conversa (subconsulta agrupada) e a média é sobre elas. A primeira versão
+ * agrupava no nível de fora e devolvia uma linha por conversa, cada uma com a média de um valor
+ * só: quem lesse `rows[0]` teria a latência de uma conversa qualquer chamada de média.
+ */
 export function buildFirstReplyMetricsQuery(db: Db, { channel, since }: MetricsWindow) {
-  const primeiraDoCliente = sql`min(${conversationMessages.createdAt})
-    filter (where ${conversationMessages.sender} = 'visitor')`;
-  const primeiraResposta = sql`min(${conversationMessages.createdAt})
-    filter (where ${conversationMessages.sender} <> 'visitor')`;
-  return db.select({
-    segundosAtePrimeiraResposta: sql<number | null>`avg(extract(epoch from (${primeiraResposta} - ${primeiraDoCliente})))`,
+  const porConversa = db.select({
+    segundos: sql<number>`extract(epoch from (
+      min(${conversationMessages.createdAt}) filter (where ${conversationMessages.sender} <> 'visitor')
+      - min(${conversationMessages.createdAt}) filter (where ${conversationMessages.sender} = 'visitor')
+    ))`.as('segundos'),
   }).from(conversationMessages)
     .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
     .where(and(eq(conversations.channel, channel), gte(conversations.createdAt, since)))
-    .groupBy(conversations.id);
+    .groupBy(conversations.id)
+    .as('por_conversa');
+
+  return db.select({
+    segundosAtePrimeiraResposta: sql<number | null>`avg(${porConversa.segundos})`,
+  }).from(porConversa);
 }
 
 /** 6.3 (custo) e 6.5 — requisições, tokens e guardas reprovadas acumuladas por dia. */

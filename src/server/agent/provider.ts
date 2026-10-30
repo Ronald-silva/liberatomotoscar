@@ -24,10 +24,27 @@ const safeMessages: Record<AgentProviderErrorCode, string> = {
 };
 
 export class AgentProviderError extends Error {
-  constructor(public readonly code: AgentProviderErrorCode) {
-    super(safeMessages[code]);
+  /**
+   * O que o provedor realmente disse. A mensagem da classe é segura para o cliente; o detalhe
+   * é para o log. Sem ele, uma rodada de eval com 8 falhas vira oito linhas "upstream" e não há
+   * como saber se foi rate limit, rota do OpenRouter ou erro do modelo.
+   */
+  readonly detail: string;
+
+  constructor(public readonly code: AgentProviderErrorCode, cause?: unknown) {
+    super(safeMessages[code], cause === undefined ? undefined : { cause });
     this.name = 'AgentProviderError';
+    this.detail = describeCause(cause);
   }
+}
+
+function describeCause(cause: unknown): string {
+  if (cause === undefined || cause === null) return '';
+  if (APICallError.isInstance(cause)) {
+    const corpo = typeof cause.responseBody === 'string' ? cause.responseBody.slice(0, 300) : '';
+    return `HTTP ${cause.statusCode ?? '?'} ${cause.message}${corpo ? ` | ${corpo}` : ''}`;
+  }
+  return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause).slice(0, 300);
 }
 
 export function getAgentProviderConfig() {
@@ -54,15 +71,15 @@ export function getAgentLanguageModel() {
 export function normalizeProviderError(error: unknown): AgentProviderError {
   if (error instanceof AgentProviderError) return error;
   if (APICallError.isInstance(error)) {
-    if (error.statusCode === 401 || error.statusCode === 403) return new AgentProviderError('invalid_key');
-    if (error.statusCode === 402) return new AgentProviderError('insufficient_credits');
+    if (error.statusCode === 401 || error.statusCode === 403) return new AgentProviderError('invalid_key', error);
+    if (error.statusCode === 402) return new AgentProviderError('insufficient_credits', error);
     if (error.statusCode === 404 || error.statusCode === 400 || error.statusCode === 422) {
-      return new AgentProviderError('unsupported_model');
+      return new AgentProviderError('unsupported_model', error);
     }
-    if (error.statusCode === 408 || error.statusCode === 504) return new AgentProviderError('timeout');
-    if (error.statusCode === 429) return new AgentProviderError('rate_limited');
-    return new AgentProviderError('upstream');
+    if (error.statusCode === 408 || error.statusCode === 504) return new AgentProviderError('timeout', error);
+    if (error.statusCode === 429) return new AgentProviderError('rate_limited', error);
+    return new AgentProviderError('upstream', error);
   }
-  if (error instanceof UnsupportedFunctionalityError) return new AgentProviderError('unsupported_model');
-  return new AgentProviderError('upstream');
+  if (error instanceof UnsupportedFunctionalityError) return new AgentProviderError('unsupported_model', error);
+  return new AgentProviderError('upstream', error);
 }

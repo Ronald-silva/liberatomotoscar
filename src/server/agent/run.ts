@@ -1,11 +1,13 @@
 import { generateText, isStepCount } from 'ai';
 import type { getVehicleDetails, searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
 import type { AutomatedReply, MessageCard, MessageRow } from '@/server/attendance/conversation-repository';
+import type { AgentTurnState } from './tools';
 import { checkAgentReply, type GuardVerdict } from './guards';
 import { AGENT_SYSTEM_PROMPT } from './prompt';
 import { getAgentLanguageModel, normalizeProviderError } from './provider';
 import {
-  createAgentToolFunctions, createAgentTools, createAgentTurnState, semAcento, type VerifiedVehicle,
+  createAgentToolFunctions, createAgentTools, createAgentTurnState, semAcento, veiculosCitaveis,
+  type VerifiedVehicle,
 } from './tools';
 
 /** Passos suficientes para buscar, detalhar, anotar e responder; o bastante para não girar à toa. */
@@ -94,6 +96,7 @@ function cardsFor(text: string, vehicles: Iterable<VerifiedVehicle>): MessageCar
 async function reconferirVeiculosJaMostrados(
   history: MessageRow[],
   fn: ReturnType<typeof createAgentToolFunctions>,
+  state: AgentTurnState,
 ) {
   const ids: string[] = [];
   for (const row of history) {
@@ -104,6 +107,7 @@ async function reconferirVeiculosJaMostrados(
   const recentes = ids.slice(-MAX_VEICULOS_RECONFERIDOS);
   // detalharVeiculo já grava no estado do turno e trata id inválido como resultado, não exceção.
   await Promise.all(recentes.map((id) => fn.detalharVeiculo({ id })));
+  for (const id of recentes) if (state.allowedVehicles.has(id)) state.reconferredIds.add(id);
 }
 
 export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = {}): Promise<AgentTurnResult> {
@@ -113,7 +117,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   const state = createAgentTurnState();
   const catalogDeps = { searchVehicles: deps.searchVehicles, readVehicle: deps.readVehicle };
   const tools = createAgentTools(state, catalogDeps);
-  await reconferirVeiculosJaMostrados(input.history, createAgentToolFunctions(state, catalogDeps));
+  await reconferirVeiculosJaMostrados(input.history, createAgentToolFunctions(state, catalogDeps), state);
 
   const fallback = (
     guard: GuardVerdict,
@@ -147,8 +151,8 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   } catch (error) {
     const normalized = normalizeProviderError(error);
     console.warn('[agente] provedor indisponível', JSON.stringify({
-      evento: 'provedor_falhou', codigo: normalized.code, conversationId: input.conversationId,
-      em: new Date().toISOString(),
+      evento: 'provedor_falhou', codigo: normalized.code, detalhe: normalized.detail,
+      conversationId: input.conversationId, em: new Date().toISOString(),
     }));
     return fallback({ ok: false, violation: 'tamanho_invalido', detail: `provedor: ${normalized.code}` },
       { inputTokens: 0, outputTokens: 0 });
@@ -169,7 +173,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
     reply: {
       sender: 'ai',
       body: text,
-      cards: cardsFor(text, state.allowedVehicles.values()),
+      cards: cardsFor(text, veiculosCitaveis(state)),
       facts: state.facts,
       handoffReason: state.handoffReason,
     },

@@ -69,17 +69,47 @@ export type AgentTurnState = {
   /** Só um veículo que passou por uma ferramenta pode ser citado na resposta (guarda 3.3). */
   allowedVehicles: Map<string, VerifiedVehicle>;
   /**
-   * Marcas que o modelo pediu ao estoque, em minúsculas e sem acento. Uma busca que não
-   * achou nada autoriza a resposta honesta ("não encontrei nenhuma Yamaha publicada"), que
-   * de outro modo seria bloqueada como estoque inventado.
+   * Termos que o modelo pediu ao estoque, em minúsculas e sem acento. Uma busca que não achou
+   * nada autoriza a resposta honesta ("não encontrei nenhuma Yamaha publicada"). Marca e modelo
+   * são separados porque o modelo pode buscar por um sem o outro, e a guarda precisa saber de
+   * qual termo a frase honesta pode falar.
    */
   searchedBrands: Set<string>;
+  searchedModels: Set<string>;
+  /**
+   * Alguma busca deste turno devolveu veículo. Enquanto for false, falar de uma marca buscada
+   * só pode ser para dizer que não tem — e é por isso que `searchedBrands` não vira passe livre
+   * para afirmar estoque.
+   */
+  searchFoundResults: boolean;
+  /**
+   * Veículos que entraram pela releitura dos turnos anteriores, não por uma busca deste turno.
+   * Se a busca trouxer o mesmo modelo, o relido cede o lugar: eram esses dois que produziam
+   * dois preços da mesma moto na mesma mensagem.
+   */
+  reconferredIds: Set<string>;
   facts: LeadFact[];
   handoffReason: HandoffReason | null;
 };
 
 export function createAgentTurnState(): AgentTurnState {
-  return { allowedVehicles: new Map(), searchedBrands: new Set(), facts: [], handoffReason: null };
+  return {
+    allowedVehicles: new Map(), searchedBrands: new Set(), searchedModels: new Set(),
+    searchFoundResults: false, reconferredIds: new Set(), facts: [], handoffReason: null,
+  };
+}
+
+/**
+ * Veículos que a resposta pode citar. Um anúncio relido de um turno anterior é descartado
+ * quando a busca deste turno trouxe outro anúncio do mesmo modelo: o dado fresco manda, e sem
+ * isso o preço antigo continuava citável ao lado do novo.
+ */
+export function veiculosCitaveis(state: AgentTurnState): VerifiedVehicle[] {
+  const todos = [...state.allowedVehicles.values()];
+  const modelosFrescos = new Set(
+    todos.filter((v) => !state.reconferredIds.has(v.id)).map((v) => semAcento(v.modelo)),
+  );
+  return todos.filter((v) => !state.reconferredIds.has(v.id) || !modelosFrescos.has(semAcento(v.modelo)));
 }
 
 export type AgentToolDeps = {
@@ -121,12 +151,14 @@ export function createAgentToolFunctions(state: AgentTurnState, deps: AgentToolD
   return {
     async buscarVeiculos({ tipo, marca, modelo, precoMax, limite }: z.infer<typeof buscarVeiculosSchema>) {
       if (marca) state.searchedBrands.add(semAcento(marca));
+      if (modelo) state.searchedModels.add(semAcento(modelo));
       const { items, checkedAt } = await searchVehicles({
         type: tipo, brand: marca, model: modelo,
         maxPriceCents: precoMax ? precoMax * 100 : undefined,
         limit: Math.min(limite ?? 3, MAX_RESULTADOS),
       });
       const veiculos = items.map(toVerified).filter((item): item is VerifiedVehicle => item !== null);
+      if (veiculos.length) state.searchFoundResults = true;
       remember(veiculos);
       return { veiculos, total: veiculos.length, consultadoEm: checkedAt };
     },

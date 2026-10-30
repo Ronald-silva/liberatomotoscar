@@ -96,9 +96,19 @@ export type AutomatedReply = {
   handoffReason?: HandoffReason | null;
 };
 
-/** Troca e financiamento entram na fila do vendedor enquanto a Dayse coleta os dados que faltam. */
+/**
+ * Troca e financiamento entram na fila do vendedor enquanto o agente coleta os dados que faltam.
+ *
+ * `ai_suggested` entrou nessa lista depois da revisão: ele é o motivo que o fallback usa quando
+ * uma guarda reprova ou o provedor falha. Pausando, um único falso positivo na mensagem 2 de 20
+ * tirava o agente da conversa inteira, e as outras 18 ficavam esperando um humano numa loja que
+ * não tem plantão. Pedido explícito de pessoa (`visitor_request`) continua pausando, que é o
+ * caso em que o cliente realmente quer parar de falar com a automação.
+ */
+const MOTIVOS_QUE_NAO_PAUSAM: ReadonlySet<HandoffReason> = new Set(['trade_in', 'financing', 'ai_suggested']);
+
 export function handoffPausesAutomation(reason: HandoffReason | null | undefined): boolean {
-  return reason !== null && reason !== undefined && reason !== 'trade_in' && reason !== 'financing';
+  return reason !== null && reason !== undefined && !MOTIVOS_QUE_NAO_PAUSAM.has(reason);
 }
 
 /**

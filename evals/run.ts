@@ -16,9 +16,17 @@ import { evaluateCase, summarize, type CaseOutcome, type CorpusCase, type Findin
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * `--limit=N` e `--only=id,id` existem para o teste de fumaça: a rodada inteira gasta crédito
+ * de verdade, e descobrir que o pipeline está quebrado no caso 1 de 60 é caro demais.
+ */
 function lerCorpus(): CorpusCase[] {
   const bruto = readFileSync(join(aqui, 'corpus.jsonl'), 'utf8').trim();
-  return bruto.split('\n').filter(Boolean).map((linha) => JSON.parse(linha) as CorpusCase);
+  const todos = bruto.split('\n').filter(Boolean).map((linha) => JSON.parse(linha) as CorpusCase);
+  const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7).split(',').filter(Boolean);
+  const limit = Number(process.argv.find((a) => a.startsWith('--limit='))?.slice(8));
+  const filtrados = only?.length ? todos.filter((c) => only.includes(c.id)) : todos;
+  return Number.isSafeInteger(limit) && limit > 0 ? filtrados.slice(0, limit) : filtrados;
 }
 
 type RunAgentTurn = typeof import('@/server/agent/run').runAgentTurn;
@@ -71,7 +79,8 @@ async function main() {
 
   const dir = join(aqui, 'resultados');
   mkdirSync(dir, { recursive: true });
-  const arquivo = join(dir, `${modelId.replace(/\//g, '_')}.jsonl`);
+  const parcial = corpus.length < 60 ? '.parcial' : '';
+  const arquivo = join(dir, `${modelId.replace(/\//g, '_')}${parcial}.jsonl`);
   writeFileSync(arquivo, `${resultados.map((r) => JSON.stringify({ ...r, modelId })).join('\n')}\n`);
 
   const casosComFalha = new Set(achados.map((f) => f.caseId)).size;
