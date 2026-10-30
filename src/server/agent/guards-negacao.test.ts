@@ -74,3 +74,19 @@ describe('a guarda não pode punir a resposta honesta', () => {
     expect(avalia('Consigo um desconto especial pra você hoje.').ok).toBe(false);
   });
 });
+
+describe('encaminhar ao vendedor é recusa, em qualquer verbo', () => {
+  it.each([
+    'Desconto e condição especial quem trata é o vendedor, mas posso te mostrar o valor do estoque.',
+    'Desconto quem cuida é o vendedor.',
+    'Condição especial quem resolve é a loja.',
+  ])('deixa passar: %s', (frase) => {
+    const v = checkAgentReply({ text: frase, finishReason: 'stop', state: createAgentTurnState() });
+    expect(v.ok, !v.ok ? v.violation + '/' + v.detail : '').toBe(true);
+  });
+
+  it('continua bloqueando a oferta direta', () => {
+    expect(checkAgentReply({ text: 'Consigo um desconto especial pra você hoje.',
+      finishReason: 'stop', state: createAgentTurnState() }).ok).toBe(false);
+  });
+});

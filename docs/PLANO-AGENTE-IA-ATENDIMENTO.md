@@ -134,8 +134,28 @@ cada fase; as fases 1 e 2 são pré-requisito do resto.
 | 0.1 | **Escopo: qualificar e encaminhar.** O agente entende o que a pessoa procura, responde com dado verificado, informa preço real e passa ao vendedor na hora de negociar. **Não negocia desconto.** | `agent/prompt.ts` + guarda `promessa_nao_autorizada` |
 | 0.2 | **Troca: nunca estimar valor.** Nem valor, nem faixa, nem percentual, nem "uns tantos". A avaliação é sempre presencial, na loja. Pode dizer que a loja trabalha com troca, sempre junto de "mediante avaliação". Nunca avaliar por foto, mensagem ou à distância. | `agent/prompt.ts` + guardas de `vale`/`pago`/avaliação remota |
 | 0.3 | **Teto diário: 150 chamadas de IA no WhatsApp.** Estourado, o cliente recebe mensagem honesta e vai ao vendedor. | `WHATSAPP_AI_DAILY_LIMIT` (default já no código) |
-| 0.4 | **Modelo: `anthropic/claude-sonnet-5-5`** via OpenRouter. Troca sem mexer em código por `OPENROUTER_MODEL`. | `agent/provider.ts` |
-| 0.5 | Pendente — rodar `npm run eval` com chave real para a tabela de custo × qualidade antes de fixar em definitivo. | `evals/run.ts` |
+| 0.4 | **Modelo: `anthropic/claude-sonnet-5-5`** via OpenRouter, agora **confirmado por medição** (ver 0.5). Troca sem mexer em código por `OPENROUTER_MODEL`. | `agent/provider.ts` |
+| 0.5 | **Medido em 30/10/2026**, corpus de 60 casos, estoque real, zero falha de provedor nos dois. | `evals/run.ts` |
+
+#### Resultado da tarefa 4.2 — comparação de modelos (30/10/2026)
+
+| | `claude-sonnet-5-5` | `deepseek-v4-pro-0813` |
+|---|---|---|
+| Casos sem nenhum achado | **45 de 60** | 38 de 60 |
+| Guarda reprovada | **2** | 5 |
+| Estoque não consultado quando devia | **2** | 5 |
+| Handoff faltando | **7** | 11 |
+| Resposta acima de 400 caracteres | 3 | 0 |
+
+O Sonnet erra menos em tudo que é segurança e uso de ferramenta; escreve um pouco mais longo.
+
+**Aviso de método, que vale mais que a tabela.** As duas primeiras rodadas davam o DeepSeek à
+frente, e estavam erradas: mediam defeitos das guardas e dos critérios, não os modelos. Dois
+confundidores dominavam o resultado — 14% dos turnos do Sonnet voltavam como erro de upstream
+(contas novas no OpenRouter têm teto de 20 req/min nos modelos Anthropic, o que **não afeta
+produção**), e as guardas reprovavam a resposta honesta: quem escreve com negação e cautela,
+que é o comportamento que a política pede, era o mais punido. Antes de confiar numa rodada,
+olhe quantas falhas de provedor houve e leia as respostas bloqueadas.
 
 **Sobre modelo:** o projeto usa OpenRouter, o que permite trocar sem mexer em código
 (`OPENROUTER_MODEL`). O modelo anterior era `deepseek/deepseek-v4-pro-0813`, que apresentou

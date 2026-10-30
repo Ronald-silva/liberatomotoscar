@@ -87,7 +87,7 @@ const AFIRMA_ESTOQUE = /\b(temos|tenho|tem aqui|chegou|chega|esta disponivel|ta 
  * guarda lia a negação como se fosse afirmação. Todas as frases que motivaram isto saíram de
  * uma rodada real de eval, reprovadas estando corretas.
  */
-const NEGACAO = /\b(nao|nem|nenhum|nenhuma|infelizmente|so a loja|quem (confirma|garante|negocia|ve)|e com o vendedor|nao e comigo|nao sei)\b|\bsem\b(?!\s+(problema|dificuldade|complicacao|crise|stress|susto))/;
+const NEGACAO = /\b(nao|nem|nenhum|nenhuma|infelizmente|so a loja|e com o vendedor|nao e comigo|nao sei)\b|\bquem \w+ e (o |a )?(vendedor|loja|equipe|consultor)\b|\bsem\b(?!\s+(problema|dificuldade|complicacao|crise|stress|susto))/;
 
 function fraseNegada(frase: string) {
   return NEGACAO.test(frase);

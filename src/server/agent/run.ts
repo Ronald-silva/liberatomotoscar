@@ -12,7 +12,12 @@ import {
 
 /** Passos suficientes para buscar, detalhar, anotar e responder; o bastante para não girar à toa. */
 const MAX_PASSOS = 6;
-const MAX_TOKENS_SAIDA = 500;
+/**
+ * 500 cortava o modelo no meio e a guarda reprovava a frase pela metade — a resposta não ia ao
+ * cliente justamente por ser mais completa. O teto de caracteres da guarda é 900, então 700
+ * tokens é o que cabe sem que os dois limites briguem entre si.
+ */
+const MAX_TOKENS_SAIDA = 700;
 /** Quantos veículos já mostrados reconferir no início do turno. */
 const MAX_VEICULOS_RECONFERIDOS = 3;
 
