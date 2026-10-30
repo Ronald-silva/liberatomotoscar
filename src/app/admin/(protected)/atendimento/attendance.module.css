@@ -19,11 +19,14 @@
    espaço horizontal. Os blocos de texto e de formulário continuam numa coluna legível — texto
    esticado em 1280px não se lê. */
 .panel { width: min(100%, 1280px); margin-inline: auto; }
-.panel h1, .intro, .form, .history { max-width: 72ch; }
+/* Só PROSA tem largura de leitura. Formulário, cartões e fila são componentes e acompanham a
+   largura do painel — limitar o .form junto com o texto deixou o bloco de modo terminando em
+   693px enquanto a fila ia até 1310px, com as bordas direitas sem se encontrar. */
+.intro { max-width: 72ch; }
 .back { display: inline-flex; min-height: 44px; align-items: center; color: var(--attendance-muted); text-underline-offset: 0.25em; }
 .back:hover { color: var(--attendance-ink); }
 .panel h1 { margin: var(--attendance-space-2) 0; font-size: clamp(1.8rem, 5vw, 2.3rem); }
-.intro { max-width: 62ch; color: var(--attendance-muted); line-height: 1.5; }
+.intro { color: var(--attendance-muted); line-height: 1.5; }
 .form { display: grid; gap: var(--attendance-space-2); margin-top: var(--attendance-space-4); }
 .choices { display: grid; gap: var(--attendance-space-1); min-width: 0; margin: 0; padding: var(--attendance-space-3); border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: var(--attendance-surface); }
 .choices legend { padding-inline: var(--attendance-space-1); font-weight: 700; }
