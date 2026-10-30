@@ -59,11 +59,14 @@
 .filterNav { display: flex; flex-wrap: wrap; gap: var(--attendance-space-1); margin-top: var(--attendance-space-2); }
 .filterTab { display: inline-flex; align-items: center; min-height: 44px; padding: var(--attendance-space-1) var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 999px; color: var(--attendance-ink); text-decoration: none; font-size: 0.9375rem; }
 .filterTabActive { background: var(--attendance-accent); border-color: var(--attendance-accent); color: #fff; font-weight: 700; }
-.inboxGrid { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: var(--attendance-space-3); margin-top: var(--attendance-space-3); align-items: start; }
+/* Empilhado, não lado a lado. Com a fila estreita à esquerda quase vazia e a ficha larga à
+   direita, todo o peso visual caía para a direita e a tela parecia torta mesmo com as bordas
+   certas. Fila em cima, atendimento embaixo, os dois na largura inteira. */
+.inboxGrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--attendance-space-3); margin-top: var(--attendance-space-3); }
 /* A lista ganha contêiner próprio: com uma conversa só, o cartão solto deixava 400px de vazio
    ao lado da ficha e o conjunto parecia desalinhado mesmo estando alinhado. Dentro de uma
    moldura, o espaço livre lê como fila vazia, que é o que é. */
-.conversationList { display: grid; gap: var(--attendance-space-1); margin: 0; padding: var(--attendance-space-2); list-style: none; border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: rgba(255, 255, 255, 0.02); align-content: start; }
+.conversationList { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--attendance-space-2); margin: 0; padding: var(--attendance-space-2); list-style: none; border: 1px solid var(--attendance-line); border-radius: var(--attendance-radius); background: rgba(255, 255, 255, 0.02); }
 .conversationList:empty { display: none; }
 .conversationLink { display: grid; gap: 0.3rem; padding: var(--attendance-space-2); border: 1px solid var(--attendance-line); border-radius: 10px; background: var(--attendance-surface); color: inherit; text-decoration: none; font-size: 0.9375rem; }
 .conversationLinkActive { border-color: var(--attendance-accent); box-shadow: inset 0 0 0 2px var(--attendance-accent); }
@@ -115,7 +118,7 @@
   .ficha { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 780px) {
-  .inboxGrid { grid-template-columns: 1fr; }
+  .conversationList { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   .screen { padding: var(--attendance-space-2); }
