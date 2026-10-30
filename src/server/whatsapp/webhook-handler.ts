@@ -153,11 +153,15 @@ async function defaultRunAgentTurn(params: {
  */
 let ultimaConversa: string | null = null;
 
-/** Falha de envio: um vendedor assume, porque o cliente está esperando e não recebeu nada. */
+/**
+ * Falha de envio: a conversa entra na fila do vendedor, porque o cliente está esperando e não
+ * recebeu nada — mas CONTINUA com a automação. Marcar como humana aqui desligou o agente em
+ * produção quando o token do número expirou, e ele seguiu mudo depois do token ser renovado.
+ */
 async function defaultOnSendFailed(conversationId: string) {
   if (!conversationId) return;
-  const { requestHumanTakeover } = await import('@/server/attendance/conversation-repository');
-  await requestHumanTakeover(conversationId, 'ai_suggested');
+  const { flagConversationForHuman } = await import('@/server/attendance/conversation-repository');
+  await flagConversationForHuman(conversationId, 'ai_suggested');
 }
 
 /**

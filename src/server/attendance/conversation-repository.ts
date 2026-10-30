@@ -149,16 +149,24 @@ export async function commitAutomatedReply(conversationId: string, reply: Automa
 }
 
 /**
- * Põe a conversa na fila do vendedor sem passar por uma resposta automática. Usado quando o
- * envio ao WhatsApp falha: o cliente está esperando, a resposta não chegou, e alguém precisa ver.
+ * Põe a conversa na fila do vendedor SEM tirá-la da automação. Usado quando o envio ao WhatsApp
+ * falha: o cliente está esperando, a resposta não chegou, e alguém precisa ver.
+ *
+ * A versão anterior marcava `owner: 'human'` aqui, e isso desligou o agente em produção. O token
+ * do número expirou, o envio falhou, a conversa virou humana — e o agente continuou mudo mesmo
+ * depois do token ser renovado, porque `reserveAutomatedTurn` exige automação como dona.
+ *
+ * Falha de envio é problema de infraestrutura, não sinal de que o cliente quer falar com gente.
+ * Quem tira a conversa da automação é o pedido explícito do cliente, o eco do vendedor pelo
+ * celular da loja, ou o vendedor assumindo no painel.
  */
-export async function requestHumanTakeover(conversationId: string, reason: HandoffReason, now = new Date()) {
+export async function flagConversationForHuman(conversationId: string, reason: HandoffReason, now = new Date()) {
   return getDb().transaction(async (tx) => {
     const [current] = await tx.select().from(conversations)
       .where(eq(conversations.id, conversationId)).for('update').limit(1);
     if (!current || current.status !== 'open') return null;
     const [row] = await tx.update(conversations)
-      .set({ owner: 'human', handoffRequestedAt: current.handoffRequestedAt ?? now, turnLockedUntil: null })
+      .set({ handoffRequestedAt: current.handoffRequestedAt ?? now, turnLockedUntil: null })
       .where(eq(conversations.id, conversationId)).returning();
     if (!current.handoffRequestedAt) {
       await tx.insert(handoffs).values({ conversationId, event: 'requested', reason, occurredAt: now });
