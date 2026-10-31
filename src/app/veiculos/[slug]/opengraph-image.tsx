@@ -5,7 +5,6 @@ import {
   formatKilometers,
   formatPrice,
 } from '@/data/inventory-vehicles';
-import { getDemoVehicle } from '@/data/mock-vehicles';
 import { OG_CONTENT_TYPE, OG_SIZE, loadOgFonts, loadPublicImage } from '@/lib/og';
 import { getPublicVehicleWithPhotos } from '@/server/vehicles/service';
 import { toCatalogVehicle } from '@/server/vehicles/public-catalog';
@@ -18,9 +17,9 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const { slug } = await params;
   await connection();
   const publicVehicle = await getPublicVehicleWithPhotos(slug);
-  const stockVehicle = publicVehicle ? toCatalogVehicle({ ...publicVehicle, image: publicVehicle.images[0] ?? null }) : null;
-  const demoVehicle = stockVehicle ? undefined : getDemoVehicle(slug);
-  const vehicle = stockVehicle ?? demoVehicle;
+  const vehicle = publicVehicle
+    ? toCatalogVehicle({ ...publicVehicle, image: publicVehicle.images[0] ?? null })
+    : null;
 
   if (!vehicle) return new Response('Not found', { status: 404 });
 
@@ -31,15 +30,11 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     }).catch(() => loadPublicImage('/images/fachada.png'))
     : loadPublicImage(vehicle.image)]);
 
-  const facts = stockVehicle
-    ? [
-        stockVehicle.year !== undefined ? String(stockVehicle.year) : undefined,
-        stockVehicle.kilometers !== undefined
-          ? formatKilometers(stockVehicle.kilometers)
-          : undefined,
-        stockVehicle.color,
-      ].filter((fact): fact is string => Boolean(fact))
-    : ['Apresentação ilustrativa'];
+  const facts = [
+    vehicle.year !== undefined ? String(vehicle.year) : undefined,
+    vehicle.kilometers !== undefined ? formatKilometers(vehicle.kilometers) : undefined,
+    vehicle.color,
+  ].filter((fact): fact is string => Boolean(fact));
 
   return new ImageResponse(
     (
@@ -91,7 +86,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
               ))}
             </div>
 
-            {stockVehicle && (
+            {vehicle.priceBRL > 0 && (
               <div
                 style={{
                   display: 'flex',
@@ -101,7 +96,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
                   lineHeight: 1,
                 }}
               >
-                {formatPrice(stockVehicle.priceBRL)}
+                {formatPrice(vehicle.priceBRL)}
               </div>
             )}
           </div>

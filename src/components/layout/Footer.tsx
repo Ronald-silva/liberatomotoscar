@@ -14,15 +14,14 @@ export function Footer() {
           </p>
         </div>
         <nav className="footer-links" aria-label="Navegação do rodapé">
-          <Link href="/#vitrine">Seleção</Link>
+          <Link href="/#vitrine">Veículos</Link>
           <Link href="/#experiencia">Experiência</Link>
-          <Link href="/#localizacao">Localização</Link>
+          <Link href="/#localizacao">A loja</Link>
           <WhatsAppLink subject="a loja" placement="footer">WhatsApp</WhatsAppLink>
         </nav>
       </div>
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} {STORE.name}.</span>
-        <span className="footer-note">Prévia comercial • confirme disponibilidade e condições com a loja</span>
         <span className="footer-signature">By RonalDigital Tech</span>
       </div>
     </footer>
