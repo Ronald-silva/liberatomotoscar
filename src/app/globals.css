@@ -378,6 +378,10 @@ img { max-width: 100%; }
 .footer-links a:hover { color: var(--red); }
 .footer-bottom { display: flex; justify-content: space-between; gap: var(--space-4); padding-block: var(--space-4); border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .68rem; }
 .footer-signature { flex: none; white-space: nowrap; }
+/* Como link, o crédito precisa se anunciar clicável e ter alvo de toque: o rodapé é a área
+   que mais se lê no celular com o dedo. */
+.footer-signature a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255,255,255,.3); transition: color var(--duration-fast) var(--ease), text-decoration-color var(--duration-fast) var(--ease); }
+.footer-signature a:hover { color: var(--white); text-decoration-color: currentColor; }
 
 .detail-page { min-height: 100dvh; background: var(--bg); }
 .detail-hero { padding-block: 132px var(--space-9); }
