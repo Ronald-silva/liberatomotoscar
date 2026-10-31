@@ -1,8 +1,9 @@
 /**
  * Dados da loja usados por metadados, dados estruturados, contato e rodapé.
  * Origem: captura do perfil do Google enviada pelo usuário em 22/10/2026.
- * Horário de funcionamento e redes sociais seguem sem confirmação e por isso
- * não aparecem aqui nem nos dados estruturados.
+ * Redes sociais seguem sem confirmação e por isso não aparecem aqui. O horário de
+ * funcionamento mora em `store-policy.ts`, junto dos outros fatos que o lojista
+ * confirmou — este arquivo guarda identidade e endereço.
  */
 export const STORE = {
   name: 'Liberato Motos Car',

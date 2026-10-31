@@ -40,6 +40,21 @@ describe('política comercial da loja', () => {
     expect(STORE_POLICY.horario).toContain('domingos');
   });
 
+  it('mantém a frase e o horário de máquina dizendo a mesma coisa', () => {
+    // A frase vai ao prompt da Dayse; a forma estruturada vai ao JSON-LD e à página. São dois
+    // campos porque a redação da frase é própria — mas um não pode mudar sem o outro.
+    const { abre, fecha, dias, rotulo } = STORE_POLICY.horarioEstruturado;
+    expect(abre).toBe('09:00');
+    expect(fecha).toBe('18:00');
+    // "das 9h às 18h" e "09:00"/"18:00" têm de bater.
+    expect(STORE_POLICY.horario).toContain(`${Number(abre.slice(0, 2))}h`);
+    expect(STORE_POLICY.horario).toContain(`${Number(fecha.slice(0, 2))}h`);
+    // "fechado aos domingos" e a lista de dias têm de bater.
+    expect(dias).not.toContain('Sunday');
+    expect(dias).toHaveLength(6);
+    expect(rotulo).toContain('sábado');
+  });
+
   it('a garantia é a legal do consumidor, sem prometer cobertura própria', () => {
     expect(STORE_POLICY.garantia).toContain('Código de Defesa do Consumidor');
     expect(resumoDaPolitica().confirmado.garantia).toBeTruthy();

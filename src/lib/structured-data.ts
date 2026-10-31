@@ -1,10 +1,13 @@
 import { GOOGLE_PROFILE, SITE_URL, STORE, STORE_STREET_ADDRESS } from '@/data/store';
+import { STORE_POLICY } from '@/data/store-policy';
 import type { InventoryVehicle } from '@/data/inventory-vehicles';
 
 /**
  * Construtores de JSON-LD. Só descrevem o que o anúncio ou o perfil da loja
- * já afirmam. Horário de funcionamento, nota de avaliação e condições de
- * crédito ficam de fora enquanto não houver confirmação da loja.
+ * já afirmam. O horário entrou quando o lojista confirmou (ver `store-policy.ts`);
+ * nota de avaliação e condições de crédito seguem de fora — a primeira porque
+ * marcar avaliação de outra plataforma como própria contraria as diretrizes do
+ * Google, a segunda porque ninguém informou parcela nem juros.
  */
 
 const POSTAL_ADDRESS = {
@@ -27,6 +30,12 @@ export function buildAutoDealerSchema(): Record<string, unknown> {
     telephone: STORE.phoneE164,
     address: POSTAL_ADDRESS,
     areaServed: `${STORE.city}, ${STORE.state}`,
+    openingHoursSpecification: [{
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: [...STORE_POLICY.horarioEstruturado.dias],
+      opens: STORE_POLICY.horarioEstruturado.abre,
+      closes: STORE_POLICY.horarioEstruturado.fecha,
+    }],
     sameAs: [GOOGLE_PROFILE.url],
   };
 }
