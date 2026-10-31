@@ -12,6 +12,7 @@ import {
 export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: InventoryVehicle; vehicles: InventoryVehicle[]; images: string[] }) {
   const isSold = vehicle.availability === 'vendido';
   const isReserved = vehicle.availability === 'reservado';
+  const rotuloDisponibilidade = isSold ? 'Vendido' : isReserved ? 'Reservado' : null;
   const others = vehicles.filter((item) => item.slug !== vehicle.slug);
   const related = [
     ...others.filter((item) => item.category === vehicle.category),
@@ -35,7 +36,7 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
               alt={vehicle.imageAlt}
               badge={images.length ? 'FOTO DO ANÚNCIO' : 'FOTO INDISPONÍVEL'}
               singleImageCaption={images.length
-                ? 'Uma imagem foi fornecida para este anúncio. Peça mais fotos à loja para avaliar outros ângulos.'
+                ? ''
                 : 'A foto deste anúncio está indisponível no momento. Consulte a loja para recebê-la.'}
             />
             <div>
@@ -46,14 +47,19 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
               <div className="detail-stock-facts" aria-label="Dados principais do anúncio">
                 {vehicle.year !== undefined && <span>{vehicle.year}</span>}
                 {vehicle.kilometers !== undefined && <span>{formatKilometers(vehicle.kilometers)}</span>}
-                <span>{vehicle.color}</span>
+                {vehicle.color && <span>{vehicle.color}</span>}
               </div>
-              <p className="detail-price">{formatPrice(vehicle.priceBRL)}</p>
+              <p className="detail-price">
+                {vehicle.priceBRL > 0 ? formatPrice(vehicle.priceBRL) : 'Consulte o preço'}
+              </p>
               {isSold ? <p className="detail-price-note">Preço anunciado antes da venda.</p> : null}
-              <p className="detail-subtitle">{vehicle.shortDescription}</p>
-              <ul className="detail-highlights">
-                {vehicle.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}
-              </ul>
+              {/* Única ressalva da página, no ponto em que a decisão acontece. O resumo e os
+                  destaques saíram daqui: repetiam, cortada, a descrição que vem logo abaixo e
+                  os dados que já estão na linha acima. */}
+              <p className="detail-data-note">
+                Preço, quilometragem, disponibilidade e condições comerciais devem ser
+                confirmados com a loja antes da negociação.
+              </p>
             </div>
           </div>
         </div>
@@ -65,7 +71,6 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
             <p className="eyebrow"><span className="eyebrow-line" /> SOBRE ESTE VEÍCULO</p>
             <h2 id="information-title">Conheça os detalhes.</h2>
             <p className="detail-description">{vehicle.description}</p>
-            <p className="detail-data-note">Preço, quilometragem, disponibilidade e condições comerciais devem ser confirmados com a loja antes da negociação.</p>
           </div>
 
           <div className="detail-specification" aria-labelledby="specification-title">
@@ -79,9 +84,13 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
               {vehicle.manufactureYear !== undefined && <div><dt>Ano de fabricação</dt><dd>{vehicle.manufactureYear}</dd></div>}
               {vehicle.modelYear !== undefined && <div><dt>Ano-modelo</dt><dd>{vehicle.modelYear}</dd></div>}
               <div><dt>Categoria</dt><dd>{vehicle.categoryLabel}</dd></div>
-              <div><dt>Cor</dt><dd>{vehicle.color}</dd></div>
-              <div><dt>Condição anunciada</dt><dd>{vehicle.condition}</dd></div>
-              {vehicle.availability && <div><dt>Disponibilidade</dt><dd>{vehicle.availability}</dd></div>}
+              {vehicle.color && <div><dt>Cor</dt><dd>{vehicle.color}</dd></div>}
+              {vehicle.condition && <div><dt>Condição anunciada</dt><dd>{vehicle.condition}</dd></div>}
+              {/* "disponivel" é o estado normal e chegava cru do banco, sem acento. Só vale
+                  linha na ficha quando o veículo está fora do normal. */}
+              {rotuloDisponibilidade && (
+                <div><dt>Disponibilidade</dt><dd>{rotuloDisponibilidade}</dd></div>
+              )}
             </dl>
 
             {vehicle.factoryReference && (
@@ -124,7 +133,7 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
             <h2 id="detail-contact-title">{isSold ? 'Este veículo foi vendido.' : isReserved ? 'Veículo reservado.' : 'Gostou deste veículo?'}</h2>
             <p>{isSold ? 'Veja outros anúncios para encontrar uma opção disponível.'
               : isReserved ? 'Este veículo está reservado. Consulte a loja para saber se a reserva mudou.'
-                : 'Confirme a disponibilidade e tire suas dúvidas diretamente com a Liberato Motos Car.'}</p>
+                : 'Fale com a equipe da Liberato Motos Car pelo WhatsApp.'}</p>
           </div>
           <div className="detail-cta">
             {!isSold ? <WhatsAppLink

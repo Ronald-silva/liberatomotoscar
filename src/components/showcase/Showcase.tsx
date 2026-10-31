@@ -11,9 +11,12 @@ const CATEGORIAS: { valor: string; rotulo: string }[] = [
 ];
 
 /**
- * Vitrine. Componente de servidor: os sete cards estão no HTML servido, e o
- * filtro é a única parte que roda no navegador. A numeração dos cards vem de
- * um contador CSS, que reconta sozinho quando o filtro esconde algum.
+ * Vitrine. Componente de servidor: os cards estão no HTML servido, e o filtro é a única
+ * parte que roda no navegador.
+ *
+ * Os cards já tiveram um número ("01", "02"…) sobre a foto, vindo de um contador CSS. Saiu:
+ * era posição na grade, não referência de estoque — mudava quando o filtro escondia um
+ * veículo e não servia para o cliente citar nada no WhatsApp.
  */
 export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
   const opcoes: OpcaoFiltro[] = [
@@ -30,7 +33,6 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
       <div className="container">
         <div className="section-topline">
           <span className="eyebrow"><span className="eyebrow-line" /> VEÍCULOS LIBERATO</span>
-          <span className="section-index">01 / 03</span>
         </div>
         <div className="showcase-heading">
           <div>
@@ -46,7 +48,7 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
         </div>
 
         <p className="demo-note" role="note">
-          DADOS FORNECIDOS PARA OS ANÚNCIOS. CONFIRME PREÇO, DISPONIBILIDADE E CONDIÇÕES COM A LOJA.
+          CONFIRME PREÇO, DISPONIBILIDADE E CONDIÇÕES COM A LOJA.
         </p>
 
         <div className="vehicle-grid">
@@ -63,21 +65,24 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
                     className="vehicle-image"
                   />
                 </span>
-                <span className="vehicle-number" aria-hidden="true" />
                 <span className="vehicle-type">{vehicle.categoryLabel}</span>
               </div>
               <div className="vehicle-content">
                 <div>
-                  <p className="vehicle-kicker">{vehicle.categoryLabel.toUpperCase()} • {vehicle.condition.toUpperCase()}</p>
+                  {vehicle.condition && (
+                    <p className="vehicle-kicker">{vehicle.condition.toUpperCase()}</p>
+                  )}
                   <h3>{vehicle.title}</h3>
                   <p>{vehicle.shortDescription}</p>
                   <dl className="vehicle-facts">
                     {vehicle.year !== undefined && <div><dt>Ano</dt><dd>{vehicle.year}</dd></div>}
                     {vehicle.kilometers !== undefined && <div><dt>Km</dt><dd>{formatKilometers(vehicle.kilometers)}</dd></div>}
-                    <div><dt>Cor</dt><dd>{vehicle.color}</dd></div>
+                    {vehicle.color && <div><dt>Cor</dt><dd>{vehicle.color}</dd></div>}
                   </dl>
                 </div>
-                <strong className="vehicle-price">{formatPrice(vehicle.priceBRL)}</strong>
+                <strong className="vehicle-price">
+                  {vehicle.priceBRL > 0 ? formatPrice(vehicle.priceBRL) : 'Consulte o preço'}
+                </strong>
                 <div className="vehicle-links">
                   <Link href={`/veiculos/${vehicle.slug}`} className="text-link">
                     Ver detalhes de {vehicle.model} <ArrowUpRight size={17} aria-hidden="true" />
