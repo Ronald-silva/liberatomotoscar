@@ -93,9 +93,9 @@ export function Viewer360({
             </button>
           </div>
         </div>
-      ) : (
+      ) : singleImageCaption ? (
         <p className="viewer-caption">{singleImageCaption}</p>
-      )}
+      ) : null}
     </div>
   );
 }

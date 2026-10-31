@@ -46,8 +46,22 @@ export const STORE_POLICY = {
    */
   garantia: 'a garantia legal prevista no Código de Defesa do Consumidor; a loja não oferece '
     + 'garantia contratual própria além dela' as string | null,
-  /** Confirmado pelo lojista em 30/10/2026. */
+  /** Confirmado pelo lojista em 30/10/2026, e reconfirmado em 31/10/2026. */
   horario: 'das 9h às 18h, fechado aos domingos' as string | null,
+  /**
+   * O mesmo horário em forma de máquina, para `openingHoursSpecification` no JSON-LD e para a
+   * seção de contato do site. Fica ao LADO da frase em vez de gerá-la: a frase acima entra no
+   * prompt da Dayse com redação própria, e derivá-la mudaria o texto que o agente já usa.
+   * `store-policy.test.ts` compara os dois campos, então eles não podem divergir em silêncio.
+   */
+  horarioEstruturado: {
+    abre: '09:00',
+    fecha: '18:00',
+    /** Schema.org exige os nomes em inglês. Domingo fora: a loja fecha. */
+    dias: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    /** Para a página, onde o cliente lê em português. */
+    rotulo: 'Segunda a sábado, 9h às 18h',
+  },
   /** Confirmado em 30/10/2026: ver veículo é sempre com hora marcada. */
   visitaExigeAgendamento: true,
   /**

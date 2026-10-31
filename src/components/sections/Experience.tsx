@@ -27,7 +27,6 @@ export function Experience() {
         <div className="container">
           <div className="section-topline">
             <span className="eyebrow"><span className="eyebrow-line" /> EXPERIÊNCIA LIBERATO</span>
-            <span className="section-index">02 / 03</span>
           </div>
           <div className="experience-heading">
             <h2 id="experience-title" className="section-title">

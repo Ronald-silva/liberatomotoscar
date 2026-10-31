@@ -1,9 +1,9 @@
 import { ArrowUpRight, Star } from 'lucide-react';
-import { GOOGLE_PROFILE, STORE } from '@/data/store';
+import { GOOGLE_PROFILE } from '@/data/store';
+import { STORE_POLICY } from '@/data/store-policy';
 import type { InventoryVehicle } from '@/data/inventory-vehicles';
 
 export function Credibility({ vehicles }: { vehicles: InventoryVehicle[] }) {
-  const brands = [...new Set(vehicles.map((vehicle) => vehicle.brand))];
   const motorcycles = vehicles.filter((vehicle) => vehicle.category === 'moto').length;
   const cars = vehicles.length - motorcycles;
   return (
@@ -39,17 +39,18 @@ export function Credibility({ vehicles }: { vehicles: InventoryVehicle[] }) {
         </div>
 
         <div className="proof">
-          <span className="proof-label">Marcas nos anúncios</span>
-          <span className="proof-value proof-value--list">{brands.join(' · ') || 'A confirmar'}</span>
-          <span className="proof-note">Seminovos conferidos com a loja</span>
+          <span className="proof-label">Antes da vitrine</span>
+          <span className="proof-value proof-value--list">Veículo revisado</span>
+          <span className="proof-note">
+            {STORE_POLICY.revisaoAntesDaVitrine
+              ? `${STORE_POLICY.revisaoAntesDaVitrine.charAt(0).toLocaleUpperCase('pt-BR')}${STORE_POLICY.revisaoAntesDaVitrine.slice(1)}.`
+              : null}
+          </span>
         </div>
 
         <div className="proof">
           <span className="proof-label">Atendimento</span>
-          <span className="proof-value proof-value--list">{STORE.tagline}</span>
-          <span className="proof-note">
-            {STORE.district}, {STORE.city}/{STORE.state}
-          </span>
+          <span className="proof-value proof-value--list">WhatsApp e loja física</span>
         </div>
       </div>
     </section>

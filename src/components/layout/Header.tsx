@@ -11,7 +11,7 @@ export function Header() {
         <Brand priority />
 
         <nav className="desktop-nav" aria-label="Navegação principal">
-          <Link href="/#vitrine">Seleção</Link>
+          <Link href="/#vitrine">Veículos</Link>
           <Link href="/#experiencia">Experiência</Link>
           <Link href="/#localizacao">A loja</Link>
         </nav>

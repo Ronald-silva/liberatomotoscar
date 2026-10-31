@@ -1,4 +1,8 @@
-import type { VehicleCategory } from './mock-vehicles';
+/**
+ * Vivia em `mock-vehicles.ts`, junto dos três conceitos ilustrativos. O arquivo saiu quando
+ * as rotas de conceito passaram a responder 404; o tipo ficou, porque é real.
+ */
+export type VehicleCategory = 'moto' | 'carro';
 
 type TechnicalKey =
   | 'engine' | 'displacement' | 'fuel' | 'power' | 'torque' | 'transmission'
@@ -41,8 +45,10 @@ export interface InventoryVehicle {
   priceBRL: number;
   category: VehicleCategory;
   categoryLabel: string;
-  color: string;
-  condition: 'Seminovo' | 'Não informada';
+  /** Ausente quando o cadastro não informa. Campo vazio não se exibe. */
+  color?: string;
+  /** Ausente quando o cadastro não informa. Campo vazio não se exibe. */
+  condition?: 'Seminovo';
   availability?: 'disponivel' | 'reservado' | 'vendido';
   /** PNG com fundo transparente, fornecido pela loja. Serve ao palco escuro do
    *  card e também ao painel claro das imagens de Open Graph. */

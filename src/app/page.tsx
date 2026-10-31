@@ -1,4 +1,3 @@
-import { Suspense } from 'react';
 import { connection } from 'next/server';
 import { Header } from '@/components/layout/Header';
 import { Hero } from '@/components/hero/Hero';
@@ -22,9 +21,10 @@ export default async function Home() {
       <main id="conteudo">
         <Hero />
         <Reveal><Credibility vehicles={vehicles} /></Reveal>
-        <Suspense fallback={<div className="showcase-loading" aria-hidden="true" />}>
-          <Reveal><Showcase vehicles={vehicles} /></Reveal>
-        </Suspense>
+        {/* Sem <Suspense>: `vehicles` já foi aguardado acima, então o boundary nunca
+            suspendia — só fazia o Next transmitir a vitrine fora de ordem, depois do
+            rodapé. Sem JavaScript, o catálogo aparecia no fim da página. */}
+        <Reveal><Showcase vehicles={vehicles} /></Reveal>
         <Reveal><Experience /></Reveal>
         <Reveal><Contact /></Reveal>
       </main>

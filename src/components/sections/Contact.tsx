@@ -1,6 +1,7 @@
-import { ArrowUpRight, MapPin, Phone } from 'lucide-react';
+import { ArrowUpRight, CalendarCheck, Clock, MapPin, Phone } from 'lucide-react';
 import { WhatsAppLink } from '@/components/marketing/WhatsAppLink';
-import { MAP_EMBED_URL, MAP_URL, STORE, STORE_ADDRESS_LINE, STORE_STREET_ADDRESS } from '@/data/store';
+import { MAP_EMBED_URL, MAP_URL, STORE, STORE_ADDRESS_LINE } from '@/data/store';
+import { STORE_POLICY } from '@/data/store-policy';
 
 export function Contact() {
   return (
@@ -8,7 +9,6 @@ export function Contact() {
       <div className="container">
         <div className="section-topline">
           <span className="eyebrow"><span className="eyebrow-line" /> ONDE ESTAMOS</span>
-          <span className="section-index">03 / 03</span>
         </div>
         <div className="contact-grid">
           <div>
@@ -21,7 +21,20 @@ export function Contact() {
             </p>
             <ul className="contact-details">
               <li><MapPin size={19} aria-hidden="true" /> {STORE_ADDRESS_LINE}</li>
-              <li><Phone size={19} aria-hidden="true" /> {STORE.phoneDisplay}</li>
+              <li><Clock size={19} aria-hidden="true" /> {STORE_POLICY.horarioEstruturado.rotulo}</li>
+              {/* O horário sozinho convidaria o cliente a aparecer de surpresa, e
+                  `visitaExigeAgendamento` diz o contrário: ver veículo é sempre com hora
+                  marcada. As duas linhas andam juntas ou a página engana. */}
+              {STORE_POLICY.visitaExigeAgendamento && (
+                <li>
+                  <CalendarCheck size={19} aria-hidden="true" />
+                  Para ver um veículo, combine o horário antes pelo WhatsApp
+                </li>
+              )}
+              <li>
+                <Phone size={19} aria-hidden="true" />
+                <a href={`tel:${STORE.phoneE164}`}>{STORE.phoneDisplay}</a>
+              </li>
             </ul>
             <div className="contact-actions">
               <WhatsAppLink
@@ -45,10 +58,12 @@ export function Contact() {
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
             />
+            {/* A etiqueta já teve o endereço completo e depois bairro/cidade — a poucos
+                centímetros da lista ao lado, que diz a mesma coisa. Agora só nomeia o ponto
+                e oferece a ação; o endereço tem um lugar só na página. */}
             <div className="map-label">
               <div>
-                <span>LIBERATO MOTOS CAR</span>
-                <strong>{STORE_STREET_ADDRESS}<br />{STORE.district} • {STORE.city}/{STORE.state}</strong>
+                <span className="map-label-name">{STORE.name}</span>
               </div>
               <a href={MAP_URL} target="_blank" rel="noopener noreferrer">
                 ABRIR MAPA <ArrowUpRight size={17} aria-hidden="true" />
