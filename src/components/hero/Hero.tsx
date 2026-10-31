@@ -22,7 +22,7 @@ export function Hero() {
           </p>
           <div className="hero-actions">
             <Link className="button button--red" href="#vitrine">
-              Explorar seleção <ArrowUpRight size={18} aria-hidden="true" />
+              Explorar veículos <ArrowUpRight size={18} aria-hidden="true" />
             </Link>
             <WhatsAppLink
               className="button button--outline"
@@ -52,7 +52,7 @@ export function Hero() {
         <div className="container hero-bottom-inner">
           <span>LIBERATO MOTOS CAR</span>
           <span>COMPRA <b>•</b> VENDA <b>•</b> TROCA</span>
-          <Link href="#vitrine" aria-label="Ir para a seleção de veículos">
+          <Link href="#vitrine" aria-label="Ir para os veículos">
             DESLIZE PARA EXPLORAR <ArrowDown size={16} aria-hidden="true" />
           </Link>
         </div>
