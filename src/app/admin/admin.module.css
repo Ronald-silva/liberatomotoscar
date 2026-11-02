@@ -3,7 +3,7 @@
   --admin-surface: #171c24;
   --admin-ink: #f7f7f4;
   --admin-muted: #c7cbd2;
-  --admin-line: #4d535d;
+  --admin-line: #6e747e;
   --admin-accent: #ba1d28;
   --admin-ok: #8fe0a8;
   --admin-warn: #f2c46d;
@@ -71,6 +71,10 @@
 .button:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
 .button:disabled { opacity: 0.65; cursor: wait; }
 .buttonSecondary { background: transparent; border-color: var(--admin-line); }
+/* Ação destrutiva: não é o vermelho cheio do primário (esse é a ação que o dono mais quer, "Criar
+   arte") nem o contorno neutro do secundário (esse é "mais uma opção"). Contorno e texto na cor de
+   perigo, que já passa no contraste de texto; o alvo de toque é o do .button e não muda. */
+.buttonDestructive { background: transparent; border-color: var(--admin-danger); color: var(--admin-danger); }
 .small { margin: var(--admin-space-3) 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.5; }
 
 .listScreen { align-items: flex-start; justify-content: center; padding: var(--admin-space-2); }

@@ -108,7 +108,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
         <h2 id="fotos-title" className={styles.subheading}>{isNew ? <span className={styles.step}>2</span> : null}Fotos</h2>
         <PhotoGallery vehicleId={vehicleId} draft={draft} photos={photos} />
         <PhotoUpload vehicleId={vehicleId} draft={draft} />
-        <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={openingArt}
+        <button className={styles.button} type="button" disabled={openingArt}
           onClick={() => void openArt()}>{openingArt ? 'Salvando anúncio…' : 'Criar arte'}</button>
         <FormNotice message={artMessage} vehicleId={vehicleId} role="alert" />
       </section>
