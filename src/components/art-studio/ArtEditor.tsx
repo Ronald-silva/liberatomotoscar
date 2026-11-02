@@ -6,7 +6,7 @@ import { useCallback, useRef, useState } from 'react';
 import type Konva from 'konva';
 import styles from '@/app/admin/admin.module.css';
 import artStyles from './art-studio.module.css';
-import { deliverArt } from './share-art';
+import { checkVersion, deliverArt, runArtDelivery } from './share-art';
 import { artFormats, templatesForStatus, type ArtFormat, type ArtTemplate } from './templates';
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -57,23 +57,19 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
     try {
       if (note.trim() && !noteApproved) throw new Error('Revise e confirme o texto auxiliar antes de enviar.');
       if (!photoLoaded || !stageRef.current) throw new Error('A foto ainda não carregou. Aguarde ou escolha outra foto.');
-      await document.fonts.ready;
-      // JPEG: foto de veículo em PNG passa de vários MB e o WhatsApp recomprime de qualquer forma.
-      const blob = await stageRef.current.toBlob({ mimeType: 'image/jpeg', quality: 0.92, pixelRatio: 1 });
-      if (!blob) throw new Error('Não foi possível gerar a arte neste aparelho.');
-      const response = await fetch(`/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? 'Não foi possível conferir o anúncio. Tente de novo.');
+      const stage = stageRef.current;
       const canNativeShare = mode === 'share' && typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
-      const outcome = await deliverArt({
-        blob, filename: `liberato-${vehicle.slug}-${format}.jpg`, download: downloadBlob,
-        share: canNativeShare ? (data) => navigator.share(data) : undefined,
-        canShare: canNativeShare ? (data) => navigator.canShare(data) : undefined,
-      });
-      if (outcome === 'shared') setMessage('Arte enviada. Confira antes de publicar.');
-      else if (outcome === 'downloaded') setMessage(mode === 'share'
-        ? 'Este aparelho não abriu o envio, então a arte foi baixada. Confira antes de publicar.'
-        : 'Arte pronta para baixar. Confira antes de publicar.');
+      setMessage(await runArtDelivery({
+        mode,
+        // JPEG: foto de veículo em PNG passa de vários MB e o WhatsApp recomprime de qualquer forma.
+        render: async () => { await document.fonts.ready; return stage.toBlob({ mimeType: 'image/jpeg', quality: 0.92, pixelRatio: 1 }); },
+        check: () => checkVersion(() => fetch(`/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' })),
+        deliver: (blob) => deliverArt({
+          blob, filename: `liberato-${vehicle.slug}-${format}.jpg`, download: downloadBlob,
+          share: canNativeShare ? (data) => navigator.share(data) : undefined,
+          canShare: canNativeShare ? (data) => navigator.canShare(data) : undefined,
+        }),
+      }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Não foi possível gerar a arte. Tente de novo.');
     } finally { setBusy(false); }
