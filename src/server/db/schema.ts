@@ -249,6 +249,30 @@ export const handoffs = pgTable('handoffs', {
   index('handoffs_conversation_time_idx').on(table.conversationId, table.occurredAt),
 ]);
 
+// Agenda de visitas. Existe fora de `conversations.facts` de propósito: aquela coluna guarda só
+// as 7 últimas entradas, e um agendamento ali sumiria de uma conversa longa. Nome e telefone ficam
+// na própria linha porque o agendamento lançado à mão não tem conversa. `scheduledFor` nulo é a
+// visita combinada sem hora firme: `quote` guarda a frase do cliente, nunca um palpite.
+export const visitAppointments = pgTable('visit_appointments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id, { onDelete: 'set null' }),
+  customerName: text('customer_name'),
+  customerPhone: text('customer_phone'),
+  scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
+  quote: text('quote').notNull(),
+  source: text('source', { enum: ['agent', 'manual'] }).notNull(),
+  createdBy: text('created_by').references(() => usersTable.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('visit_appointments_source_valid', sql`${table.source} IN ('agent', 'manual')`),
+  // Uma visita por conversa: quem remarca atualiza a linha. Parcial porque o manual não tem conversa.
+  uniqueIndex('visit_appointments_conversation_uidx').on(table.conversationId)
+    .where(sql`${table.conversationId} IS NOT NULL`),
+  index('visit_appointments_scheduled_idx').on(table.scheduledFor),
+]);
+
 // Contadores do atendimento público: somente números, nunca texto do comprador.
 export const attendanceUsage = pgTable('attendance_usage', {
   channel: text('channel', { enum: ['site', 'whatsapp'] }).notNull(),
