@@ -127,34 +127,6 @@ export function ensureAttendanceTables(): Promise<void> {
           CREATE INDEX IF NOT EXISTS "whatsapp_tenants_tenant_id_idx"
             ON "whatsapp_tenants" ("tenant_id")
         `);
-        // Agenda de visitas (migração 0010). `vehicle_id` e `created_by` ficam sem FK aqui, como
-        // `assigned_to` em conversations: `vehicles` e "user" não são criadas por este arquivo, e um
-        // REFERENCES para tabela ausente derrubaria o DDL e as demais criações junto.
-        await db.execute(sql`
-          CREATE TABLE IF NOT EXISTS "visit_appointments" (
-            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-            "conversation_id" uuid REFERENCES "conversations"("id") ON DELETE CASCADE,
-            "vehicle_id" uuid,
-            "customer_name" text,
-            "customer_phone" text,
-            "scheduled_for" timestamp with time zone,
-            "quote" text NOT NULL,
-            "source" text NOT NULL,
-            "created_by" text,
-            "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-            "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-            CONSTRAINT "visit_appointments_source_valid" CHECK ("source" IN ('agent', 'manual'))
-          )
-        `);
-        await db.execute(sql`
-          CREATE UNIQUE INDEX IF NOT EXISTS "visit_appointments_conversation_uidx"
-            ON "visit_appointments" ("conversation_id")
-            WHERE "conversation_id" IS NOT NULL
-        `);
-        await db.execute(sql`
-          CREATE INDEX IF NOT EXISTS "visit_appointments_scheduled_idx"
-            ON "visit_appointments" ("scheduled_for")
-        `);
       } catch (error) {
         ensuredPromise = null;
         console.warn('Aviso ao verificar tabelas de atendimento:', error instanceof Error ? error.message : 'erro');

@@ -12,9 +12,9 @@ Escrito em 2 de novembro de 2026, sobre a branch `painel-reformulacao-agenda`. O
 
 A tabela `visit_appointments` (migração `drizzle/0010_majestic_newton_destine.sql`) **não foi aplicada na produção**. O registro de migrações da produção tem 9 entradas, a mais nova de 27/10/2026, e a tabela não existe lá.
 
-- Enquanto você não autorizar aplicar a migração, **a demonstração da Agenda só funciona num banco que já tenha a tabela** (o de desenvolvimento).
-- Se a agenda falhar por isso, a tela agora avisa "Não foi possível carregar a agenda agora" em vez de quebrar. Mas aviso na frente do cliente não é demonstração.
-- **Cuidado antes de abrir `/admin/agenda` na produção.** O código tem um criador automático de tabelas (`ensure-schema.ts`) que também cria `visit_appointments` ao primeiro acesso, se o usuário do banco tiver permissão. Se isso acontecer, a migração 0010 depois falha com "tabela já existe". Decida a ordem com calma e antes: ou aplica a migração primeiro, ou não abre a agenda em produção.
+- **Aplicar a migração 0010 é pré-requisito da Agenda.** Enquanto você não autorizar, a demonstração da Agenda só funciona num banco que já tenha a tabela (o de desenvolvimento).
+- Abrir a aba Agenda antes da migração **não estraga nada**: a tela só mostra "Não foi possível carregar a agenda agora". A correção é aplicar a migração e atualizar a página.
+- Mesmo assim, aviso na frente do cliente não é demonstração: aplique antes.
 
 ### 0.2 O WhatsApp conectado é o número de teste da Meta
 
@@ -169,7 +169,7 @@ Regra geral: **o painel agora explica a falha em português. Leia a mensagem em 
 - **Salvar não funciona (veículo ou visita):** o painel mostra o motivo no formulário. Leia, corrija o campo indicado, e toque de novo. Não repita o toque várias vezes.
 - **Arte não envia:** toque em **Baixar** e diga que manda pela galeria.
 - **Dayse não responde:** número de teste (seção 0.2). Mostre a conversa que já existe.
-- **Agenda com aviso:** banco sem a tabela (seção 0.1).
+- **Agenda com aviso:** a migração 0010 não foi aplicada nesse banco (seção 0.1).
 - **Perdeu-se no meio:** toque em **Estoque**, o primeiro botão da barra. Recomece dali.
 
 O que **não** dizer: que a agenda se preenche sozinha, que a Dayse já marca visita, que a resposta do vendedor chega ao cliente pelo painel. Nada disso existe ainda.
