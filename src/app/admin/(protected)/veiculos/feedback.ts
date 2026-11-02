@@ -28,6 +28,8 @@ const KNOWN = new Map<string, string>([
   ['Escolha moto ou carro.', 'Escolha moto ou carro.'],
 ]);
 
+// A gravação deu certo, mas a pessoa digitou enquanto ela estava em voo: nada falhou, falta salvar o resto.
+export const PENDING_EDITS_MESSAGE = 'Você alterou o anúncio enquanto eu salvava. Toque de novo.';
 export const STALE_MESSAGE = 'Este anúncio foi alterado. Recarregue antes de salvar.';
 export const isStaleMessage = (message: string) => message === STALE_MESSAGE;
 

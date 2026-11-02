@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveVehicle } from '../actions';
 import type { FormState } from '../actions';
-import { isStaleMessage, toFormMessage } from '../feedback';
+import { PENDING_EDITS_MESSAGE, isStaleMessage, toFormMessage } from '../feedback';
 
 /**
  * Dono único da versão, das pendências e da fila de escrita do rascunho.
@@ -224,9 +224,12 @@ export function useVehicleDraft({ vehicleId, initialVersion, initialFields, init
         setMessage(state.version === undefined ? state.message : null);
         return state;
       });
-      if (result.version !== undefined && !differs(fieldsRef.current, savedRef.current)) return { ok: true, message: null };
-      // Gravou, mas o que se digitou durante a gravação ainda está pendente: sem motivo da action.
-      return { ok: false, message: result.message ?? toFormMessage(null) };
+      // Escrita recusada: o motivo é o da própria action.
+      if (result.version === undefined) return { ok: false, message: result.message ?? toFormMessage(null) };
+      // Escrita feita, mas o que se digitou durante ela ainda está pendente. A mensagem de sucesso da action
+      // nunca serve de motivo; um segundo toque grava o resto (a fila) e então executa a ação.
+      if (differs(fieldsRef.current, savedRef.current)) return { ok: false, message: PENDING_EDITS_MESSAGE };
+      return { ok: true, message: null };
     } catch (error) {
       const reason = toFormMessage(error);
       setSaveState('error');

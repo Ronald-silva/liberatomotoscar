@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FormState } from '../actions';
-import { STALE_MESSAGE } from '../feedback';
+import { PENDING_EDITS_MESSAGE, STALE_MESSAGE } from '../feedback';
 import { useVehicleDraft, type DraftFields } from './useVehicleDraft';
 
 // A action de verdade é `'use server'` e puxa o serviço, que puxa autenticação e banco: nada
@@ -291,6 +291,26 @@ describe('dono do rascunho no cliente', () => {
 
     // Lista vazia significa "não falta nada"; ausente significa "não sei" — o que estava fica.
     expect(result.current.missing).toEqual(MISSING);
+  });
+
+  it('saveBeforeAction não chama de falha uma gravação que deu certo quando se digitou durante ela', async () => {
+    let release: (state: FormState) => void = () => {};
+    saveVehicle.mockImplementationOnce(() => new Promise<FormState>((resolve) => { release = resolve; }));
+    const { result } = setup();
+
+    act(() => { result.current.set('model', 'CG'); });
+    let outcome: unknown;
+    let pending: Promise<unknown> = Promise.resolve();
+    await act(async () => { pending = result.current.saveBeforeAction().then((value) => { outcome = value; }); });
+    await settle();
+    expect(saveVehicle).toHaveBeenCalledTimes(1);
+
+    act(() => { result.current.set('model', 'CG 160'); });
+    await act(async () => { release(okState(4)); await pending; });
+
+    expect(outcome).toEqual({ ok: false, message: PENDING_EDITS_MESSAGE });
+    expect((outcome as { message: string }).message).not.toBe('Não foi possível salvar agora. Tente de novo.');
+    expect((outcome as { message: string }).message).not.toBe('Veículo salvo.');
   });
 
   it('grava o que foi digitado durante uma gravação em voo', async () => {

@@ -113,6 +113,18 @@ it('publicar com gravação falhando explica no rodapé de publicação', async 
   expect(changeStatus).not.toHaveBeenCalled();
 });
 
+it('o aviso de falha da publicação fica dentro do rodapé fixo, ao lado de Publicar anúncio', async () => {
+  render(<VehicleEditor {...props} initialMissing={[]} photos={[{ id: 'p1', url: null, isCover: true }]} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Publicar anúncio' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, publicar anúncio' }));
+  const notice = await screen.findByText(SAVE_FAILED, { selector: '[role="alert"]' });
+  const footer = screen.getByRole('button', { name: 'Publicar anúncio' }).closest('[class*="editorFooter"]') as HTMLElement;
+  expect(footer).toBeTruthy();
+  expect(footer.contains(notice)).toBe(true);
+  expect(notice.parentElement).toBe(screen.getByRole('button', { name: 'Publicar anúncio' }).parentElement);
+});
+
 it('criar arte com gravação falhando explica ao lado do botão e não navega', async () => {
   render(<VehicleEditor {...props} />);
   failNextSave();
