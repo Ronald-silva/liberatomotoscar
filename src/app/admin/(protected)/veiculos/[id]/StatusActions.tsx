@@ -23,7 +23,8 @@ export function StatusActions({ vehicleId, draft, status, targets }: {
   async function change(target: VehicleStatus) {
     setBusy(true);
     setMessage(null);
-    if (!await draft.saveBeforeAction()) { setBusy(false); setConfirming(null); return; }
+    const saved = await draft.saveBeforeAction();
+    if (!saved.ok) { setMessage(saved.message); setBusy(false); setConfirming(null); return; }
     const state = await draft.enqueue((version) => {
       const data = new FormData();
       data.set('id', vehicleId);

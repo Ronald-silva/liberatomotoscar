@@ -20,7 +20,10 @@ export function DangerActions({ vehicleId, draft, canDiscard, archiveTargetAvail
   async function execute() {
     if (!confirming) return;
     setBusy(true);
-    if (!await draft.saveBeforeAction()) { setBusy(false); return; }
+    setMessage(null);
+    // A caixa de confirmação continua aberta e a explicação aparece nela, junto do botão tocado.
+    const saved = await draft.saveBeforeAction();
+    if (!saved.ok) { setMessage(saved.message); setBusy(false); return; }
     const action = confirming === 'archive' ? changeStatus : discardVehicleDraft;
     const state = await draft.enqueue((version) => {
       const data = new FormData();

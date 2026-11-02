@@ -10,7 +10,7 @@ function draft(overrides: Partial<VehicleDraft> = {}): VehicleDraft {
   return {
     fields: { brand: 'Honda', model: 'CG 160', versionName: '', year: '', mileageKm: '', color: '', description: '', price: '18.500' },
     set: vi.fn(), flush: vi.fn(), retry: vi.fn(), saveState: 'idle', message: null, isStale: false,
-    missing: [], version: 3, enqueue: vi.fn(), photoAdded: vi.fn(), photoRemoved: vi.fn(), saveBeforeAction: vi.fn(),
+    missing: [], version: 3, enqueue: vi.fn(), photoAdded: vi.fn(), photoRemoved: vi.fn(), saveBeforeAction: vi.fn(async () => ({ ok: true, message: null })),
     ...overrides,
   };
 }

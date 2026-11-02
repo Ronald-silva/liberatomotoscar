@@ -30,6 +30,12 @@ export type DraftFields = Record<DraftFieldName, string>;
 /** O mínimo que a fila precisa saber de uma escrita: a versão nova, quando houve uma. */
 export type WriteResult = { message: string | null; version?: number; missing?: readonly string[] };
 
+/**
+ * Resultado de gravar antes de uma ação principal. O motivo viaja junto porque `message` do hook
+ * aparece na seção do formulário, longe do botão tocado; quem chamou o mostra ao lado dele.
+ */
+export type ActionOutcome = { ok: boolean; message: string | null };
+
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export type VehicleDraft = {
@@ -45,7 +51,7 @@ export type VehicleDraft = {
   enqueue: <T extends WriteResult>(job: (version: number) => Promise<T>) => Promise<T>;
   photoAdded: () => void;
   photoRemoved: () => void;
-  saveBeforeAction: () => Promise<boolean>;
+  saveBeforeAction: () => Promise<ActionOutcome>;
 };
 
 type Request = 'debounced' | 'immediate';
@@ -200,7 +206,7 @@ export function useVehicleDraft({ vehicleId, initialVersion, initialFields, init
   // Publicar/arquivar só pode começar depois de qualquer campo pendente. O job entra na mesma
   // fila das fotos e lê o retrato na hora de executar, inclusive se a digitação ocorreu durante
   // um upload. Sem isto, o botão poderia publicar a versão anterior do anúncio.
-  const saveBeforeAction = useCallback(async (): Promise<boolean> => {
+  const saveBeforeAction = useCallback(async (): Promise<ActionOutcome> => {
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = null;
     try {
@@ -218,11 +224,14 @@ export function useVehicleDraft({ vehicleId, initialVersion, initialFields, init
         setMessage(state.version === undefined ? state.message : null);
         return state;
       });
-      return result.version !== undefined && !differs(fieldsRef.current, savedRef.current);
+      if (result.version !== undefined && !differs(fieldsRef.current, savedRef.current)) return { ok: true, message: null };
+      // Gravou, mas o que se digitou durante a gravação ainda está pendente: sem motivo da action.
+      return { ok: false, message: result.message ?? toFormMessage(null) };
     } catch (error) {
+      const reason = toFormMessage(error);
       setSaveState('error');
-      setMessage(toFormMessage(error));
-      return false;
+      setMessage(reason);
+      return { ok: false, message: reason };
     }
   }, [enqueue, vehicleId]);
 

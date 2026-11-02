@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { VehicleEditor } from './VehicleEditor';
 
-const { changeStatus, saveVehicle, refresh } = vi.hoisted(() => ({ changeStatus: vi.fn(), saveVehicle: vi.fn(), refresh: vi.fn() }));
+const { changeStatus, saveVehicle, refresh, push } = vi.hoisted(() => ({ changeStatus: vi.fn(), saveVehicle: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
 vi.mock('../actions', () => ({ changeStatus, saveVehicle, addVehiclePhoto: vi.fn(), removeVehiclePhoto: vi.fn(), setVehicleCover: vi.fn(), discardVehicleDraft: vi.fn() }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push }) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const fields = { brand: 'Honda', model: 'CG 160', versionName: '', year: '2024', mileageKm: '1200', color: 'Preto', description: '', price: '18.500' };
@@ -15,7 +15,7 @@ const props = {
   initialFields: fields, initialMissing: ['Pelo menos uma foto'], photos: [], currentYear: 2026,
 };
 
-beforeEach(() => { changeStatus.mockReset(); saveVehicle.mockReset(); refresh.mockReset(); });
+beforeEach(() => { changeStatus.mockReset(); saveVehicle.mockReset(); refresh.mockReset(); push.mockReset(); });
 afterEach(cleanup);
 
 it('ordena as três seções e mantém uma ação principal no rodapé', () => {
@@ -92,4 +92,56 @@ it('permite cancelar e exige nova confirmação para republicar', async () => {
   const data = changeStatus.mock.calls[0][1] as FormData;
   expect(data.get('status')).toBe('published');
   expect(data.get('confirmAvailability')).toBe('true');
+});
+
+// A gravação que antecede cada ação principal falha; a explicação tem de aparecer junto do botão tocado,
+// não na seção do formulário, que numa tela de celular fica fora de vista.
+const SAVE_FAILED = 'Não foi possível salvar agora. Tente de novo.';
+
+function failNextSave() {
+  saveVehicle.mockResolvedValue({ message: SAVE_FAILED });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Preço' }), { target: { value: '19000' } });
+}
+
+it('publicar com gravação falhando explica no rodapé de publicação', async () => {
+  render(<VehicleEditor {...props} initialMissing={[]} photos={[{ id: 'p1', url: null, isCover: true }]} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Publicar anúncio' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, publicar anúncio' }));
+  const footer = (await screen.findByRole('button', { name: 'Publicar anúncio' })).parentElement as HTMLElement;
+  await waitFor(() => expect(within(footer).getByText(SAVE_FAILED)).toBeTruthy());
+  expect(changeStatus).not.toHaveBeenCalled();
+});
+
+it('criar arte com gravação falhando explica ao lado do botão e não navega', async () => {
+  render(<VehicleEditor {...props} />);
+  failNextSave();
+  const button = screen.getByRole('button', { name: 'Criar arte' });
+  fireEvent.click(button);
+  const section = button.closest('section') as HTMLElement;
+  await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
+  expect(button.nextElementSibling?.textContent).toBe(SAVE_FAILED);
+  expect(push).not.toHaveBeenCalled();
+});
+
+it('mudar situação com gravação falhando explica na seção de situação', async () => {
+  render(<VehicleEditor {...props} status="published" isNew={false} canDiscard={false}
+    targets={['reserved', 'archived']} initialMissing={[]} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Reservar' }));
+  const section = screen.getByRole('heading', { name: /^Situação:/ }).closest('section') as HTMLElement;
+  await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
+  expect(changeStatus).not.toHaveBeenCalled();
+});
+
+it('arquivar com gravação falhando explica dentro da caixa, que continua aberta', async () => {
+  render(<VehicleEditor {...props} status="published" isNew={false} canDiscard={false}
+    targets={['reserved', 'archived']} initialMissing={[]} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Arquivar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, arquivar' }));
+  const section = screen.getByRole('heading', { name: 'Gerenciar anúncio' }).closest('section') as HTMLElement;
+  await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
+  expect(within(section).getByRole('button', { name: 'Sim, arquivar' })).toBeTruthy();
+  expect(changeStatus).not.toHaveBeenCalled();
 });

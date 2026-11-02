@@ -31,6 +31,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
   const [publishedNow, setPublishedNow] = useState(false);
   const [editingField, setEditingField] = useState(false);
   const [openingArt, setOpeningArt] = useState(false);
+  const [artMessage, setArtMessage] = useState<string | null>(null);
   const router = useRouter();
   const name = [draft.fields.brand, draft.fields.model].filter(Boolean).join(' ');
   const title = isNew && (!draft.fields.brand || !draft.fields.model)
@@ -60,7 +61,9 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
   async function publish() {
     setPublishing(true);
     setPublishMessage(null);
-    if (!await draft.saveBeforeAction()) { setPublishing(false); setConfirming(false); return; }
+    // O motivo da falha aparece aqui, no rodapé onde a pessoa tocou, e não só na seção do formulário.
+    const saved = await draft.saveBeforeAction();
+    if (!saved.ok) { setPublishMessage(saved.message); setPublishing(false); setConfirming(false); return; }
     const state = await draft.enqueue((version) => {
       const data = new FormData();
       data.set('id', vehicleId);
@@ -77,8 +80,11 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
 
   async function openArt() {
     setOpeningArt(true);
+    setArtMessage(null);
     try {
-      if (await draft.saveBeforeAction()) router.push(`/admin/veiculos/${vehicleId}/arte`);
+      const saved = await draft.saveBeforeAction();
+      if (saved.ok) router.push(`/admin/veiculos/${vehicleId}/arte`);
+      else setArtMessage(saved.message);
     } finally { setOpeningArt(false); }
   }
 
@@ -104,6 +110,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
         <PhotoUpload vehicleId={vehicleId} draft={draft} />
         <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={openingArt}
           onClick={() => void openArt()}>{openingArt ? 'Salvando anúncio…' : 'Criar arte'}</button>
+        <FormNotice message={artMessage} vehicleId={vehicleId} role="alert" />
       </section>
 
       {canPublish && !publishedNow ? <section aria-labelledby="conferir-title">
@@ -137,6 +144,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
                     : `Para publicar, complete: ${draft.missing.join(', ')}.`}
               </p> : null}
             </>}
+            {!publishedNow ? <FormNotice message={publishMessage} vehicleId={vehicleId} role="alert" /> : null}
           </div>
         </div>
       </section> : null}
@@ -146,7 +154,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
 
       <DangerActions vehicleId={vehicleId} draft={draft} canDiscard={canDiscard}
         archiveTargetAvailable={!publishedNow && targets.includes('archived')} />
-      <FormNotice message={publishMessage} vehicleId={vehicleId} role="alert" />
+      {publishedNow ? <FormNotice message={publishMessage} vehicleId={vehicleId} role="alert" /> : null}
     </div>
 
   </main>;

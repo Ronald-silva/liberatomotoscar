@@ -217,6 +217,48 @@ describe('dono do rascunho no cliente', () => {
     expect(result.current.fields.model).toBe('CG 160');
   });
 
+  it('saveBeforeAction devolve o motivo quando a gravação falha', async () => {
+    saveVehicle.mockImplementation(async () => ({ message: STALE_MESSAGE }));
+    const { result } = setup();
+
+    act(() => { result.current.set('model', 'CG 160'); });
+    let outcome: unknown;
+    await act(async () => { outcome = await result.current.saveBeforeAction(); });
+
+    expect(outcome).toEqual({ ok: false, message: STALE_MESSAGE });
+  });
+
+  it('saveBeforeAction devolve o motivo quando a escrita nem chega ao servidor', async () => {
+    saveVehicle.mockImplementation(async () => { throw new Error('Failed to fetch'); });
+    const { result } = setup();
+
+    act(() => { result.current.set('model', 'CG 160'); });
+    let outcome: unknown;
+    await act(async () => { outcome = await result.current.saveBeforeAction(); });
+
+    expect(outcome).toEqual({ ok: false, message: 'Não foi possível salvar agora. Tente de novo.' });
+  });
+
+  it('saveBeforeAction devolve ok sem motivo quando grava', async () => {
+    const { result } = setup();
+
+    act(() => { result.current.set('model', 'CG 160'); });
+    let outcome: unknown;
+    await act(async () => { outcome = await result.current.saveBeforeAction(); });
+
+    expect(outcome).toEqual({ ok: true, message: null });
+  });
+
+  it('saveBeforeAction devolve ok sem motivo quando não há nada pendente', async () => {
+    const { result } = setup();
+
+    let outcome: unknown;
+    await act(async () => { outcome = await result.current.saveBeforeAction(); });
+
+    expect(outcome).toEqual({ ok: true, message: null });
+    expect(saveVehicle).not.toHaveBeenCalled();
+  });
+
   it('vira mensagem conhecida quando a escrita nem chega ao servidor', async () => {
     saveVehicle.mockImplementation(async () => { throw new Error('Failed to fetch'); });
     const { result } = setup();
