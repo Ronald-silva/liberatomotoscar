@@ -388,7 +388,7 @@ Nome e telefone ficam **na linha do agendamento**, porque o manual não tem conv
 
 - [ ] **Step 1: Escrever o teste de `resolveVisitSlot` que falha**
 
-Item 2 do Review Focus. `const now = new Date('2026-11-02T12:00:00-03:00'); // domingo`
+Item 2 do Review Focus. `const now = new Date('2026-11-02T12:00:00-03:00'); // segunda-feira`
 
 ```ts
 it('resolve dia e hora dentro do horario da loja', () => {

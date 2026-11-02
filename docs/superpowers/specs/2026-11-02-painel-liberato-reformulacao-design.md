@@ -471,7 +471,7 @@ consumidor do ajuste, e o desligamento não seguraria.
 
 **Não sai:** o enum `channel` continua `['site', 'whatsapp']`. Estreitá-lo tocaria 4 tabelas e 4
 check constraints numa migração destrutiva, por ganho nenhum. Basta parar de criar linhas `site`.
-A linha `site` de `channel_settings` e as 34 entradas de `channel_settings_audit` **ficam** no banco,
+A linha `site` de `channel_settings` e as 33 entradas de `channel_settings_audit` **ficam** no banco,
 por decisão do proprietário.
 
 **Sai do banco:** as **12 conversas de canal `site`**, todas com 0 mensagens e 0 turnos, autorizadas
