@@ -127,11 +127,6 @@ export function ensureAttendanceTables(): Promise<void> {
           CREATE INDEX IF NOT EXISTS "whatsapp_tenants_tenant_id_idx"
             ON "whatsapp_tenants" ("tenant_id")
         `);
-        await db.execute(sql`
-          UPDATE "channel_settings"
-            SET "mode" = 'ai'
-            WHERE "channel" = 'site' AND "mode" = 'disabled'
-        `);
       } catch (error) {
         ensuredPromise = null;
         console.warn('Aviso ao verificar tabelas de atendimento:', error instanceof Error ? error.message : 'erro');

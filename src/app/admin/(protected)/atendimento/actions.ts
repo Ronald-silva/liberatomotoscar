@@ -8,7 +8,7 @@ import {
   releaseInboxConversation,
   replyToInboxConversation,
 } from '@/server/attendance/inbox';
-import { setSiteMode, type AttendanceMode } from '@/server/attendance/settings';
+import { setWhatsappMode, type AttendanceMode } from '@/server/attendance/settings';
 import { requireAdmin } from '@/server/authz';
 import { activateConfiguredMetaTestNumber, activateSavedMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
 
@@ -73,13 +73,18 @@ export async function activateMetaTestNumberFromSavedToken(_previous: TestNumber
   }
 }
 
-export async function changeSiteMode(previous: ModeFormState, formData: FormData): Promise<ModeFormState> {
-  let setting: Awaited<ReturnType<typeof setSiteMode>>;
+/**
+ * Troca o modo da Dayse no WhatsApp. A confirmação tem de repetir o modo escolhido: um valor
+ * fixo no formulário (o antigo `confirm=yes`) não passa, então a trava só cede a quem de fato
+ * confirmou aquela troca.
+ */
+export async function changeWhatsappMode(previous: ModeFormState, formData: FormData): Promise<ModeFormState> {
+  let setting: Awaited<ReturnType<typeof setWhatsappMode>>;
   try {
-    if (formData.get('confirm') !== 'yes') {
+    if (formData.get('confirm') !== formData.get('mode')) {
       return { ...previous, message: 'Confirme a mudança antes de salvar.', error: true };
     }
-    setting = await setSiteMode(formData.get('mode'), Number(formData.get('version')));
+    setting = await setWhatsappMode(formData.get('mode'), Number(formData.get('version')));
   } catch (error) {
     const message = error instanceof Error && error.name === 'StaleAttendanceSettingError'
       ? error.message : 'Não foi possível alterar o modo. Confira os dados e tente novamente.';
@@ -88,7 +93,7 @@ export async function changeSiteMode(previous: ModeFormState, formData: FormData
   // A mudança já foi gravada. Uma falha de invalidação não deve mandar repetir a ação.
   revalidateAttendance();
   return { mode: setting.mode, version: setting.version,
-    message: setting.mode === previous.mode ? 'O modo já estava selecionado.' : 'Modo do site atualizado.', error: false };
+    message: setting.mode === previous.mode ? 'O modo já estava selecionado.' : 'Modo da Dayse atualizado.', error: false };
 }
 
 export async function operateInboxConversation(_previous: InboxActionState, formData: FormData): Promise<InboxActionState> {

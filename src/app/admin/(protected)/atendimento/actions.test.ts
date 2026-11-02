@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  setSiteMode: vi.fn(),
+  setWhatsappMode: vi.fn(),
   assumeInboxConversation: vi.fn(),
   releaseInboxConversation: vi.fn(),
   closeInboxConversation: vi.fn(),
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   requireAdmin: vi.fn(async () => ({ userId: 'admin' })),
   registerMetaTestNumber: vi.fn(),
 }));
-vi.mock('@/server/attendance/settings', () => ({ setSiteMode: mocks.setSiteMode }));
+vi.mock('@/server/attendance/settings', () => ({ setWhatsappMode: mocks.setWhatsappMode }));
 vi.mock('@/server/attendance/inbox', () => ({
   assumeInboxConversation: mocks.assumeInboxConversation,
   releaseInboxConversation: mocks.releaseInboxConversation,
@@ -25,23 +25,36 @@ vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock('@/server/authz', () => ({ requireAdmin: mocks.requireAdmin }));
 vi.mock('@/server/whatsapp/test-number', () => ({ registerMetaTestNumber: mocks.registerMetaTestNumber }));
 
-import { changeSiteMode, connectMetaTestNumber, operateInboxConversation, type ModeFormState } from './actions';
+import { changeWhatsappMode, connectMetaTestNumber, operateInboxConversation, type ModeFormState } from './actions';
 
 const current: ModeFormState = { mode: 'disabled', version: 1, message: null, error: false };
-const form = (mode: string, confirm = 'yes') => {
+// A confirmação legítima repete o modo escolhido; `confirm` sozinho é o que a tela antiga fixava.
+const form = (mode: string, confirm: string | null = mode) => {
   const data = new FormData();
   data.set('mode', mode);
   data.set('version', '1');
-  if (confirm) data.set('confirm', confirm);
+  if (confirm !== null) data.set('confirm', confirm);
   return data;
 };
 
 beforeEach(() => vi.clearAllMocks());
 
 it('não altera o modo sem confirmação explícita', async () => {
-  const result = await changeSiteMode(current, form('ai', ''));
+  const result = await changeWhatsappMode(current, form('ai', null));
   expect(result.error).toBe(true);
-  expect(mocks.setSiteMode).not.toHaveBeenCalled();
+  expect(mocks.setWhatsappMode).not.toHaveBeenCalled();
+});
+
+it('recusa o confirm fixo em "yes", que não confirma modo nenhum', async () => {
+  const result = await changeWhatsappMode(current, form('disabled', 'yes'));
+  expect(result).toMatchObject({ error: true, message: 'Confirme a mudança antes de salvar.' });
+  expect(mocks.setWhatsappMode).not.toHaveBeenCalled();
+});
+
+it('recusa confirmação de um modo diferente do escolhido', async () => {
+  const result = await changeWhatsappMode(current, form('disabled', 'ai'));
+  expect(result.error).toBe(true);
+  expect(mocks.setWhatsappMode).not.toHaveBeenCalled();
 });
 
 it('exige administrador antes de registrar o número de teste', async () => {
@@ -57,18 +70,18 @@ it('exige administrador antes de registrar o número de teste', async () => {
 });
 
 it('devolve a versão nova e não pede repetição se a invalidação falhar depois de gravar', async () => {
-  mocks.setSiteMode.mockResolvedValue({ mode: 'deterministic', version: 2 });
+  mocks.setWhatsappMode.mockResolvedValue({ mode: 'deterministic', version: 2 });
   mocks.revalidatePath.mockImplementation(() => { throw new Error('cache'); });
-  const result = await changeSiteMode(current, form('deterministic'));
-  expect(mocks.setSiteMode).toHaveBeenCalledWith('deterministic', 1);
+  const result = await changeWhatsappMode(current, form('deterministic'));
+  expect(mocks.setWhatsappMode).toHaveBeenCalledWith('deterministic', 1);
   expect(result).toEqual({ mode: 'deterministic', version: 2,
-    message: 'Modo do site atualizado.', error: false });
+    message: 'Modo da Dayse atualizado.', error: false });
 });
 
 it('pede atualização quando outra pessoa mudou o modo antes', async () => {
-  mocks.setSiteMode.mockRejectedValue(Object.assign(new Error('Atualize a página.'),
+  mocks.setWhatsappMode.mockRejectedValue(Object.assign(new Error('Atualize a página.'),
     { name: 'StaleAttendanceSettingError' }));
-  const result = await changeSiteMode(current, form('ai'));
+  const result = await changeWhatsappMode(current, form('ai'));
   expect(result.error).toBe(true);
   expect(result.message).toContain('Atualize a página');
   expect(mocks.revalidatePath).not.toHaveBeenCalled();

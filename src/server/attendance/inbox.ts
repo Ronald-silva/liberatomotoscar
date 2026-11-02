@@ -2,25 +2,27 @@ import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
-import { conversations } from '@/server/db/schema';
+import { conversationMessages, conversations } from '@/server/db/schema';
 import * as repository from './conversation-repository';
 
 export const inboxFilterSchema = z.enum(['waiting', 'mine', 'automation', 'closed']).catch('waiting');
 export type InboxFilter = z.infer<typeof inboxFilterSchema>;
 
 const conversationId = z.uuid();
+// Conversa sem nenhuma mensagem não tem o que atender: não entra na fila nem nas contagens.
+const hasMessage = sql`exists (select 1 from ${conversationMessages} where ${conversationMessages.conversationId} = ${conversations.id})`;
 const replyBody = z.string().trim().min(1, 'Escreva a resposta.').max(2000, 'Resposta muito longa.');
 
 /** Fila do vendedor. Hoje operadores são administradores autorizados (sem papel vendedor separado). */
 export async function listInbox(filter: InboxFilter) {
   const admin = await requireAdmin();
   const where = filter === 'waiting'
-    ? and(eq(conversations.status, 'open'), isNotNull(conversations.handoffRequestedAt), isNull(conversations.assignedTo))
+    ? and(eq(conversations.status, 'open'), isNotNull(conversations.handoffRequestedAt), isNull(conversations.assignedTo), hasMessage)
     : filter === 'mine'
-      ? and(eq(conversations.status, 'open'), eq(conversations.assignedTo, admin.userId))
+      ? and(eq(conversations.status, 'open'), eq(conversations.assignedTo, admin.userId), hasMessage)
       : filter === 'automation'
-        ? and(eq(conversations.status, 'open'), eq(conversations.owner, 'automation'), isNull(conversations.handoffRequestedAt))
-        : eq(conversations.status, 'closed');
+        ? and(eq(conversations.status, 'open'), eq(conversations.owner, 'automation'), isNull(conversations.handoffRequestedAt), hasMessage)
+        : and(eq(conversations.status, 'closed'), hasMessage);
   return getDb().select({
     id: conversations.id, owner: conversations.owner, status: conversations.status,
     assignedTo: conversations.assignedTo, facts: conversations.facts, visitorTurns: conversations.visitorTurns,
@@ -36,7 +38,7 @@ export async function countInbox() {
     waiting: sql<number>`count(*) filter (where ${conversations.handoffRequestedAt} is not null and ${conversations.assignedTo} is null)::int`,
     mine: sql<number>`count(*) filter (where ${conversations.assignedTo} = ${admin.userId})::int`,
     automation: sql<number>`count(*) filter (where ${conversations.owner} = 'automation' and ${conversations.handoffRequestedAt} is null)::int`,
-  }).from(conversations).where(eq(conversations.status, 'open'));
+  }).from(conversations).where(and(eq(conversations.status, 'open'), hasMessage));
   return row ?? { waiting: 0, mine: 0, automation: 0 };
 }
 

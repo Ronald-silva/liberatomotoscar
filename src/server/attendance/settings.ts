@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
@@ -7,33 +7,13 @@ import { ensureAttendanceTables } from './ensure-schema';
 
 export const attendanceModeSchema = z.enum(['disabled', 'deterministic', 'ai']);
 export type AttendanceMode = z.infer<typeof attendanceModeSchema>;
+export type ChannelSettingRow = typeof channelSettings.$inferSelect;
 
 export class StaleAttendanceSettingError extends Error {
   constructor() { super('O modo de atendimento mudou. Atualize a página antes de tentar novamente.'); }
 }
 
-export function defaultSiteMode(): AttendanceMode {
-  return 'ai';
-}
-
-// Sem linha no banco (ou se ficou 'disabled' sem ação explícita de admin), o canal inicia com a Agente Dayse ('ai').
-export async function readSiteSetting() {
-  try {
-    await ensureAttendanceTables();
-    const [row] = await getDb().select().from(channelSettings)
-      .where(eq(channelSettings.channel, 'site')).limit(1);
-    if (!row || (row.mode === 'disabled' && !row.updatedBy)) {
-      return { channel: 'site' as const, mode: defaultSiteMode(), version: row?.version ?? 1,
-        updatedBy: row?.updatedBy ?? null, updatedAt: row?.updatedAt ?? null };
-    }
-    return row;
-  } catch {
-    return { channel: 'site' as const, mode: defaultSiteMode(), version: 1,
-      updatedBy: null, updatedAt: null };
-  }
-}
-
-/** O canal WhatsApp tem modo próprio; uma mudança no chat do site não altera o teste da Dayse. */
+/** Sem linha no banco, a Dayse roda no padrão 'ai'; `setWhatsappMode` cria a linha na primeira troca. */
 export async function readWhatsappSetting() {
   await ensureAttendanceTables();
   const [row] = await getDb().select().from(channelSettings)
@@ -42,41 +22,34 @@ export async function readWhatsappSetting() {
     updatedBy: null, updatedAt: null };
 }
 
-export async function readAdminSiteSetting() {
-  await requireAdmin();
-  return readSiteSetting();
-}
-
-export async function listAdminSiteModeChanges() {
-  await requireAdmin();
-  await ensureAttendanceTables();
-  return getDb().select().from(channelSettingsAudit)
-    .where(eq(channelSettingsAudit.channel, 'site'))
-    .orderBy(desc(channelSettingsAudit.occurredAt)).limit(10);
-}
-
-export async function setSiteMode(requestedMode: unknown, expectedVersion: number) {
+/**
+ * Troca o modo da Dayse no WhatsApp. A linha do canal pode não existir (a Dayse roda no padrão
+ * 'ai' até alguém mexer), então a primeira troca a cria. `expectedVersion` é a versão que a
+ * pessoa viu na tela: se a linha andou desde então, outra pessoa mudou o modo e a troca é
+ * recusada, em vez de sobrescrever em silêncio.
+ */
+export async function setWhatsappMode(requestedMode: unknown, expectedVersion: number): Promise<ChannelSettingRow> {
   const actor = await requireAdmin();
   const mode = attendanceModeSchema.parse(requestedMode);
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new StaleAttendanceSettingError();
   await ensureAttendanceTables();
 
   return getDb().transaction(async (tx) => {
-    // A primeira mudança cria a linha desativada. Corridas de criação convergem
-    // na chave primária; depois a comparação de versão decide um único vencedor.
-    await tx.insert(channelSettings).values({ channel: 'site', mode: defaultSiteMode(), version: 1 })
+    // Corridas de criação convergem na chave primária; o bloqueio da linha decide um único vencedor.
+    await tx.insert(channelSettings).values({ channel: 'whatsapp', mode: 'ai', version: 1 })
       .onConflictDoNothing();
     const [before] = await tx.select().from(channelSettings)
-      .where(eq(channelSettings.channel, 'site')).for('update').limit(1);
-    if (!before) throw new StaleAttendanceSettingError();
-    if (before.mode === mode && before.updatedBy !== null) return before;
+      .where(eq(channelSettings.channel, 'whatsapp')).for('update').limit(1);
+    if (!before || before.version !== expectedVersion) throw new StaleAttendanceSettingError();
+    // Mesmo modo: nada a gravar (e a auditoria exige que antes e depois difiram).
+    if (before.mode === mode) return before;
 
     const [after] = await tx.update(channelSettings).set({ mode, updatedBy: actor.userId,
       updatedAt: new Date(), version: sql`${channelSettings.version} + 1` })
-      .where(and(eq(channelSettings.channel, 'site'), eq(channelSettings.version, before.version)))
+      .where(and(eq(channelSettings.channel, 'whatsapp'), eq(channelSettings.version, before.version)))
       .returning();
     if (!after) throw new StaleAttendanceSettingError();
-    await tx.insert(channelSettingsAudit).values({ channel: 'site', actorUserId: actor.userId,
+    await tx.insert(channelSettingsAudit).values({ channel: 'whatsapp', actorUserId: actor.userId,
       beforeMode: before.mode, afterMode: mode,
       beforeVersion: before.version, afterVersion: after.version });
     return after;

@@ -11,12 +11,6 @@ export class AttendanceLimitError extends Error {
   }
 }
 
-/** Teto diário global de chamadas de IA no site; ajustável por ambiente. */
-export function siteAiDailyLimit() {
-  const value = Number(process.env.SITE_CHAT_AI_DAILY_LIMIT ?? 150);
-  return Number.isSafeInteger(value) && value >= 0 ? value : 150;
-}
-
 export function whatsappAiDailyLimit() {
   const value = Number(process.env.WHATSAPP_AI_DAILY_LIMIT ?? 150);
   return Number.isSafeInteger(value) && value >= 0 ? value : 150;
@@ -37,10 +31,6 @@ async function reserveAiRequest(channel: 'site' | 'whatsapp', now: Date, limit: 
   } catch {
     return { dayUtc };
   }
-}
-
-export async function reserveSiteAiRequest(now = new Date(), limit = siteAiDailyLimit()) {
-  return reserveAiRequest('site', now, limit);
 }
 
 export async function reserveWhatsappAiRequest(now = new Date(), limit = whatsappAiDailyLimit()) {
@@ -66,14 +56,6 @@ async function recordGuardRejection(channel: 'site' | 'whatsapp', dayUtc: string
 
 export async function recordWhatsappGuardRejection(dayUtc: string) {
   return recordGuardRejection('whatsapp', dayUtc);
-}
-
-export async function recordSiteGuardRejection(dayUtc: string) {
-  return recordGuardRejection('site', dayUtc);
-}
-
-export async function recordSiteAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {
-  return recordAiTokens('site', dayUtc, inputTokens, outputTokens);
 }
 
 export async function recordWhatsappAiTokens(dayUtc: string, inputTokens: number, outputTokens: number) {

@@ -9,12 +9,10 @@ import {
 } from '@/server/attendance/inbox';
 import { protocolOf } from '@/server/attendance/protocol';
 import { organizarFicha, semGritar } from './ficha';
-import { readAdminSiteSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { TEST_TENANT_ID, TEST_WEBHOOK_URL } from '@/server/whatsapp/test-number';
 import { InboxOperatorControls } from './InboxOperatorControls';
 import { MetaTestNumberForm } from './MetaTestNumberForm';
-import { SiteModeForm } from './SiteModeForm';
 import { WhatsAppOnboardingCard } from './WhatsAppOnboardingCard';
 import attendanceStyles from './attendance.module.css';
 
@@ -57,14 +55,7 @@ export default async function AttendancePage({
   const rawConversation = Array.isArray(resolved.conversa) ? resolved.conversa[0] : resolved.conversa;
   const filter: InboxFilter = inboxFilterSchema.parse(rawFilter);
 
-  const [setting, counts, list, tenants] = await Promise.all([
-    readAdminSiteSetting().catch(() => ({
-      channel: 'site' as const,
-      mode: 'ai' as const,
-      version: 1,
-      updatedBy: null,
-      updatedAt: null,
-    })),
+  const [counts, list, tenants] = await Promise.all([
     countInbox().catch(() => ({ waiting: 0, mine: 0, automation: 0 })),
     listInbox(filter).catch(() => []),
     listWhatsappTenants().catch(() => []),
@@ -129,8 +120,6 @@ export default async function AttendancePage({
           hasEnvTestCredentials={Boolean(process.env.WHATSAPP_TOKEN?.trim() &&
             process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() && process.env.WHATSAPP_WEBHOOK_CALLBACK_URL?.trim())}
         />
-
-        <SiteModeForm mode={setting.mode} version={setting.version} />
 
         <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
           <div className={attendanceStyles.inboxHeader}>

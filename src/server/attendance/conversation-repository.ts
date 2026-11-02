@@ -1,8 +1,7 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { and, asc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+import { and, asc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { getDb } from '@/server/db/client';
 import { attendanceRateLimits, conversationMessages, conversations, handoffs } from '@/server/db/schema';
-import { ensureAttendanceTables } from './ensure-schema';
 
 export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof conversationMessages.$inferSelect;
@@ -21,30 +20,8 @@ export function hashConversationToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-export function newConversationToken() {
-  return randomBytes(32).toString('base64url');
-}
-
 function retentionFrom(now: Date, lead: boolean) {
   return new Date(now.getTime() + (lead ? RETENTION_LEAD_DAYS : RETENTION_NO_LEAD_DAYS) * DAY_MS);
-}
-
-export async function createSiteConversation(now = new Date()) {
-  await ensureAttendanceTables();
-  const token = newConversationToken();
-  const [row] = await getDb().insert(conversations).values({
-    channel: 'site', tokenHash: hashConversationToken(token),
-    createdAt: now, lastMessageAt: now, expiresAt: retentionFrom(now, false),
-  }).returning();
-  return { token, conversation: row };
-}
-
-export async function findConversationByToken(token: string, now = new Date()) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  await ensureAttendanceTables();
-  const [row] = await getDb().select().from(conversations)
-    .where(and(eq(conversations.tokenHash, hashConversationToken(token)), gt(conversations.expiresAt, now))).limit(1);
-  return row ?? null;
 }
 
 export async function listConversationMessages(conversationId: string, limit = 60) {
