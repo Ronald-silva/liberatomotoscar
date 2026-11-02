@@ -15,6 +15,15 @@ tasks da Etapa 1 e as 4 da Etapa 2, sem corte. A apresentação ao Elton fica pa
 em vez de esta, porque o portão custa ≈6,75 dias (§10 do design). Execução por subagente: um
 implementa cada task e um revisor novo confere antes de a seguinte começar.
 
+**Ordem de execução — não é a ordem numérica.** O scan de pré-execução achou que a barra de
+navegação (Task 5) aponta para `/admin/agenda` e `/admin/divulgar`, criadas nas Tasks 7 e 8: na
+ordem escrita, dois dos quatro destinos dariam 404. A ordem é:
+
+> Etapa 1: **1 → 2 → 3 → 4 → 6 → 7 → 8 → 5 → 9** · Etapa 2: **10 → 11 → 12 → 13**
+
+Os números não mudam, para não invalidar briefs e commits. As decisões e o raciocínio estão no
+ledger em `.superpowers/sdd/2026-11-02-painel-liberato-reformulacao/progress.md`.
+
 ## Global Constraints
 
 - **Ler `node_modules/next/dist/docs/` antes de escrever código.** `AGENTS.md` do repositório determina isso.
@@ -139,6 +148,7 @@ git commit -m "fix(painel): acoes principais deixam de falhar em silencio"
 **Files:**
 - Create: `src/components/art-studio/title-fit.ts`, `.../title-fit.test.ts`
 - Modify: `ArtCanvas.tsx:76-77` (sai), `:129-131`, e as 8 ocorrências de `fontFamily="Archivo, Arial"`
+- Modify: `ArtEditor.tsx` (redesenho após a fonte carregar — Step 6). A Task 8 toca o mesmo arquivo depois, para a reordenação do iOS.
 
 **Interfaces:**
 - Consumes: nada.
@@ -186,9 +196,18 @@ it('rejeita 66px quando ele só permite uma linha e o texto precisa de duas', ()
 
 Apagar o `titleSize` de `:76-77`; chamar `fitTitle` com `measure` apoiada em `measureText` de um contexto 2D e `ART_FONT_FAMILY`; passar `ellipsis` ao `Text` do título; trocar as 8 ocorrências de `"Archivo, Arial"` por `ART_FONT_FAMILY`. **Este passo remove duas condicionais; não acrescenta nenhuma.**
 
-- [ ] **Step 6: Rodar e conferir a dívida** — `npx vitest run src/components/art-studio/` → PASS; `grep -c "?" src/components/art-studio/ArtCanvas.tsx` ≤ 56.
+- [ ] **Step 6: Redesenhar o palco depois de a fonte carregar**
 
-- [ ] **Step 7: Commit**
+Medir o título não resolve nada se o palco guardar a quebra calculada com a fonte de fallback. O
+Konva calcula a quebra **uma vez**, em `_setTextData`, e não redesenha quando a fonte chega; a
+Archivo é carregada com `font-display: swap` em três sub-faixas Unicode, e hoje
+`document.fonts.ready` só é aguardado dentro de `download()` (`ArtEditor.tsx:48`), depois de o
+canvas já ter medido. Aguardar `document.fonts.ready` também na montagem do editor e forçar um
+redesenho quando resolver, para prévia e arquivo usarem a mesma métrica.
+
+- [ ] **Step 7: Rodar e conferir a dívida** — `npx vitest run src/components/art-studio/` → PASS; `grep -c "?" src/components/art-studio/ArtCanvas.tsx` ≤ 56.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/components/art-studio/
@@ -260,7 +279,13 @@ O último é o que importa: hoje **não existe linha `whatsapp`** e a Dayse roda
 
 - [ ] **Step 2: Rodar e verificar que falha** — `npx vitest run src/server/attendance/settings-whatsapp.test.ts` → FAIL.
 
-- [ ] **Step 3: Implementar `setWhatsappMode` e a action** — espelhando `setSiteMode`, que sai no passo seguinte. Confirmação explícita de verdade: **não** repetir o `confirm: 'yes'` fixo que tornava a trava do servidor inalcançável (`SiteModeForm.tsx:145,155`).
+- [ ] **Step 3: Implementar `setWhatsappMode` e a action — serviço e action apenas**
+
+Espelhando `setSiteMode`, que sai no passo seguinte. Confirmação explícita de verdade: **não**
+repetir o `confirm: 'yes'` fixo que tornava a trava do servidor inalcançável
+(`SiteModeForm.tsx:145,155`). **A colocação em tela é da Task 5**, que cria Ajustes; ao fim desta
+task o serviço existe sem interface, o que é inerte e não quebrado. Os rótulos dos três modos saem
+em português simples, sem emoji e sem Title Case (design §7.11).
 
 - [ ] **Step 4: Remover o chat do site**
 
@@ -301,7 +326,8 @@ git commit -m "feat(atendimento): remover o chat do site e dar um freio real na 
 - Modify: `(protected)/layout.tsx`, `atendimento/page.tsx:118-131`, `(protected)/page.tsx:44`, `admin.module.css`
 
 **Interfaces:**
-- Consumes: `countInbox()` (já filtrado na Task 4); `listAgenda` chega na Task 6 — até lá o contador da Agenda é `null`.
+- Consumes: `countInbox()` (já filtrado na Task 4); `listAgenda(now)` da Task 6; as rotas `/admin/agenda` (Task 7) e `/admin/divulgar` (Task 8), que **já existem** quando esta task roda.
+- **Esta task é a 8ª a executar**, depois das Tasks 6, 7 e 8. É ela, e só ela, que liga o contador da aba Agenda em `layout.tsx`.
 - Produces: `<AdminTabBar active="estoque" | "agenda" | "divulgar" | "conversas" counts={{ agenda: number | null; conversas: number | null }} />`. `null` renderiza o destino sem número.
 
 - [ ] **Step 1: Escrever o teste que falha**
@@ -434,7 +460,8 @@ git commit -m "feat(agenda): tabela de agendamentos e resolucao de horario da lo
 
 **Files:**
 - Create: `.../agenda/page.tsx`, `.../agenda/VisitCard.tsx`, `.../agenda/ManualVisitForm.tsx`, `.../agenda/actions.ts`, mais `VisitCard.test.tsx` e `ManualVisitForm.test.tsx`
-- Modify: `src/server/attendance/appointments.ts`; `(protected)/layout.tsx` (contador da Agenda passa a vir de `listAgenda`)
+- Modify: `src/server/attendance/appointments.ts`
+- **Não** toca `(protected)/layout.tsx`: o contador da aba Agenda é ligado pela Task 5, dona da barra.
 
 **Interfaces:**
 - Consumes: `listAgenda`, `resolveVisitSlot` da Task 6; `AdminTabBar` da Task 5; `listAdminVehiclesWithCover` para escolher veículo.
