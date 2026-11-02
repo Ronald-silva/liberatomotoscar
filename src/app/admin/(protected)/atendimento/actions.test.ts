@@ -144,3 +144,16 @@ it('define todas as classes referenciadas por attendanceStyles em attendance.mod
   }
   expect(missing).toEqual([]);
 });
+
+it('assumir conversa revalida o layout, onde mora o contador da aba Conversas', async () => {
+  const data = new FormData();
+  data.set('conversationId', '89f8cf37-e8cf-4f11-93f6-c92ecae72c71');
+  data.set('intent', 'assume');
+  await operateInboxConversation({ message: null, error: false }, data);
+  expect(mocks.revalidatePath).toHaveBeenCalledWith('/admin', 'layout');
+});
+
+it('versao velha volta marcada como stale, para a tela nao oferecer repetir', async () => {
+  mocks.setWhatsappMode.mockRejectedValue(Object.assign(new Error('Atualize.'), { name: 'StaleAttendanceSettingError' }));
+  expect(await changeWhatsappMode(current, form('disabled'))).toMatchObject({ error: true, stale: true });
+});

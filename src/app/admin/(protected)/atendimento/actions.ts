@@ -12,12 +12,15 @@ import { setWhatsappMode, type AttendanceMode } from '@/server/attendance/settin
 import { requireAdmin } from '@/server/authz';
 import { activateConfiguredMetaTestNumber, activateSavedMetaTestNumber, checkMetaTestNumberStatus, registerMetaTestNumber } from '@/server/whatsapp/test-number';
 
-export type ModeFormState = { mode: AttendanceMode; version: number; message: string | null; error: boolean };
+export type ModeFormState = { mode: AttendanceMode; version: number; message: string | null; error: boolean;
+  /** A versão mudou por baixo: repetir o envio falharia de novo, só recarregar resolve. */
+  stale?: boolean };
 export type InboxActionState = { message: string | null; error: boolean };
 export type TestNumberState = { message: string | null; error: boolean };
 
 function revalidateAttendance() {
-  try { revalidatePath('/admin/atendimento'); } catch { /* próxima navegação lê o banco */ }
+  // O contador da aba Conversas mora no layout: revalidar só a página o deixaria com o número velho.
+  try { revalidatePath('/admin', 'layout'); } catch { /* próxima navegação lê o banco */ }
 }
 
 export async function connectMetaTestNumber(_previous: TestNumberState, formData: FormData): Promise<TestNumberState> {
@@ -86,9 +89,9 @@ export async function changeWhatsappMode(previous: ModeFormState, formData: Form
     }
     setting = await setWhatsappMode(formData.get('mode'), Number(formData.get('version')));
   } catch (error) {
-    const message = error instanceof Error && error.name === 'StaleAttendanceSettingError'
-      ? error.message : 'Não foi possível alterar o modo. Confira os dados e tente novamente.';
-    return { ...previous, message, error: true };
+    const stale = error instanceof Error && error.name === 'StaleAttendanceSettingError';
+    const message = stale ? error.message : 'Não foi possível alterar o modo. Confira os dados e tente novamente.';
+    return { ...previous, message, error: true, stale };
   }
   // A mudança já foi gravada. Uma falha de invalidação não deve mandar repetir a ação.
   revalidateAttendance();

@@ -32,7 +32,7 @@ describe('layout protegido do painel', () => {
   it('entrega o conteúdo para quem tem concessão ativa', async () => {
     // O layout agora também monta a barra; o que importa aqui é que o conteúdo chega a quem tem concessão.
     const { renderToStaticMarkup } = await import('react-dom/server');
-    expect(renderToStaticMarkup(await ProtectedAdminLayout({ children: 'painel' }))).toContain('painel');
+    expect(renderToStaticMarkup(await ProtectedAdminLayout({ children: 'conteudo-do-painel' }))).toContain('conteudo-do-painel');
   });
 
   it('manda ao login quem não tem concessão administrativa', async () => {

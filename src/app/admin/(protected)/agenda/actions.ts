@@ -24,7 +24,8 @@ async function run(success: string, apply: () => Promise<unknown>): Promise<Agen
     return { message: error instanceof AppointmentInputError ? error.message : GENERIC, ok: false };
   }
   // Já gravou. Falha de invalidação não pode virar "não salvou": a próxima leitura traz o dado.
-  try { revalidatePath('/admin/agenda'); } catch { /* rota dinâmica lê o banco no próximo pedido */ }
+  // O contador da aba Agenda mora no layout: revalidar só a página o deixaria com o número velho.
+  try { revalidatePath('/admin', 'layout'); } catch { /* rota dinâmica lê o banco no próximo pedido */ }
   return { message: success, ok: true };
 }
 

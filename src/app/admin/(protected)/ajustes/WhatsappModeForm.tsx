@@ -31,7 +31,7 @@ export function WhatsappModeForm({ mode, version }: { mode: AttendanceMode; vers
         <span><strong>{option.label}</strong><small>{option.description}</small></span>
       </label>)}
     </fieldset>
-    {changing && chosen ? <form action={action} className={attendanceStyles.form}>
+    {changing && chosen && !state.stale ? <form action={action} className={attendanceStyles.form}>
       <p className={attendanceStyles.current} role="alert">
         Trocar para “{chosen.label}”? {chosen.description} Vale já para as próximas mensagens.
       </p>
@@ -43,6 +43,8 @@ export function WhatsappModeForm({ mode, version }: { mode: AttendanceMode; vers
       <button className={attendanceStyles.secondaryButton} type="button" disabled={pending}
         onClick={() => setSelected(state.mode)}>Manter como está</button>
     </form> : null}
+    {state.stale ? <button className={attendanceStyles.submit} type="button"
+      onClick={() => window.location.reload()}>Recarregar a página</button> : null}
     {message ? <p className={state.error ? attendanceStyles.error : attendanceStyles.success} role={state.error ? 'alert' : 'status'}>{message}</p> : null}
   </section>;
 }

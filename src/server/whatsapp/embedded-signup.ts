@@ -1,5 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { STORE } from '@/data/store';
+import { requireAdmin } from '@/server/authz';
 import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
 import { getDb } from '@/server/db/client';
 import { whatsappTenants } from '@/server/db/schema';
@@ -261,6 +262,7 @@ export async function findActiveTenantByPhoneNumberId(phoneNumberId: string): Pr
 export async function listWhatsappTenants(): Promise<
   Array<Omit<WhatsappTenantRow, 'encryptedAccessToken'>>
 > {
+  await requireAdmin();
   await ensureAttendanceTables();
   const rows = await getDb()
     .select({

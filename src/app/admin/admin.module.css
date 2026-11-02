@@ -277,10 +277,6 @@
 /* Casco das telas protegidas: reserva o pé para a barra, que é fixa e não ocupa lugar no fluxo. */
 .shell { padding-bottom: var(--admin-tabbar); }
 .shell > main { min-height: calc(100dvh - var(--admin-tabbar)); }
-/* Teclado aberto: a barra só atrapalharia a digitação (some, e o espaço dela com ela). */
-.shell:has(textarea:focus, select:focus, input:not([type="radio"], [type="checkbox"], [type="file"], [type="button"], [type="submit"]):focus) { --admin-tabbar: 0px; }
-.shell:has(textarea:focus, select:focus, input:not([type="radio"], [type="checkbox"], [type="file"], [type="button"], [type="submit"]):focus) .tabBar { display: none; }
-
 /* Fora de .screen, então a paleta vem escrita aqui (mesmos valores de --admin-*). */
 .tabBar {
   position: fixed;

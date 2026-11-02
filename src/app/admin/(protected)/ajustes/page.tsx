@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { AccessDeniedError } from '@/server/authz';
 import { readAdminWhatsappSetting } from '@/server/attendance/settings';
 import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
 import { TEST_TENANT_ID, TEST_WEBHOOK_URL } from '@/server/whatsapp/test-number';
@@ -13,11 +14,14 @@ export const metadata: Metadata = { title: 'Ajustes', robots: { index: false, fo
 export default async function SettingsPage() {
   const [tenants, setting] = await Promise.all([
     listWhatsappTenants().catch((error: unknown) => {
+      // Sem sessão autorizada não se mostra nada: a negação sobe, não vira aviso na tela.
+      if (error instanceof AccessDeniedError) throw error;
       console.error('Falha ao listar os números do WhatsApp', error);
       return null;
     }),
     // Sem a leitura não há versão para confirmar a troca: o controle some e a tela diz por quê.
     readAdminWhatsappSetting().catch((error: unknown) => {
+      if (error instanceof AccessDeniedError) throw error;
       console.error('Falha ao ler o modo da Dayse', error);
       return null;
     }),
