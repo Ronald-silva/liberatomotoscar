@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 
-vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: 'admin-1' }) }));
+const admin = vi.hoisted(() => ({ userId: 'admin-1' }));
+vi.mock('@/server/authz', () => ({ requireAdmin: async () => ({ userId: admin.userId }) }));
 
 import { closeDb, getDb } from '@/server/db/client';
-import { conversations, visitAppointments } from '@/server/db/schema';
-import { groupAgenda, upsertAgentAppointment, type AppointmentRow } from './appointments';
+import { conversations, usersTable, visitAppointments } from '@/server/db/schema';
+import {
+  AppointmentInputError, createManualAppointment, deleteAppointment, groupAgenda, manualEditFields,
+  updateAppointment, upsertAgentAppointment, type AppointmentRow,
+} from './appointments';
 
 const at = (iso: string) => new Date(iso);
 const row = (quote: string, scheduledFor: Date | null): AppointmentRow => ({
@@ -135,4 +139,100 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('upsertAgentAppointment com Post
       await db.delete(conversations).where(eq(conversations.id, conversation.id));
     }
   });
+});
+
+// Segunda-feira 12h na loja; sábado, dia 7, é dia de funcionamento; domingo, dia 8, a loja fecha.
+const visit = { customerName: 'Ana', customerPhone: '(85) 99999-0000', vehicleId: null, data: '2026-11-07', hora: '14:00' };
+
+describe('regras de agendamento manual (sem banco)', () => {
+  it('recusa horario fora do funcionamento com a mesma regra do agente', async () => {
+    // Uma regra só: o que resolveVisitSlot recusa para a Dayse, o formulário também recusa.
+    for (const fora of [{ hora: '18:00' }, { hora: '08:59' }, { data: '2026-11-08' }]) {
+      await expect(createManualAppointment({ ...visit, ...fora }, now)).rejects.toThrow(AppointmentInputError);
+    }
+    await expect(createManualAppointment({ ...visit, hora: '18:00' }, now))
+      .rejects.toThrow(/funcionamento/i);
+  });
+
+  it('recusa horario que ja passou e data invalida', async () => {
+    await expect(createManualAppointment({ ...visit, data: '2026-11-02', hora: '10:00' }, now)).rejects.toThrow(/já passou/i);
+    await expect(createManualAppointment({ ...visit, data: '2026-02-31' }, now)).rejects.toThrow(AppointmentInputError);
+  });
+
+  it('recusa telefone vazio e nome vazio', async () => {
+    await expect(createManualAppointment({ ...visit, customerPhone: '   ' }, now)).rejects.toThrow(/telefone/i);
+    await expect(createManualAppointment({ ...visit, customerPhone: '123' }, now)).rejects.toThrow(/telefone/i);
+    await expect(createManualAppointment({ ...visit, customerName: ' ' }, now)).rejects.toThrow(/nome/i);
+  });
+
+  it('corrigir tambem recusa horario fora do funcionamento', async () => {
+    await expect(updateAppointment(randomUUID(), { data: '2026-11-08', hora: '10:00', vehicleId: null }, now))
+      .rejects.toThrow(/funcionamento/i);
+  });
+
+  it('toda edicao feita a mao marca a linha como manual, para a Dayse nao desfazer', () => {
+    const fields = manualEditFields(at('2026-11-07T14:00:00-03:00'), null);
+    expect(fields.source).toBe('manual');
+    expect(fields.scheduledFor?.toISOString()).toBe('2026-11-07T17:00:00.000Z');
+  });
+});
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)('agendamento manual com PostgreSQL isolado', () => {
+  afterAll(closeDb);
+  const created: string[] = [];
+  const adminId = randomUUID();
+
+  async function withAdmin<T>(run: () => Promise<T>): Promise<T> {
+    if (process.env.DATABASE_URL !== process.env.TEST_DATABASE_URL) throw new Error('Banco de teste isolado obrigatório.');
+    const db = getDb();
+    await db.insert(usersTable).values({ id: adminId, name: 'Admin de teste' }).onConflictDoNothing();
+    admin.userId = adminId;
+    return run();
+  }
+  afterAll(async () => {
+    const db = getDb();
+    for (const id of created) await db.delete(visitAppointments).where(eq(visitAppointments.id, id));
+    await db.delete(usersTable).where(eq(usersTable.id, adminId));
+  });
+
+  it('cria agendamento manual com quem atendeu registrado', () => withAdmin(async () => {
+    const row = await createManualAppointment(visit, now);
+    created.push(row.id);
+    expect(row).toMatchObject({ source: 'manual', createdBy: adminId, customerName: 'Ana', conversationId: null });
+    expect(row.scheduledFor?.toISOString()).toBe('2026-11-07T17:00:00.000Z');
+  }));
+
+  it('corrigir altera o horario sem criar outra linha e vira manual', () => withAdmin(async () => {
+    const db = getDb();
+    const [conversation] = await db.insert(conversations).values({
+      channel: 'whatsapp', tokenHash: randomUUID(), expiresAt: at('2027-01-01T00:00:00Z'),
+    }).returning();
+    try {
+      const agent = await upsertAgentAppointment({
+        conversationId: conversation.id, vehicleId: null, customerName: 'Beto', customerPhone: '85988887777',
+        scheduledFor: at('2026-11-07T14:00:00-03:00'), quote: 'sabado as 14h',
+      });
+      const before = (await db.select().from(visitAppointments)).length;
+      const fixed = await updateAppointment(agent.id, { data: '2026-11-06', hora: '10:30', vehicleId: null }, now);
+      expect((await db.select().from(visitAppointments)).length).toBe(before);
+      expect(fixed.id).toBe(agent.id);
+      expect(fixed.scheduledFor?.toISOString()).toBe('2026-11-06T13:30:00.000Z');
+      // A frase do cliente e a conversa ficam; so a origem muda, e e ela que protege a correcao.
+      expect(fixed).toMatchObject({ source: 'manual', quote: 'sabado as 14h', conversationId: conversation.id, customerName: 'Beto' });
+    } finally {
+      await db.delete(conversations).where(eq(conversations.id, conversation.id));
+    }
+  }));
+
+  it('corrigir um id que nao existe avisa em vez de fingir', () => withAdmin(async () => {
+    await expect(updateAppointment(randomUUID(), { data: '2026-11-06', hora: '10:30', vehicleId: null }, now))
+      .rejects.toThrow(/não encontrada/i);
+  }));
+
+  it('cancelar remove a linha', () => withAdmin(async () => {
+    const row = await createManualAppointment(visit, now);
+    await deleteAppointment(row.id);
+    const rest = await getDb().select().from(visitAppointments).where(eq(visitAppointments.id, row.id));
+    expect(rest).toEqual([]);
+  }));
 });

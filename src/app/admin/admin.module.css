@@ -267,3 +267,24 @@
 /* O container de rolagem é o documento, não um elemento deste módulo; sem isto o navegador
    encosta o campo focado atrás da barra fixa ao rolá-lo para a tela. */
 :global(html) { scroll-padding-bottom: calc(var(--admin-sticky-action, 5.25rem) + var(--admin-space-2, 1rem)); }
+
+/* Agenda */
+.visitGroup { margin-top: var(--admin-space-4); }
+.visitGroupTitle { margin: 0 0 var(--admin-space-2); font-size: 1.125rem; }
+.visitList { display: grid; gap: var(--admin-space-2); margin: 0; padding: 0; list-style: none; }
+.visitCard { display: grid; gap: var(--admin-space-1); padding: var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
+/* Passou, mas segue visível: apagada pela cor e pela borda tracejada, e dita no selo "Já passou". */
+.visitCardPassou { border-style: dashed; color: var(--admin-muted); }
+.visitCardPassou .visitTime, .visitCardPassou .visitName { color: var(--admin-muted); }
+.visitWhen { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--admin-space-1) var(--admin-space-2); }
+.visitTime { font-size: 1.75rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.visitDay { color: var(--admin-muted); font-size: 0.9375rem; }
+.visitName { margin: 0; font-weight: 700; }
+.visitMeta { margin: 0; color: var(--admin-muted); }
+.visitQuote { margin: 0; padding-left: var(--admin-space-2); border-left: 3px solid var(--admin-line); }
+.visitActions { display: flex; flex-wrap: wrap; gap: var(--admin-space-1); margin-top: var(--admin-space-1); }
+.visitActions > .button { width: auto; }
+.visitForm { display: grid; gap: var(--admin-space-1); width: 100%; }
+.visitConfirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--admin-space-1); width: 100%; }
+.visitConfirm .notice { margin: 0; flex-basis: 100%; }
+.visitDetails > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; }

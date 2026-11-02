@@ -1,9 +1,9 @@
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { visitAppointments } from '@/server/db/schema';
 import { ensureAttendanceTables } from './ensure-schema';
-import { storeDayNumber, storeWeekday } from './visit-slot';
+import { resolveVisitSlot, storeDayNumber, storeWeekday, type VisitSlotReason } from './visit-slot';
 
 export type AppointmentRow = typeof visitAppointments.$inferSelect;
 /** O mesmo `tx` que `getDb().transaction` entrega: a Task 12 grava o agendamento junto com a resposta. */
@@ -104,4 +104,70 @@ export async function upsertAgentAppointment(
     },
   }).returning();
   return row;
+}
+
+export type ManualAppointmentInput = { customerName: string; customerPhone: string; vehicleId: string | null; data: string; hora: string };
+export type AppointmentCorrection = { data: string; hora: string; vehicleId: string | null };
+
+/** Erro que a pessoa pode ler: a mensagem é dela, o resto vira o texto genérico na action. */
+export class AppointmentInputError extends Error {}
+
+const SLOT_MESSAGES: Record<Exclude<VisitSlotReason, 'ok'>, string> = {
+  'sem-data': 'Escolha o dia da visita.',
+  'sem-hora': 'Escolha a hora da visita.',
+  fechado: 'Esse horário está fora do funcionamento da loja.',
+  passado: 'Esse horário já passou. Escolha um dia e uma hora que ainda virão.',
+  invalido: 'Dia ou hora inválidos.',
+};
+export const APPOINTMENT_NOT_FOUND = 'Visita não encontrada. Ela pode já ter sido cancelada.';
+
+/** A regra de horário é a da Dayse (`resolveVisitSlot`); aqui só se traduz a recusa em palavras. */
+function resolveManualSlot(data: string, hora: string, now: Date): Date {
+  const slot = resolveVisitSlot({ data, hora, now });
+  if (!slot.scheduledFor) throw new AppointmentInputError(SLOT_MESSAGES[slot.reason as Exclude<VisitSlotReason, 'ok'>]);
+  return slot.scheduledFor;
+}
+
+/**
+ * O que uma correção feita à mão grava. `source: 'manual'` é o que impede a Dayse de desfazer a
+ * correção na próxima mensagem do cliente: o upsert dela não troca a hora de uma linha manual.
+ */
+export function manualEditFields(scheduledFor: Date, vehicleId: string | null) {
+  return { scheduledFor, vehicleId, source: 'manual' as const, updatedAt: sql`now()` };
+}
+
+/** Marca uma visita pelo painel. Sem conversa e sem frase do cliente: quem a marcou foi o administrador. */
+export async function createManualAppointment(input: ManualAppointmentInput, now: Date = new Date()): Promise<AppointmentRow> {
+  const admin = await requireAdmin();
+  const customerName = input.customerName.trim();
+  const customerPhone = input.customerPhone.trim();
+  if (!customerName) throw new AppointmentInputError('Informe o nome do cliente.');
+  // DDD + número: 10 dígitos no mínimo. Telefone curto vira link de WhatsApp que não abre.
+  if (customerPhone.replace(/\D/g, '').length < 10) throw new AppointmentInputError('Informe o telefone do cliente com DDD.');
+  const scheduledFor = resolveManualSlot(input.data, input.hora, now);
+  await ensureAttendanceTables();
+  const [row] = await getDb().insert(visitAppointments).values({
+    vehicleId: input.vehicleId, customerName, customerPhone, scheduledFor,
+    quote: '', source: 'manual', createdBy: admin.userId,
+  }).returning();
+  return row;
+}
+
+/** Corrige dia, hora e veículo de uma visita. Atualiza a linha: nunca cria outra. */
+export async function updateAppointment(id: string, input: AppointmentCorrection, now: Date = new Date()): Promise<AppointmentRow> {
+  await requireAdmin();
+  const scheduledFor = resolveManualSlot(input.data, input.hora, now);
+  await ensureAttendanceTables();
+  const [row] = await getDb().update(visitAppointments)
+    .set(manualEditFields(scheduledFor, input.vehicleId))
+    .where(eq(visitAppointments.id, id)).returning();
+  if (!row) throw new AppointmentInputError(APPOINTMENT_NOT_FOUND);
+  return row;
+}
+
+/** Cancela removendo a linha. Se ela já não existe, o resultado desejado já é verdade. */
+export async function deleteAppointment(id: string): Promise<void> {
+  await requireAdmin();
+  await ensureAttendanceTables();
+  await getDb().delete(visitAppointments).where(eq(visitAppointments.id, id));
 }
