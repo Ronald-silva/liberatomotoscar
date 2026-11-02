@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// O horário vem de STORE_POLICY, não do código: o mock deixa o teste trocá-lo.
+const policy = vi.hoisted(() => ({
+  horarioEstruturado: { abre: '09:00', fecha: '18:00', dias: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] },
+}));
+vi.mock('@/data/store-policy', () => ({ STORE_POLICY: policy }));
+
 import { resolveVisitSlot, storeClock } from './visit-slot';
 
 const now = new Date('2026-11-02T12:00:00-03:00'); // segunda-feira, no relógio da loja
@@ -46,6 +53,23 @@ describe('resolveVisitSlot', () => {
   it('qualquer recusa devolve scheduledFor nulo', () => {
     for (const input of [{}, { data: '2026-11-08', hora: '10:00' }, { data: '2026-10-30', hora: '10:00' }, { data: '2026-11-07' }]) {
       expect(resolveVisitSlot({ ...input, now }).scheduledFor).toBeNull();
+    }
+  });
+});
+
+describe('resolveVisitSlot segue a politica da loja', () => {
+  it('usa abre, fecha e dias de STORE_POLICY, sem 9 e 18 no codigo', () => {
+    const original = { ...policy.horarioEstruturado };
+    try {
+      policy.horarioEstruturado.abre = '08:00';
+      policy.horarioEstruturado.fecha = '12:00';
+      policy.horarioEstruturado.dias = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Sunday'];
+      expect(resolveVisitSlot({ data: '2026-11-04', hora: '08:30', now }).reason).toBe('ok'); // antes das 9h
+      expect(resolveVisitSlot({ data: '2026-11-04', hora: '14:00', now }).reason).toBe('fechado'); // depois das 12h
+      expect(resolveVisitSlot({ data: '2026-11-07', hora: '10:00', now }).reason).toBe('fechado'); // sábado fora
+      expect(resolveVisitSlot({ data: '2026-11-08', hora: '10:00', now }).reason).toBe('ok'); // domingo dentro
+    } finally {
+      Object.assign(policy.horarioEstruturado, original);
     }
   });
 });

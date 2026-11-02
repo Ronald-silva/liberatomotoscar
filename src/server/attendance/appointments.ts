@@ -9,14 +9,18 @@ export type AppointmentRow = typeof visitAppointments.$inferSelect;
 /** O mesmo `tx` que `getDb().transaction` entrega: a Task 12 grava o agendamento junto com a resposta. */
 export type AppointmentTransaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 
+/** `passou`: a hora já foi, mas é de hoje; a tela mostra esmaecida em vez de sumir com ela. */
+export type AgendaRow = AppointmentRow & { passou: boolean };
+
 export type Agenda = {
-  hoje: AppointmentRow[];
-  amanha: AppointmentRow[];
+  /** Inclui as de hoje que já passaram (`passou`): às 15h ainda interessa saber quem veio às 14h. */
+  hoje: AgendaRow[];
+  amanha: AgendaRow[];
   /** De depois de amanhã até o sábado da semana da loja. */
-  semana: AppointmentRow[];
+  semana: AgendaRow[];
   /** Tudo que passa do sábado: sem este grupo, uma visita daqui a dez dias sumiria da tela. */
-  depois: AppointmentRow[];
-  semHora: AppointmentRow[];
+  depois: AgendaRow[];
+  semHora: AgendaRow[];
 };
 
 const SATURDAY = 6;
@@ -24,8 +28,9 @@ const SATURDAY = 6;
 /**
  * Distribui os agendamentos nos grupos da tela, contando os dias no calendário da loja (não em
  * blocos de 24h: 23h de hoje e 1h de amanhã estão a duas horas, mas em dias diferentes).
- * A semana da loja fecha no sábado; domingo já é a semana seguinte. Visita cuja hora passou sai
- * dos grupos futuros — sem hora (`scheduledFor` nulo) nunca "passa", fica em `semHora` até alguém resolver.
+ * A semana da loja fecha no sábado; domingo já é a semana seguinte. Visita de hoje cuja hora passou
+ * fica em `hoje`, marcada `passou`, até o fim do dia da loja; a de dia anterior sai da tela. Sem hora
+ * (`scheduledFor` nulo) nunca "passa", fica em `semHora` até alguém resolver.
  */
 export function groupAgenda(rows: readonly AppointmentRow[], now: Date): Agenda {
   const agenda: Agenda = { hoje: [], amanha: [], semana: [], depois: [], semHora: [] };
@@ -35,13 +40,14 @@ export function groupAgenda(rows: readonly AppointmentRow[], now: Date): Agenda 
   const ordered = [...rows].sort((a, b) =>
     (a.scheduledFor?.getTime() ?? 0) - (b.scheduledFor?.getTime() ?? 0));
   for (const row of ordered) {
-    if (!row.scheduledFor) { agenda.semHora.push(row); continue; }
-    if (row.scheduledFor.getTime() <= now.getTime()) continue;
+    if (!row.scheduledFor) { agenda.semHora.push({ ...row, passou: false }); continue; }
     const day = storeDayNumber(row.scheduledFor);
-    if (day === today) agenda.hoje.push(row);
-    else if (day === today + 1) agenda.amanha.push(row);
-    else if (day <= weekEnd) agenda.semana.push(row);
-    else agenda.depois.push(row);
+    if (day < today) continue;
+    const item = { ...row, passou: row.scheduledFor.getTime() <= now.getTime() };
+    if (day === today) agenda.hoje.push(item);
+    else if (day === today + 1) agenda.amanha.push(item);
+    else if (day <= weekEnd) agenda.semana.push(item);
+    else agenda.depois.push(item);
   }
   return agenda;
 }

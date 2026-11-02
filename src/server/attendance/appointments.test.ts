@@ -61,10 +61,36 @@ describe('groupAgenda', () => {
     expect(quotes(agenda.semana)).toEqual(['sabado']);
   });
 
-  it('visita ja passada sai dos grupos futuros', () => {
-    const agenda = groupAgenda([row('passou', at('2026-11-02T10:00:00-03:00')), row('sem hora', null)], now);
-    expect([...agenda.hoje, ...agenda.amanha, ...agenda.semana, ...agenda.depois]).toEqual([]);
+  it('visita de hoje que ja passou fica em hoje, marcada; a de ontem sai da tela', () => {
+    const agenda = groupAgenda([
+      row('ontem', at('2026-11-01T15:00:00-03:00')),
+      row('passou', at('2026-11-02T10:00:00-03:00')),
+      row('vem', at('2026-11-02T15:00:00-03:00')),
+      row('sem hora', null),
+    ], now);
+    expect(agenda.hoje.map((r) => [r.quote, r.passou])).toEqual([['passou', true], ['vem', false]]);
+    expect([...agenda.amanha, ...agenda.semana, ...agenda.depois]).toEqual([]);
     expect(quotes(agenda.semHora)).toEqual(['sem hora']);
+    expect(agenda.semHora[0].passou).toBe(false);
+  });
+
+  it('o domingo seguinte ja e depois, nao esta semana', () => {
+    const agenda = groupAgenda([row('domingo', at('2026-11-08T10:00:00-03:00'))], now);
+    expect(quotes(agenda.depois)).toEqual(['domingo']);
+    expect(agenda.semana).toEqual([]);
+  });
+
+  it('o "agora" tambem e lido no relogio da loja: sabado 22h ja e domingo em UTC', () => {
+    const sabadoNoite = at('2026-11-07T22:00:00-03:00'); // 01:00 de domingo em UTC
+    const agenda = groupAgenda([
+      row('hoje', at('2026-11-07T23:00:00-03:00')),
+      row('domingo', at('2026-11-08T10:00:00-03:00')),
+      row('segunda', at('2026-11-09T10:00:00-03:00')),
+    ], sabadoNoite);
+    expect(quotes(agenda.hoje)).toEqual(['hoje']);
+    expect(quotes(agenda.amanha)).toEqual(['domingo']);
+    expect(quotes(agenda.depois)).toEqual(['segunda']);
+    expect(agenda.semana).toEqual([]);
   });
 
   it('conta o dia no calendario da loja, nao em UTC', () => {
