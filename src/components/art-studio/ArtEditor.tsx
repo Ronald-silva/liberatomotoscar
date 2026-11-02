@@ -6,7 +6,19 @@ import { useCallback, useRef, useState } from 'react';
 import type Konva from 'konva';
 import styles from '@/app/admin/admin.module.css';
 import artStyles from './art-studio.module.css';
+import { deliverArt } from './share-art';
 import { artFormats, templatesForStatus, type ArtFormat, type ArtTemplate } from './templates';
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const ArtCanvas = dynamic(() => import('./ArtCanvas'), { ssr: false,
   loading: () => <p role="status">Preparando a prévia da arte…</p> });
@@ -35,28 +47,33 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
   const defaultNote = vehicle.status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     vehicle.status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições';
 
-  async function download(type: 'png' | 'jpeg') {
+  // Ordem deliberada: gerar o arquivo, conferir a versão e só então entregar. No Safari do iOS o
+  // compartilhamento exige ativação recente do toque, então o trabalho evitável vem depois da imagem pronta; já a
+  // conferência de versão fica antes de qualquer entrega para a arte nunca sair com um preço que o dono já mudou.
+  async function deliver(mode: 'share' | 'download') {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
-      if (note.trim() && !noteApproved) throw new Error('Revise e confirme o texto auxiliar antes de baixar.');
+      if (note.trim() && !noteApproved) throw new Error('Revise e confirme o texto auxiliar antes de enviar.');
+      if (!photoLoaded || !stageRef.current) throw new Error('A foto ainda não carregou. Aguarde ou escolha outra foto.');
+      await document.fonts.ready;
+      // JPEG: foto de veículo em PNG passa de vários MB e o WhatsApp recomprime de qualquer forma.
+      const blob = await stageRef.current.toBlob({ mimeType: 'image/jpeg', quality: 0.92, pixelRatio: 1 });
+      if (!blob) throw new Error('Não foi possível gerar a arte neste aparelho.');
       const response = await fetch(`/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? 'Não foi possível conferir o anúncio. Tente de novo.');
-      if (!photoLoaded || !stageRef.current) throw new Error('A foto ainda não carregou. Aguarde ou escolha outra foto.');
-      await document.fonts.ready;
-      const blob = await stageRef.current.toBlob({ mimeType: `image/${type}`, quality: 0.92, pixelRatio: 1 });
-      if (!blob) throw new Error('Não foi possível gerar a arte neste aparelho.');
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `liberato-${vehicle.slug}-${format}.${type === 'jpeg' ? 'jpg' : 'png'}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setMessage(`Arte ${type === 'jpeg' ? 'JPEG' : 'PNG'} pronta para baixar. Confira antes de publicar.`);
+      const canNativeShare = mode === 'share' && typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+      const outcome = await deliverArt({
+        blob, filename: `liberato-${vehicle.slug}-${format}.jpg`, download: downloadBlob,
+        share: canNativeShare ? (data) => navigator.share(data) : undefined,
+        canShare: canNativeShare ? (data) => navigator.canShare(data) : undefined,
+      });
+      if (outcome === 'shared') setMessage('Arte enviada. Confira antes de publicar.');
+      else if (outcome === 'downloaded') setMessage(mode === 'share'
+        ? 'Este aparelho não abriu o envio, então a arte foi baixada. Confira antes de publicar.'
+        : 'Arte pronta para baixar. Confira antes de publicar.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Não foi possível gerar a arte. Tente de novo.');
     } finally { setBusy(false); }
@@ -67,7 +84,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
       <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact} ${artStyles.backLink}`} href={`/admin/veiculos/${vehicle.id}`}>Voltar ao veículo</Link>
       <h1 id="art-options-title" className={styles.heading}>Criar arte</h1>
       <p className={styles.description}>{vehicle.title} · {vehicle.price}</p>
-      {exportProblem ? <p className={artStyles.warning} role="status">Prévia disponível. Para baixar: {exportProblem}</p> : null}
+      {exportProblem ? <p className={artStyles.warning} role="status">Prévia disponível. Para enviar ou baixar: {exportProblem}</p> : null}
       <div className={artStyles.layout}>
         <div className={artStyles.controls}>
           <fieldset className={artStyles.group}>
@@ -116,15 +133,15 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
           <a className={`${styles.button} ${styles.buttonSecondary} ${artStyles.mobileJump}`} href="#art-preview-title">Ver prévia da arte</a>
         </div>
         <section className={artStyles.preview} aria-labelledby="art-preview-title">
-          <h2 id="art-preview-title">4. Conferir e baixar</h2>
+          <h2 id="art-preview-title">4. Conferir e enviar</h2>
           <p className={artStyles.hint}>Prévia no formato escolhido. O arquivo mantém a dimensão indicada acima.</p>
           <ArtCanvas format={format} template={template} photoUrl={photoUrl} title={vehicle.title}
             year={vehicle.year} price={vehicle.price} phone={phone} status={vehicle.status} note={note}
             focalX={focalX} focalY={focalY} stageRef={stageRef} onPhotoLoad={onPhotoLoad} />
           <div className={artStyles.downloads}>
-            <button className={styles.button} type="button" disabled={busy || Boolean(exportProblem)} onClick={() => void download('png')}>
-              {busy ? 'Conferindo anúncio…' : 'Baixar PNG'}</button>
-            <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy || Boolean(exportProblem)} onClick={() => void download('jpeg')}>Baixar JPEG</button>
+            <button className={styles.button} type="button" disabled={busy || Boolean(exportProblem)} onClick={() => void deliver('share')}>
+              {busy ? 'Conferindo anúncio…' : 'Enviar para…'}</button>
+            <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy || Boolean(exportProblem)} onClick={() => void deliver('download')}>Baixar</button>
           </div>
           <p className={artStyles.hint} role="status" aria-live="polite">{message}</p>
           <a className={`${styles.button} ${styles.buttonSecondary} ${artStyles.mobileJump}`} href="#art-options-title">Alterar opções</a>
