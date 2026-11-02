@@ -4,10 +4,41 @@ import { useEffect, useState, type RefObject } from 'react';
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Group } from 'react-konva';
 import Konva from 'konva';
 import { artFormats, artTemplates, type ArtFormat, type ArtTemplate } from './templates';
+import { ART_FONT_FAMILY, fitTitle } from './title-fit';
 
 // O palco já tem 1080 px de largura. Em celulares HiDPI, duplicar a resolução
 // interna dos dois canvas do Konva gastaria memória sem melhorar o arquivo final.
 Konva.pixelRatio = 1;
+
+// Altura da caixa do título e corpos tentados (do maior para o menor) em cada formato.
+const titleBox: Record<ArtFormat, { height: number; candidates: readonly number[] }> = {
+  feed: { height: 120, candidates: [66, 55, 48] },
+  square: { height: 120, candidates: [59, 55, 48] },
+  story: { height: 108, candidates: [52, 46, 40] },
+  tiktok: { height: 108, candidates: [52, 46, 40] },
+};
+const TITLE_LINE_HEIGHT = 1.02;
+
+let measureContext: CanvasRenderingContext2D | null = null;
+// Mesma fonte e mesmo peso que o Konva usa no Text do título, para a medida bater com o desenho.
+function measureTitle(text: string, size: number) {
+  measureContext ??= document.createElement('canvas').getContext('2d');
+  if (!measureContext) return text.length * size * 0.6;
+  measureContext.font = `bold ${size}px ${ART_FONT_FAMILY}`;
+  return measureContext.measureText(text).width;
+}
+
+function useFontsReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    // O Konva quebra o texto uma única vez e não refaz quando a fonte chega (font-display: swap).
+    void Promise.all([document.fonts.load(`bold 48px ${ART_FONT_FAMILY}`), document.fonts.ready])
+      .catch(() => undefined).then(() => { if (alive) setReady(true); });
+    return () => { alive = false; };
+  }, []);
+  return ready;
+}
 
 function useLoadedImage(src: string | null) {
   const [loaded, setLoaded] = useState<{ src: string; image: HTMLImageElement } | null>(null);
@@ -30,6 +61,7 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
 }) {
   const [availableWidth, setAvailableWidth] = useState(0);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const fontsReady = useFontsReady();
   const photo = useLoadedImage(photoUrl);
   const logo = useLoadedImage('/logo-liberato-negativo.png');
   const { width, height } = artFormats[format];
@@ -73,8 +105,10 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
   const badge = status === 'sold' ? 'VENDIDO' : status === 'reserved' ? 'RESERVADO' : choice.heading;
   const ink = classic ? '#111820' : '#ffffff';
   const muted = classic ? '#49505a' : '#d0d4dc';
-  const titleSize = vertical ? 52 : Math.min(format === 'square' ? 59 : 66,
-    title.length > 32 ? 48 : title.length > 24 ? 55 : 66);
+  const { height: titleHeight, candidates } = titleBox[format];
+  // Mede com a fonte já carregada; antes disso a quebra seria a da fonte de reserva.
+  const fittedTitle = fitTitle({ text: title.toLocaleUpperCase('pt-BR'), maxWidth: contentWidth,
+    maxHeight: titleHeight, lineHeight: TITLE_LINE_HEIGHT, candidates, measure: measureTitle });
   const priceY = vertical ? 1070 : footerTop + (format === 'square' ? 191 : 203);
   const footerNote = note || (status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições');
@@ -83,7 +117,7 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
     <div style={{ width: width * scale, height: height * scale, marginInline: 'auto', overflow: 'hidden' }}>
       <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
         <Stage width={width} height={height} ref={stageRef}>
-          <Layer>
+          <Layer key={String(fontsReady)}>
             <Rect width={width} height={height} fill={classic ? '#eee9df' : '#090c11'} />
             {classic ? <Rect width={width} height={photoTop} fill="#090c11" /> : null}
             {photo && crop ? <KonvaImage image={photo} {...(containPhoto ? containedPhoto : photoBox)}
@@ -99,7 +133,7 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
               <Rect x={vertical ? photoBox.x + photoBox.width - 34 : width - 90}
                 y={photoTop + 30} width={34} height={170} fill={choice.accent} />
               {!vertical ? <Text x={width - 520} y={50} width={450} align="right" text="DESTAQUE DA SEMANA"
-                fontFamily="Archivo, Arial" fontSize={24} fontStyle="bold" fill="#d0d4dc" />
+                fontFamily={ART_FONT_FAMILY} fontSize={24} fontStyle="bold" fill="#d0d4dc" />
                 : null}
             </> : null}
             {classic ? <>
@@ -114,7 +148,7 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
                 width={vertical ? contentWidth : width} height={138}
                 fill={status === 'sold' ? 'rgba(9,12,17,0.88)' : 'rgba(98,67,20,0.9)'} />
               <Text x={inset} y={photoTop + photoHeight * 0.42 + 24} width={contentWidth}
-                align="center" text={badge} fill="#ffffff" fontFamily="Archivo, Arial"
+                align="center" text={badge} fill="#ffffff" fontFamily={ART_FONT_FAMILY}
                 fontSize={77} fontStyle="bold" />
             </> : null}
             <Rect x={0} y={0} width={width} height={16} fill={choice.accent} />
@@ -124,27 +158,27 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
             {(!unavailable || classic) ? <Group x={inset} y={footerTop - 68}>
               <Rect width={Math.min(600, badge.length * 29 + 80)} height={64}
                 fill={classic ? '#090c11' : choice.accent} cornerRadius={classic ? 0 : 8} />
-              <Text x={26} y={15} text={badge} fill="#ffffff" fontFamily="Archivo, Arial" fontSize={31} fontStyle="bold" />
+              <Text x={26} y={15} text={badge} fill="#ffffff" fontFamily={ART_FONT_FAMILY} fontSize={31} fontStyle="bold" />
             </Group> : null}
-            <Text x={inset} y={footerTop + 16} width={contentWidth} height={vertical ? 108 : 120}
-              text={title.toLocaleUpperCase('pt-BR')} fill={ink} fontFamily="Archivo, Arial"
-              fontSize={titleSize} fontStyle="bold" lineHeight={1.02} wrap="word" />
+            <Text x={inset} y={footerTop + 16} width={contentWidth} height={titleHeight}
+              text={fittedTitle.lines.join('\n')} fill={ink} fontFamily={ART_FONT_FAMILY}
+              fontSize={fittedTitle.size} fontStyle="bold" lineHeight={TITLE_LINE_HEIGHT} wrap="word" ellipsis />
             <Text x={inset} y={vertical ? 1024 : footerTop + (format === 'square' ? 147 : 154)}
-              text={year ? `ANO ${year}` : 'ANO NÃO INFORMADO'} fill={muted} fontFamily="Archivo, Arial" fontSize={31} />
+              text={year ? `ANO ${year}` : 'ANO NÃO INFORMADO'} fill={muted} fontFamily={ART_FONT_FAMILY} fontSize={31} />
             {priceFeature ? <Rect x={inset - 18} y={priceY - 8} width={contentWidth + 36}
               height={vertical || format === 'square' ? 88 : 100} fill={choice.accent} cornerRadius={8} /> : null}
             <Text x={inset} y={priceY} width={contentWidth}
               text={status === 'sold' ? 'VEJA OUTRAS OPÇÕES' : price} fill={priceFeature ? '#ffffff' : ink}
-              fontFamily="Archivo, Arial" fontSize={status === 'sold' ? 52 : vertical ? 68 : format === 'square' ? 66 : 80}
+              fontFamily={ART_FONT_FAMILY} fontSize={status === 'sold' ? 52 : vertical ? 68 : format === 'square' ? 66 : 80}
               fontStyle="bold" />
             {!vertical ? <Rect x={inset} y={height - 126} width={contentWidth} height={2}
               fill={classic ? '#8b918f' : '#57606c'} />
               : null}
             <Text x={inset} y={vertical ? 1160 : height - 112} text={footerNote}
               width={contentWidth} height={vertical ? 32 : 40} ellipsis fill={muted}
-              fontFamily="Archivo, Arial" fontSize={vertical ? 27 : 32} />
+              fontFamily={ART_FONT_FAMILY} fontSize={vertical ? 27 : 32} />
             <Text x={inset} y={vertical ? 1194 : height - 61} text={phone} fill={ink}
-              fontFamily="Archivo, Arial" fontSize={vertical ? 40 : 42} fontStyle="bold" />
+              fontFamily={ART_FONT_FAMILY} fontSize={vertical ? 40 : 42} fontStyle="bold" />
             {status === 'draft' || status === 'archived' ? <Text x={0} y={height / 2 - 70} width={width}
               text="PRÉVIA · NÃO PUBLICAR" align="center" fill="#ffffff" shadowColor="#000000"
               shadowBlur={10} fontSize={56} fontStyle="bold" /> : null}
