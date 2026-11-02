@@ -42,7 +42,7 @@ vi.mock('@/server/db/client', async () => {
   return { getDb: () => ({ ...tx, transaction: async (run: (t: typeof tx) => unknown) => run(tx) }) };
 });
 
-import { StaleAttendanceSettingError, readWhatsappSetting, setWhatsappMode } from './settings';
+import { StaleAttendanceSettingError, readAdminWhatsappSetting, readWhatsappSetting, setWhatsappMode } from './settings';
 
 beforeEach(() => { db.row = null; db.audit = []; db.denied = false; });
 
@@ -89,5 +89,15 @@ describe('controle do modo do WhatsApp', () => {
     db.denied = true;
     await expect(setWhatsappMode('disabled', 1)).rejects.toThrow('Acesso negado');
     expect(db.row).toBeNull();
+  });
+});
+
+describe('leitura do painel', () => {
+  it('exige admin, ao contrario da leitura do runtime da Dayse', async () => {
+    db.denied = true;
+    await expect(readAdminWhatsappSetting()).rejects.toThrow('Acesso negado');
+    await expect(readWhatsappSetting()).resolves.toMatchObject({ mode: 'ai' });
+    db.denied = false;
+    await expect(readAdminWhatsappSetting()).resolves.toMatchObject({ mode: 'ai', version: 1 });
   });
 });

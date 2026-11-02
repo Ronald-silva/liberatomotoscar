@@ -110,12 +110,13 @@
 .statusActions { display: grid; gap: var(--admin-space-1); margin-top: var(--admin-space-2); }
 .stickyAction {
   position: sticky;
-  bottom: 0;
+  /* Acima da barra de navegação fixa: com `bottom: 0` o botão ficaria atrás dela. */
+  bottom: var(--admin-tabbar, 0px);
   /* Abaixo da lista de sugestões (z-index 5), que precisa cobrir a barra quando abre perto do pé. */
   z-index: 1;
   margin: 0 calc(var(--admin-space-2) * -1);
   padding: var(--admin-space-2);
-  padding-bottom: max(var(--admin-space-2), env(safe-area-inset-bottom));
+  /* A área segura do aparelho já é da barra de navegação, que fica logo abaixo. */
   background: linear-gradient(to top, var(--admin-bg) 70%, transparent);
 }
 .stickyAction > a, .empty a { display: flex; align-items: center; justify-content: center; text-decoration: none; }
@@ -249,7 +250,7 @@
 .photoActions .badge { justify-self: start; }
 .dangerActions { display: grid; gap: var(--admin-space-1); margin-top: var(--admin-space-4); padding-top: var(--admin-space-3); border-top: 1px solid var(--admin-line); }
 .editorWithFooter { padding-bottom: calc(var(--admin-sticky-action) + var(--admin-space-5) + var(--admin-space-3)); }
-.editorFooter { position: sticky; z-index: 4; bottom: 0; margin: var(--admin-space-2) calc(-1 * var(--admin-space-2)); padding: var(--admin-space-1) var(--admin-space-2) max(var(--admin-space-2), env(safe-area-inset-bottom)); background: var(--admin-bg); border: 2px solid var(--admin-accent); border-radius: var(--admin-radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.editorFooter { position: sticky; z-index: 4; bottom: var(--admin-tabbar, 0px); margin: var(--admin-space-2) calc(-1 * var(--admin-space-2)); padding: var(--admin-space-1) var(--admin-space-2) var(--admin-space-2); background: var(--admin-bg); border: 2px solid var(--admin-accent); border-radius: var(--admin-radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
 .editorFooterKeyboard { display: none; }
 .editorFooterInner { width: min(100%, 640px); margin: 0 auto; }
 .editorFooter .chipHint { margin-top: var(--admin-space-1); }
@@ -266,7 +267,63 @@
 
 /* O container de rolagem é o documento, não um elemento deste módulo; sem isto o navegador
    encosta o campo focado atrás da barra fixa ao rolá-lo para a tela. */
-:global(html) { scroll-padding-bottom: calc(var(--admin-sticky-action, 5.25rem) + var(--admin-space-2, 1rem)); }
+:global(html) {
+  /* Altura da barra de navegação: 56px de alvo + a área segura do aparelho. Fica na raiz porque o
+     scroll-padding vale para o elemento que rola; a barra e os rodapés pegajosos leem o mesmo token. */
+  --admin-tabbar: calc(56px + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(var(--admin-sticky-action, 5.25rem) + var(--admin-tabbar, 0px) + var(--admin-space-2, 1rem));
+}
+
+/* Casco das telas protegidas: reserva o pé para a barra, que é fixa e não ocupa lugar no fluxo. */
+.shell { padding-bottom: var(--admin-tabbar); }
+.shell > main { min-height: calc(100dvh - var(--admin-tabbar)); }
+/* Teclado aberto: a barra só atrapalharia a digitação (some, e o espaço dela com ela). */
+.shell:has(textarea:focus, select:focus, input:not([type="radio"], [type="checkbox"], [type="file"], [type="button"], [type="submit"]):focus) { --admin-tabbar: 0px; }
+.shell:has(textarea:focus, select:focus, input:not([type="radio"], [type="checkbox"], [type="file"], [type="button"], [type="submit"]):focus) .tabBar { display: none; }
+
+/* Fora de .screen, então a paleta vem escrita aqui (mesmos valores de --admin-*). */
+.tabBar {
+  position: fixed;
+  inset: auto 0 0;
+  /* Acima do rodapé de publicar (4) e do botão fixo do estoque (1); abaixo da lista de sugestões (5). */
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid #6e747e;
+  background: #171c24;
+}
+.tabLink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  min-width: 44px;
+  padding: 4px;
+  color: #c7cbd2;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  text-decoration: none;
+}
+.tabLink[aria-current="page"] { color: #f7f7f4; font-weight: 700; box-shadow: inset 0 3px 0 #ba1d28; }
+.tabLink:focus-visible { outline: 3px solid #f7f7f4; outline-offset: -3px; }
+.tabIcon { position: relative; display: inline-flex; }
+.tabBadge {
+  position: absolute;
+  top: -6px;
+  left: 60%;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ba1d28;
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
 
 /* Agenda */
 .visitGroup { margin-top: var(--admin-space-4); }

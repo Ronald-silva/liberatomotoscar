@@ -22,6 +22,12 @@ export async function readWhatsappSetting() {
     updatedBy: null, updatedAt: null };
 }
 
+/** Leitura do painel: o runtime da Dayse usa `readWhatsappSetting` sem sessão; a tela de Ajustes exige admin. */
+export async function readAdminWhatsappSetting() {
+  await requireAdmin();
+  return readWhatsappSetting();
+}
+
 /**
  * Troca o modo da Dayse no WhatsApp. A linha do canal pode não existir (a Dayse roda no padrão
  * 'ai' até alguém mexer), então a primeira troca a cria. `expectedVersion` é a versão que a

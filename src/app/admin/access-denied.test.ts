@@ -18,7 +18,10 @@ vi.mock('@/server/authz', () => ({
 }));
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => { throw Object.assign(new Error('NEXT_REDIRECT'), { redirectUrl: url }); },
+  usePathname: () => '/admin',
 }));
+
+vi.mock('./(protected)/tabCounts', () => ({ loadTabCounts: async () => ({ agenda: null, conversas: null }) }));
 
 import ProtectedAdminLayout from './(protected)/layout';
 import { GET as healthGet } from '../api/admin/health/route';
@@ -27,7 +30,9 @@ beforeEach(() => { stub.failure = undefined; });
 
 describe('layout protegido do painel', () => {
   it('entrega o conteúdo para quem tem concessão ativa', async () => {
-    await expect(ProtectedAdminLayout({ children: 'painel' })).resolves.toBe('painel');
+    // O layout agora também monta a barra; o que importa aqui é que o conteúdo chega a quem tem concessão.
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    expect(renderToStaticMarkup(await ProtectedAdminLayout({ children: 'painel' }))).toContain('painel');
   });
 
   it('manda ao login quem não tem concessão administrativa', async () => {

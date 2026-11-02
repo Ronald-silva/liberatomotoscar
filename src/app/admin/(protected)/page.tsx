@@ -38,7 +38,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </form>
       </header>
       <h1 id="admin-title" className={styles.heading}>Estoque</h1>
-      <p><Link className={`${styles.button} ${styles.buttonSecondary}`} href="/admin/atendimento">Atendimento · Dayse</Link></p>
       <StatusFilter counts={counts} active={status} />
       {vehicles.length === 0 ? <div className={styles.empty}>
         <p className={styles.description}>{status

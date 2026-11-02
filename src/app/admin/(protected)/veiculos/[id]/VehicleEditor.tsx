@@ -89,7 +89,7 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
   }
 
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
-    <div className={styles.listPanel}>
+    <div className={`${styles.listPanel} ${styles.editorWithFooter}`}>
       <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">Voltar ao estoque</Link>
       <h1 id="editar-title" className={styles.heading}>{title}</h1>
       {isNew ? <p className={styles.description}>Siga de cima para baixo. O que você preencher é salvo automaticamente.</p> : null}

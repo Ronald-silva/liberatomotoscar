@@ -9,11 +9,7 @@ import {
 } from '@/server/attendance/inbox';
 import { protocolOf } from '@/server/attendance/protocol';
 import { organizarFicha, semGritar } from './ficha';
-import { listWhatsappTenants } from '@/server/whatsapp/embedded-signup';
-import { TEST_TENANT_ID, TEST_WEBHOOK_URL } from '@/server/whatsapp/test-number';
 import { InboxOperatorControls } from './InboxOperatorControls';
-import { MetaTestNumberForm } from './MetaTestNumberForm';
-import { WhatsAppOnboardingCard } from './WhatsAppOnboardingCard';
 import attendanceStyles from './attendance.module.css';
 
 export const metadata: Metadata = { title: 'Atendimento · Dayse', robots: { index: false, follow: false } };
@@ -55,10 +51,9 @@ export default async function AttendancePage({
   const rawConversation = Array.isArray(resolved.conversa) ? resolved.conversa[0] : resolved.conversa;
   const filter: InboxFilter = inboxFilterSchema.parse(rawFilter);
 
-  const [counts, list, tenants] = await Promise.all([
+  const [counts, list] = await Promise.all([
     countInbox().catch(() => ({ waiting: 0, mine: 0, automation: 0 })),
     listInbox(filter).catch(() => []),
-    listWhatsappTenants().catch(() => []),
   ]);
 
   const activeConversationId = rawConversation ?? list[0]?.id ?? null;
@@ -73,53 +68,14 @@ export default async function AttendancePage({
     { id: 'closed', label: 'Encerradas' },
   ];
 
-  const rawAppId = (
-    process.env.META_APP_ID ||
-    process.env.NEXT_PUBLIC_META_APP_ID ||
-    process.env.WHATSAPP_APP_ID ||
-    ''
-  )
-    .replace(/['"\s]/g, '')
-    .trim();
-  const metaAppId =
-    !rawAppId || rawAppId === '172704712193909' || !/^\d{15,20}$/.test(rawAppId)
-      ? '1727047121923909'
-      : rawAppId;
-
-  const rawConfigId = (
-    process.env.META_EMBEDDED_SIGNUP_CONFIG_ID ||
-    process.env.NEXT_PUBLIC_META_CONFIG_ID ||
-    process.env.META_CONFIG_ID ||
-    ''
-  )
-    .replace(/['"\s]/g, '')
-    .trim();
-  const metaConfigId = !/^\d{10,25}$/.test(rawConfigId) ? '1590518199231570' : rawConfigId;
-  const testTenant = tenants.find((tenant) => tenant.tenantId === TEST_TENANT_ID && tenant.isActive);
-
   return (
     <main id="conteudo" className={attendanceStyles.screen}>
       <div className={attendanceStyles.panel}>
-        <Link href="/admin" className={attendanceStyles.back}>Voltar ao painel</Link>
+        <Link href="/admin/ajustes" className={attendanceStyles.back}>Ajustes do WhatsApp</Link>
         <h1>Atendimento · Dayse</h1>
         <p className={attendanceStyles.intro}>
           A Dayse atende os clientes automaticamente com base no estoque publicado. Para pausar a IA em qualquer conversa, basta clicar em <strong>Assumir conversa</strong> (ou responder direto pelo celular da loja no WhatsApp).
         </p>
-
-        <WhatsAppOnboardingCard
-          initialTenants={tenants.filter((tenant) => tenant.tenantId !== TEST_TENANT_ID)}
-          metaAppId={metaAppId}
-          metaConfigId={metaConfigId}
-        />
-
-        <MetaTestNumberForm
-          webhookUrl={process.env.WHATSAPP_WEBHOOK_CALLBACK_URL || TEST_WEBHOOK_URL}
-          currentTestNumber={testTenant?.displayPhoneNumber ?? testTenant?.whatsappPhoneNumberId ?? null}
-          phoneNumberId={testTenant?.whatsappPhoneNumberId ?? null}
-          wabaId={testTenant?.wabaId ?? null}
-          hasEnvTestCredentials={Boolean(process.env.WHATSAPP_TOKEN?.trim() &&
-            process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() && process.env.WHATSAPP_WEBHOOK_CALLBACK_URL?.trim())}
-        />
 
         <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
           <div className={attendanceStyles.inboxHeader}>
