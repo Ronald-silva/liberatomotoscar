@@ -2,7 +2,7 @@
 
 Para seguir no celular, de pé, na frente do Elton. Nada aqui exige decisão na hora: se algo sair do roteiro, vá para a seção "Se algo falhar".
 
-Escrito em 2 de novembro de 2026, sobre a branch `painel-reformulacao-agenda`. O painel não aparece em buscadores de propósito (o site espera o domínio próprio); isso não é defeito e não precisa ser explicado.
+Escrito em 2 de novembro de 2026. O painel não aparece em buscadores de propósito (o site espera o domínio próprio); isso não é defeito e não precisa ser explicado.
 
 ---
 
@@ -10,11 +10,13 @@ Escrito em 2 de novembro de 2026, sobre a branch `painel-reformulacao-agenda`. O
 
 ### 0.1 A agenda precisa do banco certo
 
-A tabela `visit_appointments` (migração `drizzle/0010_majestic_newton_destine.sql`) **não foi aplicada na produção**. O registro de migrações da produção tem 9 entradas, a mais nova de 27/10/2026, e a tabela não existe lá.
+**Antes da demonstração, peça ao desenvolvedor para aplicar a atualização do banco de dados da Agenda.** Hoje ela não foi aplicada no banco de produção. Quem aplica é o desenvolvedor, só depois de você autorizar.
 
-- **Aplicar a migração 0010 é pré-requisito da Agenda.** Enquanto você não autorizar, a demonstração da Agenda só funciona num banco que já tenha a tabela (o de desenvolvimento).
-- Abrir a aba Agenda antes da migração **não estraga nada**: a tela só mostra "Não foi possível carregar a agenda agora". A correção é aplicar a migração e atualizar a página.
-- Mesmo assim, aviso na frente do cliente não é demonstração: aplique antes.
+- Sem essa atualização, a aba Agenda mostra apenas "Não foi possível carregar a agenda agora". Nada quebra, mas não serve para mostrar.
+- Confirme com o desenvolvedor, no dia anterior, que a atualização foi aplicada. Depois disso, abra a Agenda uma vez para ter certeza.
+- Se a demonstração for num banco de desenvolvimento que já tem a Agenda, nada a fazer.
+
+(Detalhe técnico para o desenvolvedor, no apêndice no fim.)
 
 ### 0.2 O WhatsApp conectado é o número de teste da Meta
 
@@ -22,7 +24,7 @@ O número é o de teste (`liberato-motos-car-teste`, `+1 555-195-6955`). Número
 
 - Para mostrar o atendimento ao vivo: ou você coloca o telefone de quem vai mandar a mensagem na lista, no painel da Meta, **antes**; ou faz a demonstração com o seu próprio telefone, que já esteja autorizado.
 - Nenhum cliente real alcança a Dayse hoje. Isso não é defeito do painel; é o número.
-- Sem uma das duas coisas resolvidas, **não prometa atendimento ao vivo**. Mostre a conversa que já está na tela (seção 3).
+- Sem uma das duas coisas resolvidas, **não prometa atendimento ao vivo**. Mostre a conversa que já está em Conversas (passo 3, seção 5 deste roteiro).
 
 ### 0.3 O que ainda não existe (não diga que existe)
 
@@ -48,7 +50,8 @@ Entre em `/admin` no navegador do celular e marque:
 7. **Entrar no painel.** Faça login e abra as quatro seções. Todas carregam, nenhuma mostra aviso vermelho ou "Não foi possível carregar".
 8. **Dados da demonstração.** Tenha ao menos 1 veículo **publicado, com foto, marca, modelo, ano e preço**. Sem isso, Divulgar não deixa criar arte e diz o que falta.
 9. **Telefone da Dayse** (seção 0.2) está na lista da Meta, ou você vai usar o seu.
-10. **Bateria e rede.** Carregador à mão, dados móveis como reserva do Wi-Fi.
+10. **Há uma conversa em Conversas.** Abra Conversas e confirme que existe pelo menos uma conversa na lista. Se estiver vazia, o plano B do passo 3 não tem o que mostrar; nesse caso mande uma mensagem do seu telefone liberado antes de apresentar.
+11. **Bateria e rede.** Carregador à mão, dados móveis como reserva do Wi-Fi.
 
 ---
 
@@ -56,9 +59,9 @@ Entre em `/admin` no navegador do celular e marque:
 
 Estoque, depois Divulgar, depois Conversas, depois Agenda. O Ajustes é um bônus de 20 segundos no fim.
 
-- Começa pelo **veículo** porque tudo nasce nele; é o que o concorrente não faz: o preço digitado uma vez vale para a arte e para a Dayse.
-- A **arte** vem em segundo porque é o que o Elton já conhece do concorrente. Aqui a diferença é que você não digita o preço.
-- **Conversas** em terceiro, pois é o argumento mais forte: alguém responde o cliente às 22h de domingo, e o vendedor vê o que o cliente pediu.
+- Começa pelo **veículo** porque tudo nasce nele; o preço digitado uma vez vale para a arte e para a Dayse.
+- A **arte** vem em segundo porque é o que o Elton já conhece de artes para divulgação. Aqui o preço e o nome vêm do cadastro, você não digita.
+- **Conversas** em terceiro, pois é o argumento mais forte: a atendente responde o cliente à noite e o vendedor vê o que o cliente pediu. Não compare com outro programa; mostre o que o nosso faz e deixe o Elton comparar.
 - Termina na **Agenda**, para a última imagem da demonstração ser uma visita marcada.
 
 Se você só tiver 5 minutos: pule direto para a seção 5 (Conversas) e a seção 6 (Agenda).
@@ -92,7 +95,7 @@ Cada passo abaixo: toque, o que aparece, o que dizer, o que costuma dar errado.
 4. Mostre que marca, modelo, ano e preço já estão na arte. **Não digitou nada.**
 5. Toque em **Ver prévia da arte** e depois em **Enviar para…** (ou **Baixar**, no iPhone se for o caso).
 
-**Diga:** "O preço e o nome vêm do cadastro. No programa que o senhor usa, digita-se o preço à mão; aqui ele não erra, porque é o mesmo dado do estoque."
+**Diga:** "O preço e o nome vêm do cadastro. Aqui o preço não é digitado de novo: é o mesmo dado do estoque, então a arte não sai com preço diferente do anúncio."
 
 **O que costuma dar errado:**
 - O veículo aparece com "Completar cadastro" no lugar de "Criar arte": falta marca, modelo, ano, preço ou foto. Leia a frase que a tela mostra e escolha outro veículo.
@@ -115,7 +118,7 @@ Cada passo abaixo: toque, o que aparece, o que dizer, o que costuma dar errado.
 
 **Se não está autorizado:** mostre a conversa que já existe na lista e diga que ao vivo depende da liberação do número de teste.
 
-**Diga:** "Às dez da noite de domingo, com a loja fechada, a Dayse responde sobre estoque, preço, endereço e financiamento. Quando o cliente pede vendedor, ele aparece aqui, aguardando, e o senhor vê tudo o que foi dito."
+**Diga:** "Às dez da noite de domingo, com a loja fechada, a Dayse responde sobre o estoque, o preço e o endereço. Quando o cliente fala de financiamento ou de troca, ela chama um vendedor de propósito, sem prometer aprovação. Esse cliente aparece aqui, aguardando, e o senhor vê tudo o que foi dito."
 
 **Não faça:** não use a caixa de resposta para "responder o cliente" na frente dele. Hoje ela grava no painel mas não envia ao WhatsApp (seção 0.3). Mostre **Assumir** e o histórico, e pare aí.
 
@@ -132,17 +135,17 @@ Cada passo abaixo: toque, o que aparece, o que dizer, o que costuma dar errado.
 
 1. Toque em **Agenda**.
 2. Se estiver vazia, a tela diz "Nenhuma visita marcada. Marque a primeira abaixo." e já abre o formulário. Se tiver visitas, toque em **Marcar visita**.
-3. Preencha **Nome do cliente**, **Telefone com DDD**, **Dia**, **Hora** (dentro de segunda a sábado, 9h às 18h) e **Veículo**.
+3. Preencha **Nome do cliente**, **Telefone com DDD**, **Dia**, **Hora** (segunda a sábado; a última visita começa antes das 18h, ou seja, até 17h59) e **Veículo**.
 4. Toque em **Marcar visita**.
 5. A visita aparece em "Hoje", "Amanhã" ou "Esta semana". Mostre o cartão: nome, hora, veículo, o botão **WhatsApp** e **Ver conversa**.
 6. Toque em **Corrigir** para mostrar que dá para mudar dia e hora, e em **Cancelar visita** para mostrar que há confirmação (**Manter visita** desfaz).
 
-**Diga:** "O cliente que a Dayse atendeu vira uma visita marcada aqui, com hora, veículo e o telefone para chamar. Hoje é o vendedor que marca. O próximo passo é a Dayse marcar sozinha."
+**Diga:** "Hoje o vendedor marca a visita aqui, com hora, veículo e o telefone para chamar. O próximo passo é a Dayse marcar sozinha."
 
 **O que costuma dar errado:**
-- "Não foi possível carregar a agenda agora": a tabela não existe nesse banco (seção 0.1). Leia a mensagem em voz alta, diga "essa parte depende de uma atualização do banco que ainda vou liberar" e vá para o Ajustes.
+- "Não foi possível carregar a agenda agora": a tabela não existe nesse banco (seção 0.1). Leia a mensagem em voz alta, diga "essa parte eu te mostro depois" e vá para o Ajustes.
 - O veículo não aparece para escolher, com a frase de que a lista do estoque não carregou: marque a visita sem veículo, ou atualize a página.
-- Horário recusado: domingo ou fora das 9h às 18h. Escolha outro. A tela diz o motivo.
+- Horário recusado: domingo, antes das 9h ou a partir das 18h. Escolha outro. A tela diz o motivo.
 - Visita de hoje com hora que já passou aparece como "Já passou": é o normal, não é erro.
 
 ---
@@ -169,7 +172,7 @@ Regra geral: **o painel agora explica a falha em português. Leia a mensagem em 
 - **Salvar não funciona (veículo ou visita):** o painel mostra o motivo no formulário. Leia, corrija o campo indicado, e toque de novo. Não repita o toque várias vezes.
 - **Arte não envia:** toque em **Baixar** e diga que manda pela galeria.
 - **Dayse não responde:** número de teste (seção 0.2). Mostre a conversa que já existe.
-- **Agenda com aviso:** a migração 0010 não foi aplicada nesse banco (seção 0.1).
+- **Agenda com aviso:** a atualização do banco da Agenda não foi aplicada (seção 0.1). Diga "essa parte eu te mostro depois".
 - **Perdeu-se no meio:** toque em **Estoque**, o primeiro botão da barra. Recomece dali.
 
 O que **não** dizer: que a agenda se preenche sozinha, que a Dayse já marca visita, que a resposta do vendedor chega ao cliente pelo painel. Nada disso existe ainda.
@@ -179,3 +182,11 @@ O que **não** dizer: que a agenda se preenche sozinha, que a Dayse já marca vi
 ## 9. Depois da demonstração
 
 Anote o que travou e em que passo. Isso vale mais do que qualquer ajuste do roteiro.
+
+---
+
+## Apêndice técnico (para o desenvolvedor, não para a apresentação)
+
+- A tabela é `visit_appointments`, criada pela migração `drizzle/0010_majestic_newton_destine.sql`. Em 2 de novembro de 2026 o registro de migrações da produção tinha 9 entradas, a mais nova de 27/10/2026, e a tabela não existia.
+- A migração é o único caminho que cria a tabela; o criador automático de tabelas do atendimento (`ensure-schema.ts`) deixou de criá-la. Abrir a Agenda antes da migração apenas mostra o aviso.
+- Aplicar a migração em produção exige autorização do proprietário.

@@ -27,9 +27,16 @@ Perdeu-se uma disputa de **clareza**, não de capacidade.
 
 A resposta tem duas metades. A primeira é tornar o painel apresentável: dar-lhe uma navegação onde
 não se perca, consertar o retorno silencioso das ações principais e a perda de texto nas artes. A
-segunda é **não competir no terreno do Vapo**, e sim mostrar o que o Vapo não tem: uma atendente que
-responde um cliente às 22h de um domingo e **marca a visita**. Hoje a Dayse já faz isso — e o
-resultado não aparece em lugar nenhum do painel.
+segunda é **não competir no terreno do Vapo**, e sim mostrar o que o nosso sistema faz: uma atendente
+que responde um cliente às 22h de um domingo e **marca a visita**. Hoje a Dayse atende, mas ainda não
+marca (ver nota abaixo) — e o resultado não aparece em lugar nenhum do painel.
+
+> **Correção (2 de novembro de 2026).** A primeira versão desta frase dizia "mostrar o que o Vapo
+> **não tem**". Isso era inferência minha, não algo dito pelo proprietário. O que ele relatou foi só
+> o que o Vapo faz (parágrafo acima). Não sabemos se o Vapo tem agenda ou atendimento automático, e o
+> Elton conhece o produto melhor do que nós. A apresentação deve mostrar o que o nosso sistema faz,
+> sem afirmar lacuna alheia. Também: "a Dayse já faz isso" estava errado quanto a **marcar** — ela
+> responde e chama o vendedor, mas a marcação automática é o Bloco 2 (§8.3); hoje a visita entra à mão.
 
 ---
 
@@ -563,7 +570,7 @@ código:
 A Etapa 2 deve começar por (3): transformar `templates.ts` em esquema de layout declarativo e
 reduzir `ArtCanvas` a intérprete. Só então acrescentar modelos comemorativos e a porta
 modelo-primeiro em `/admin/divulgar`, onde escolher um veículo do estoque **preenche os dados
-sozinho** — a vantagem que o Vapo não tem, já que lá o preço é digitado à mão.
+sozinho** (o preço vem do cadastro, sem digitar de novo). *Corrigido: antes dizia que o Vapo não tem isso, o que não foi verificado.*
 
 Também fica para depois: "bater a foto" dentro do fluxo da arte, busca e paginação no estoque,
 unificação das três seções de situação, miniatura reduzida para o estúdio (hoje são 6 downloads de
