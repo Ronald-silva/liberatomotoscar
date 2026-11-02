@@ -9,8 +9,9 @@ export type VisitValues = { data: string; hora: string; vehicleId: string };
  * seletor nativo do celular e entregam `AAAA-MM-DD` e `HH:MM`, exatamente o que a regra de horário lê.
  * O horário de funcionamento vem da política da loja: o texto muda junto com ela.
  */
-export function VisitFields({ values, onChange, vehicles, minDate, idPrefix }: {
-  values: VisitValues; onChange: (next: VisitValues) => void; vehicles: VehicleOption[]; minDate?: string; idPrefix: string;
+export function VisitFields({ values, onChange, vehicles, vehiclesAvailable = true, minDate, idPrefix }: {
+  values: VisitValues; onChange: (next: VisitValues) => void; vehicles: VehicleOption[]; vehiclesAvailable?: boolean;
+  minDate?: string; idPrefix: string;
 }) {
   return <>
     <label className={styles.field} htmlFor={`${idPrefix}-dia`}>Dia
@@ -23,11 +24,15 @@ export function VisitFields({ values, onChange, vehicles, minDate, idPrefix }: {
     </label>
     <p className={styles.description}>A loja atende {STORE_POLICY.horarioEstruturado.rotulo}.</p>
     <label className={styles.field} htmlFor={`${idPrefix}-veiculo`}>Veículo
-      <select id={`${idPrefix}-veiculo`} className={styles.input} name="vehicleId" value={values.vehicleId}
+      {/* Desligado e sem `name`, o select não vai no envio: a correção deixa o vínculo como está em vez de apagá-lo. */}
+      <select id={`${idPrefix}-veiculo`} className={styles.input} name={vehiclesAvailable ? 'vehicleId' : undefined} value={values.vehicleId}
+        disabled={!vehiclesAvailable} aria-describedby={vehiclesAvailable ? undefined : `${idPrefix}-veiculo-aviso`}
         onChange={(event) => onChange({ ...values, vehicleId: event.target.value })}>
         <option value="">Sem veículo definido</option>
         {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.label}</option>)}
       </select>
     </label>
+    {vehiclesAvailable ? null
+      : <p id={`${idPrefix}-veiculo-aviso`} className={styles.description}>A lista do estoque não carregou, então o veículo não pode ser mudado agora. O que já estava vinculado continua.</p>}
   </>;
 }

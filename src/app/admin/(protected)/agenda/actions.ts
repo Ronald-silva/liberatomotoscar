@@ -12,7 +12,9 @@ export type AgendaFormState = FormState & { ok: boolean };
 
 const GENERIC = 'Não foi possível salvar agora. Tente de novo.';
 const text = (data: FormData, key: string) => String(data.get(key) ?? '').trim();
-const vehicleOf = (data: FormData) => text(data, 'vehicleId') || null;
+// Campo ausente é "não mexi nisso" (undefined); só o campo presente e vazio é "sem veículo" (null).
+// Um formulário que não perguntou pelo veículo não pode, por omissão, apagar o vínculo.
+const vehicleOf = (data: FormData) => data.has('vehicleId') ? (text(data, 'vehicleId') || null) : undefined;
 
 async function run(success: string, apply: () => Promise<unknown>): Promise<AgendaFormState> {
   try {
@@ -29,7 +31,7 @@ async function run(success: string, apply: () => Promise<unknown>): Promise<Agen
 export async function marcarVisita(_state: AgendaFormState, formData: FormData): Promise<AgendaFormState> {
   return run('Visita marcada.', () => createManualAppointment({
     customerName: text(formData, 'customerName'), customerPhone: text(formData, 'customerPhone'),
-    vehicleId: vehicleOf(formData), data: text(formData, 'data'), hora: text(formData, 'hora'),
+    vehicleId: vehicleOf(formData) ?? null, data: text(formData, 'data'), hora: text(formData, 'hora'),
   }));
 }
 

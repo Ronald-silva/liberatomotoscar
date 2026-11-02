@@ -118,3 +118,28 @@ it('falha ao corrigir mostra o motivo e preserva o que foi digitado', async () =
   expect((await screen.findByRole('alert')).textContent).toContain('fora do funcionamento');
   expect((screen.getByLabelText('Hora') as HTMLInputElement).value).toBe('19:00');
 });
+
+it('sem lista de estoque, o campo de veiculo fica desligado e a correcao nao o envia', async () => {
+  corrigirVisita.mockResolvedValue({ message: 'Visita corrigida.', ok: true });
+  render(<VisitCard visit={visit()} vehicles={[]} vehiclesAvailable={false} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Corrigir' }));
+  const select = screen.getByLabelText('Veículo') as HTMLSelectElement;
+  expect(select.disabled).toBe(true);
+  expect(screen.getByText(/estoque não carregou/i)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('Hora'), { target: { value: '10:30' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar correção' }));
+  await waitFor(() => expect(corrigirVisita).toHaveBeenCalledTimes(1));
+  const data = corrigirVisita.mock.calls[0][1] as FormData;
+  expect(data.has('vehicleId')).toBe(false);
+  expect(data.get('hora')).toBe('10:30');
+});
+
+it('veiculo que saiu da lista continua escolhido, para salvar so a hora nao desvincula', async () => {
+  corrigirVisita.mockResolvedValue({ message: 'Visita corrigida.', ok: true });
+  render(<VisitCard visit={visit({ vehicleId: 'sumiu', vehicle: null })} vehicles={vehicles} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Corrigir' }));
+  expect((screen.getByLabelText('Veículo') as HTMLSelectElement).value).toBe('sumiu');
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar correção' }));
+  await waitFor(() => expect(corrigirVisita).toHaveBeenCalledTimes(1));
+  expect((corrigirVisita.mock.calls[0][1] as FormData).get('vehicleId')).toBe('sumiu');
+});

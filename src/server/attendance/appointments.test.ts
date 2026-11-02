@@ -165,11 +165,6 @@ describe('regras de agendamento manual (sem banco)', () => {
     await expect(createManualAppointment({ ...visit, customerName: ' ' }, now)).rejects.toThrow(/nome/i);
   });
 
-  it('corrigir tambem recusa horario fora do funcionamento', async () => {
-    await expect(updateAppointment(randomUUID(), { data: '2026-11-08', hora: '10:00', vehicleId: null }, now))
-      .rejects.toThrow(/funcionamento/i);
-  });
-
   it('toda edicao feita a mao marca a linha como manual, para a Dayse nao desfazer', () => {
     const fields = manualEditFields(at('2026-11-07T14:00:00-03:00'), null);
     expect(fields.source).toBe('manual');

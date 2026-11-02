@@ -83,13 +83,14 @@ function CancelVisit({ visit }: { visit: VisitView }) {
   </div>;
 }
 
-function CorrectVisit({ visit, vehicles }: { visit: VisitView; vehicles: VehicleOption[] }) {
+function CorrectVisit({ visit, vehicles, vehiclesAvailable }: { visit: VisitView; vehicles: VehicleOption[]; vehiclesAvailable: boolean }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<VisitValues>(() => initialValues(visit));
   const { busy, message, run } = useCardAction();
-  // Veículo que saiu da lista (arquivado, por exemplo) continua escolhido: salvar só a hora não o desvincula.
-  const options = visit.vehicleId && visit.vehicle && !vehicles.some((v) => v.id === visit.vehicleId)
-    ? [{ id: visit.vehicleId, label: visit.vehicle.label }, ...vehicles] : vehicles;
+  // Veículo fora da lista (descartado, por exemplo) continua escolhido: sem a opção, o select
+  // enviaria "sem veículo" e salvar só a hora desvincularia o carro.
+  const options = visit.vehicleId && !vehicles.some((v) => v.id === visit.vehicleId)
+    ? [{ id: visit.vehicleId, label: visit.vehicle?.label ?? 'Veículo que saiu do estoque' }, ...vehicles] : vehicles;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,7 +104,7 @@ function CorrectVisit({ visit, vehicles }: { visit: VisitView; vehicles: Vehicle
       onClick={() => setOpen(true)}>Corrigir</button>;
   }
   return <form onSubmit={submit} className={styles.visitForm}>
-    <VisitFields idPrefix={`corrigir-${visit.id}`} values={values} onChange={setValues} vehicles={options} />
+    <VisitFields idPrefix={`corrigir-${visit.id}`} values={values} onChange={setValues} vehicles={options} vehiclesAvailable={vehiclesAvailable} />
     <button className={`${styles.button} ${styles.buttonCompact}`} type="submit" disabled={busy} aria-busy={busy}>
       {busy ? 'Salvando...' : 'Salvar correção'}
     </button>
@@ -113,7 +114,9 @@ function CorrectVisit({ visit, vehicles }: { visit: VisitView; vehicles: Vehicle
   </form>;
 }
 
-export function VisitCard({ visit, vehicles, showDay = false }: { visit: VisitView; vehicles: VehicleOption[]; showDay?: boolean }) {
+export function VisitCard({ visit, vehicles, vehiclesAvailable = true, showDay = false }: {
+  visit: VisitView; vehicles: VehicleOption[]; vehiclesAvailable?: boolean; showDay?: boolean;
+}) {
   const when = visit.scheduledFor ? new Date(visit.scheduledFor) : null;
   const whatsapp = whatsappLink(visit.customerPhone);
   const vehicleLine = visit.vehicle
@@ -137,7 +140,7 @@ export function VisitCard({ visit, vehicles, showDay = false }: { visit: VisitVi
       {visit.conversationId
         ? <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href={`/admin/atendimento?conversa=${visit.conversationId}`}>Ver conversa</Link>
         : null}
-      <CorrectVisit visit={visit} vehicles={vehicles} />
+      <CorrectVisit visit={visit} vehicles={vehicles} vehiclesAvailable={vehiclesAvailable} />
       <CancelVisit visit={visit} />
     </div>
   </li>;

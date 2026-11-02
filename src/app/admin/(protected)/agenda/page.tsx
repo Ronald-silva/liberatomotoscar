@@ -3,33 +3,28 @@ import { listAgenda, type Agenda } from '@/server/attendance/appointments';
 import { storeClock } from '@/server/attendance/visit-slot';
 import { listAdminVehiclesWithCover } from '@/server/vehicles/service';
 import styles from '../../admin.module.css';
-import { ManualVisitForm } from './ManualVisitForm';
-import { VisitCard, type VehicleOption, type VisitView } from './VisitCard';
+import { AgendaView, type AgendaGroups } from './AgendaView';
+import type { VehicleOption, VisitView } from './VisitCard';
 
 export const metadata: Metadata = { title: 'Agenda', robots: { index: false, follow: false } };
 
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const GROUPS: { key: keyof Agenda; title: string; showDay: boolean }[] = [
-  { key: 'hoje', title: 'Hoje', showDay: false },
-  { key: 'amanha', title: 'Amanhã', showDay: false },
-  { key: 'semana', title: 'Esta semana', showDay: true },
-  { key: 'depois', title: 'Depois', showDay: true },
-  { key: 'semHora', title: 'Combinado, sem hora certa', showDay: false },
-];
-
 type Stock = Awaited<ReturnType<typeof listAdminVehiclesWithCover>>;
 const titleOf = (v: Stock[number]) => [v.brand, v.model].filter(Boolean).join(' ') || 'Veículo sem título';
 
 export default async function AgendaPage() {
   const now = new Date();
-  const [agenda, stock] = await Promise.all([
+  const [agenda, loadedStock] = await Promise.all([
     listAgenda(now),
-    // Sem o estoque a agenda continua útil: só o seletor de veículo e a linha do veículo ficam de fora.
-    listAdminVehiclesWithCover().catch((error: unknown): Stock => {
+    // Sem o estoque a agenda continua útil: o veículo não pode ser escolhido nem mostrado, e os
+    // formulários desligam o campo (em vez de mandar "sem veículo" e apagar o vínculo).
+    listAdminVehiclesWithCover().catch((error: unknown): Stock | null => {
       console.error('Falha ao carregar o estoque para a agenda', error);
-      return [];
+      return null;
     }),
   ]);
+  const vehiclesAvailable = loadedStock !== null;
+  const stock = loadedStock ?? [];
   const byId = new Map(stock.map((v) => [v.id, v]));
   const options: VehicleOption[] = stock.map((v) => ({ id: v.id, label: titleOf(v) }));
   const view = (row: Agenda['hoje'][number]): VisitView => {
@@ -41,26 +36,21 @@ export default async function AgendaPage() {
       vehicle: vehicle ? { label: titleOf(vehicle), year: vehicle.year, price: vehicle.priceCents !== null ? brl.format(vehicle.priceCents / 100) : null } : null,
     };
   };
-  const empty = GROUPS.every(({ key }) => agenda[key].length === 0);
   const c = storeClock(now);
   const today = `${c.year}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
+
+  const groups: AgendaGroups = {
+    hoje: agenda.hoje.map(view), amanha: agenda.amanha.map(view), semana: agenda.semana.map(view),
+    depois: agenda.depois.map(view), semHora: agenda.semHora.map(view),
+  };
 
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="agenda-title">
       <h1 id="agenda-title" className={styles.heading}>Agenda</h1>
-      {empty
-        ? <p className={styles.description}>Nenhuma visita marcada. Marque a primeira abaixo, ou ela aparece aqui quando a Dayse combinar uma com um cliente.</p>
-        : null}
-      <details className={styles.visitDetails} open={empty}>
-        <summary>Marcar visita</summary>
-        <ManualVisitForm vehicles={options} minDate={today} />
-      </details>
-      {GROUPS.map(({ key, title, showDay }) => agenda[key].length === 0 ? null : <section key={key} className={styles.visitGroup} aria-labelledby={`grupo-${key}`}>
-        <h2 id={`grupo-${key}`} className={styles.visitGroupTitle}>{title} ({agenda[key].length})</h2>
-        <ul className={styles.visitList}>
-          {agenda[key].map((row) => <VisitCard key={row.id} visit={view(row)} vehicles={options} showDay={showDay} />)}
-        </ul>
-      </section>)}
+      <AgendaView
+        vehicles={options} vehiclesAvailable={vehiclesAvailable} minDate={today}
+        groups={groups}
+      />
     </section>
   </main>;
 }

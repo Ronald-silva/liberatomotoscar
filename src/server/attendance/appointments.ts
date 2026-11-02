@@ -3,7 +3,7 @@ import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { visitAppointments } from '@/server/db/schema';
 import { ensureAttendanceTables } from './ensure-schema';
-import { resolveVisitSlot, storeDayNumber, storeWeekday, type VisitSlotReason } from './visit-slot';
+import { resolveVisitSlot, storeClock, storeDayNumber, storeWeekday, type VisitSlotReason } from './visit-slot';
 
 export type AppointmentRow = typeof visitAppointments.$inferSelect;
 /** O mesmo `tx` que `getDb().transaction` entrega: a Task 12 grava o agendamento junto com a resposta. */
@@ -107,7 +107,8 @@ export async function upsertAgentAppointment(
 }
 
 export type ManualAppointmentInput = { customerName: string; customerPhone: string; vehicleId: string | null; data: string; hora: string };
-export type AppointmentCorrection = { data: string; hora: string; vehicleId: string | null };
+/** `vehicleId` ausente (undefined) deixa o vínculo como está; só `null` explícito é "sem veículo". */
+export type AppointmentCorrection = { data: string; hora: string; vehicleId?: string | null };
 
 /** Erro que a pessoa pode ler: a mensagem é dela, o resto vira o texto genérico na action. */
 export class AppointmentInputError extends Error {}
@@ -132,8 +133,19 @@ function resolveManualSlot(data: string, hora: string, now: Date): Date {
  * O que uma correção feita à mão grava. `source: 'manual'` é o que impede a Dayse de desfazer a
  * correção na próxima mensagem do cliente: o upsert dela não troca a hora de uma linha manual.
  */
-export function manualEditFields(scheduledFor: Date, vehicleId: string | null) {
-  return { scheduledFor, vehicleId, source: 'manual' as const, updatedAt: sql`now()` };
+export function manualEditFields(scheduledFor: Date, vehicleId?: string | null) {
+  return {
+    scheduledFor, source: 'manual' as const, updatedAt: sql`now()`,
+    // Uma correção não apaga o que não perguntou: sem `vehicleId`, a coluna fica fora do UPDATE.
+    ...(vehicleId === undefined ? {} : { vehicleId }),
+  };
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+/** `AAAA-MM-DD` e `HH:MM` de um instante, no relógio da loja: o mesmo formato que o formulário envia. */
+function storeDateAndTime(instant: Date) {
+  const c = storeClock(instant);
+  return { data: `${c.year}-${pad(c.month)}-${pad(c.day)}`, hora: `${pad(c.hour)}:${pad(c.minute)}` };
 }
 
 /** Marca uma visita pelo painel. Sem conversa e sem frase do cliente: quem a marcou foi o administrador. */
@@ -153,11 +165,21 @@ export async function createManualAppointment(input: ManualAppointmentInput, now
   return row;
 }
 
-/** Corrige dia, hora e veículo de uma visita. Atualiza a linha: nunca cria outra. */
+/**
+ * Corrige dia, hora e veículo de uma visita. Atualiza a linha: nunca cria outra. Horário que não
+ * mudou não é revalidado: a visita de hoje que já passou continua corrigível (telefone, veículo),
+ * mas ninguém move uma visita para o passado.
+ */
 export async function updateAppointment(id: string, input: AppointmentCorrection, now: Date = new Date()): Promise<AppointmentRow> {
   await requireAdmin();
-  const scheduledFor = resolveManualSlot(input.data, input.hora, now);
   await ensureAttendanceTables();
+  const [current] = await getDb().select().from(visitAppointments).where(eq(visitAppointments.id, id)).limit(1);
+  if (!current) throw new AppointmentInputError(APPOINTMENT_NOT_FOUND);
+  const unchanged = current.scheduledFor !== null && (() => {
+    const was = storeDateAndTime(current.scheduledFor);
+    return was.data === input.data.trim() && was.hora === input.hora.trim();
+  })();
+  const scheduledFor = unchanged ? current.scheduledFor! : resolveManualSlot(input.data, input.hora, now);
   const [row] = await getDb().update(visitAppointments)
     .set(manualEditFields(scheduledFor, input.vehicleId))
     .where(eq(visitAppointments.id, id)).returning();
