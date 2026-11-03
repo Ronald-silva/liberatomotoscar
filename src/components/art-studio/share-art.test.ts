@@ -16,6 +16,13 @@ describe('entrega da arte', () => {
     expect(data.text).toBe('Legenda #HondaTitan');
     expect(data.title).toBe('Honda Titan');
   });
+  it('chama o compartilhamento no mesmo ciclo do toque, sem esperar uma Promise', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    const result = deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => true,
+      download: vi.fn(), fallback: 'none' });
+    expect(share).toHaveBeenCalledOnce();
+    await expect(result).resolves.toBe('shared');
+  });
   it('envia só a imagem se o aparelho não aceitar legenda junto do arquivo', async () => {
     const share = vi.fn().mockResolvedValue(undefined); const download = vi.fn();
     const canShare = vi.fn((data: ShareData) => !data.text);

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type Konva from 'konva';
 import styles from '@/app/admin/admin.module.css';
 import artStyles from './art-studio.module.css';
@@ -51,7 +51,13 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
   const [focalY, setFocalY] = useState(50);
   const [note, setNote] = useState('');
   const [noteApproved, setNoteApproved] = useState(false);
-  const [photoLoaded, setPhotoLoaded] = useState(false);
+  const [photoState, setPhotoState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoRetry, setPhotoRetry] = useState(0);
+  const [prepared, setPrepared] = useState<{ key: string; blob: Blob } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
+  const [prepareRetry, setPrepareRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [captionMessage, setCaptionMessage] = useState<string | null>(null);
@@ -60,7 +66,10 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
   const [captionApprovals, setCaptionApprovals] = useState<Record<string, boolean>>({});
   const stageRef = useRef<Konva.Stage | null>(null);
   const captionRef = useRef<HTMLTextAreaElement | null>(null);
-  const onPhotoLoad = useCallback((loaded: boolean) => setPhotoLoaded(loaded), []);
+  const onPhotoLoad = useCallback((state: 'loading' | 'ready' | 'error', error?: string) => {
+    setPhotoState(state);
+    setPhotoError(error ?? null);
+  }, [setPhotoState, setPhotoError]);
   const photoUrl = photoId ? `/api/admin/vehicles/${vehicle.id}/art-photo/${photoId}` : null;
   const canCrop = photos.length > 0 && format !== 'story' && format !== 'tiktok' && template !== 'classic';
   const defaultNote = vehicle.status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
@@ -70,8 +79,50 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
   const caption = captionEdits[captionKey] ?? generatedCaption;
   const captionNeedsApproval = Boolean(caption.trim()) && caption !== generatedCaption;
   const captionApproved = !captionNeedsApproval || Boolean(captionApprovals[captionKey]);
-  const verifyVehicle = () => checkVersion(() => fetch(
-    `/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' }));
+  const verifyVehicle = useCallback(() => checkVersion(() => fetch(
+    `/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' })),
+    [vehicle.id, vehicle.version]);
+  const artKey = JSON.stringify([vehicle.version, vehicle.title, vehicle.year, vehicle.price, vehicle.status,
+    phone, photoId, photoRetry, format, template, focalX, focalY, note]);
+
+  // A geração e a conferência acontecem antes do toque: Safari e outros navegadores
+  // encerram a ativação do usuário se o compartilhamento esperar por canvas ou rede.
+  useEffect(() => {
+    if (photoState !== 'ready' || exportProblem) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setPreparing(true);
+      setPrepareError(null);
+      void (async () => {
+        try {
+          await document.fonts.ready;
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          const blob = await stageRef.current?.toBlob({ mimeType: 'image/jpeg', quality: 0.92, pixelRatio: 1 });
+          if (!blob) throw new Error('Este aparelho não conseguiu gerar a imagem. Tente outra foto.');
+          const checked = await verifyVehicle();
+          if (!checked.ok) throw new Error(checked.error);
+          if (active) setPrepared({ key: artKey, blob });
+        } catch (error) {
+          if (active) setPrepareError(error instanceof Error ? error.message : 'Não foi possível preparar a arte.');
+        } finally { if (active) setPreparing(false); }
+      })();
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [artKey, photoState, exportProblem, verifyVehicle, prepareRetry]);
+
+  // O cadastro pode mudar com a tela aberta. Revalidamos a arte pronta sem refazer o JPEG.
+  useEffect(() => {
+    if (!prepared || prepared.key !== artKey) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      setPreparing(true);
+      void verifyVehicle().then((checked) => {
+        if (!active) return;
+        if (!checked.ok) { setPrepared(null); setPrepareError(checked.error); }
+      }).finally(() => { if (active) setPreparing(false); });
+    }, 12000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [prepared, artKey, verifyVehicle]);
 
   async function copyCaption() {
     if (copyBusy) return;
@@ -92,29 +143,34 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
     }
   }
 
-  // Imagem e versão são preparadas em paralelo após o toque. A entrega só acontece quando
-  // ambas estão prontas, para reduzir a espera sem divulgar dados que mudaram no cadastro.
+  // O arquivo compartilhável já está pronto neste ponto; a chamada nativa ocorre no mesmo toque.
   async function deliver(mode: 'share' | 'download') {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
       if (note.trim() && !noteApproved) throw new Error('Revise e confirme o texto auxiliar antes de enviar.');
-      if (!photoLoaded || !stageRef.current) throw new Error('A foto ainda não carregou. Aguarde ou escolha outra foto.');
+      if (photoState !== 'ready' || !stageRef.current) throw new Error(photoError || 'A foto ainda não carregou. Aguarde ou escolha outra foto.');
+      if (mode === 'share') {
+        if (!prepared || prepared.key !== artKey || preparing) throw new Error('Aguarde a arte ficar pronta para compartilhar.');
+        const outcome = await deliverArt({
+          blob: prepared.blob, filename: `liberato-${vehicle.slug}-${format}.jpg`, download: downloadBlob,
+          fallback: 'none',
+          share: typeof navigator.share === 'function' ? (data) => navigator.share(data) : undefined,
+          canShare: (data) => typeof navigator.canShare === 'function' ? navigator.canShare(data) : true,
+        });
+        setMessage(outcome === 'shared' ? 'Arte entregue ao menu do aparelho. Conclua a publicação no aplicativo.'
+          : outcome === 'unavailable' ? 'Este navegador não conseguiu abrir os aplicativos. Use Baixar ou tente outro navegador no celular.' : null);
+        return;
+      }
       const stage = stageRef.current;
-      const canNativeShare = mode === 'share' && typeof navigator.share === 'function';
       const result = await runArtDelivery({
         mode,
         // JPEG: foto de veículo em PNG passa de vários MB e o WhatsApp recomprime de qualquer forma.
         render: async () => { await document.fonts.ready; return stage.toBlob({ mimeType: 'image/jpeg', quality: 0.92, pixelRatio: 1 }); },
         check: verifyVehicle,
-        deliver: (blob) => deliverArt({
-          blob, filename: `liberato-${vehicle.slug}-${format}.jpg`, download: downloadBlob,
-          fallback: mode === 'share' ? 'none' : 'download',
-          share: canNativeShare ? (data) => navigator.share(data) : undefined,
-          canShare: canNativeShare ? (data) => typeof navigator.canShare === 'function'
-            ? navigator.canShare(data) : true : undefined,
-        }),
+        deliver: (blob) => deliverArt({ blob, filename: `liberato-${vehicle.slug}-${format}.jpg`,
+          download: downloadBlob }),
       });
       setMessage(result);
     } catch (error) {
@@ -148,10 +204,13 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
             {photos.length === 0 ? <p>Adicione uma foto no cadastro para montar a peça.</p> :
               <div className={artStyles.photos}>{photos.map((photo, index) =>
                 <button key={photo.id} type="button" className={artStyles.photoOption} aria-pressed={photoId === photo.id}
-                  onClick={() => { setPhotoLoaded(false); setPhotoId(photo.id); }}>
+                  onClick={() => {
+                    if (photoId === photo.id) return;
+                    setPhotoState('loading'); setPhotoId(photo.id);
+                  }}>
                   {/* A imagem já pertence ao anúncio e passa pela rota autenticada. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/admin/vehicles/${vehicle.id}/art-photo/${photo.id}`} alt="" />
+                  <img src={`/api/admin/vehicles/${vehicle.id}/art-photo/${photo.id}`} alt="" loading="lazy" />
                   <span>Foto {index + 1}{photo.isCover ? ' · capa' : ''}</span>
                 </button>)}</div>}
             {canCrop ? <><label className={artStyles.slider}>Enquadramento horizontal
@@ -182,9 +241,21 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
         <section className={artStyles.preview} aria-labelledby="art-preview-title">
           <h2 id="art-preview-title">4. Conferir e compartilhar</h2>
           <p className={artStyles.hint}>Prévia no formato escolhido. O arquivo mantém a dimensão indicada acima.</p>
-          <ArtCanvas format={format} template={template} photoUrl={photoUrl} title={vehicle.title}
+          <ArtCanvas format={format} template={template} photoUrl={photoUrl} photoRetry={photoRetry} title={vehicle.title}
             year={vehicle.year} price={vehicle.price} phone={phone} status={vehicle.status} note={note}
             focalX={focalX} focalY={focalY} stageRef={stageRef} onPhotoLoad={onPhotoLoad} />
+          {photoState === 'error' ? <div className={artStyles.warning} role="alert">
+            <p>{photoError}</p>
+            <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
+              onClick={() => { setPhotoState('loading'); setPhotoRetry((value) => value + 1); }}>Tentar carregar foto novamente</button>
+          </div> : null}
+          {photoState === 'loading' ? <p className={artStyles.hint} role="status">Carregando foto da arte…</p> : null}
+          {photoState === 'ready' && preparing ? <p className={artStyles.hint} role="status">Preparando arquivo para compartilhar…</p> : null}
+          {prepareError ? <div className={artStyles.warning} role="alert">
+            <p>{prepareError}</p>
+            <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
+              onClick={() => { setPrepared(null); setPrepareRetry((value) => value + 1); }}>Tentar preparar novamente</button>
+          </div> : null}
           <details className={artStyles.captionDetails}>
             <summary>Legenda e hashtags para copiar (opcional)</summary>
             <div className={artStyles.captionDetailsBody}>
@@ -216,11 +287,13 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
           </details>
           <div className={artStyles.downloads}>
             <button className={styles.button} type="button"
-              disabled={busy || Boolean(exportProblem) || shareSupport !== 'available'}
+              disabled={busy || preparing || photoState !== 'ready' || !prepared || prepared.key !== artKey || Boolean(exportProblem) || shareSupport !== 'available'}
               style={shareSupport !== 'available' ? { cursor: 'not-allowed' } : undefined}
               onClick={() => void deliver('share')}>
-              {busy ? 'Preparando arte…' : 'Compartilhar'}</button>
-            <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={busy || Boolean(exportProblem)} onClick={() => void deliver('download')}>Baixar</button>
+              {busy ? 'Abrindo aplicativos…' : preparing ? 'Preparando arte…' : 'Compartilhar'}</button>
+            <button className={`${styles.button} ${styles.buttonSecondary}`} type="button"
+              disabled={busy || photoState !== 'ready' || Boolean(exportProblem)}
+              onClick={() => void deliver('download')}>Baixar</button>
           </div>
           <p className={artStyles.hint}>{shareSupport === 'insecure'
             ? 'O compartilhamento direto exige HTTPS no celular. Este endereço da rede local permite somente Baixar.'

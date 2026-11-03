@@ -54,21 +54,64 @@ function useLoadedImage(src: string | null) {
   return loaded?.src === src ? loaded.image : null;
 }
 
-export default function ArtCanvas({ format, template, photoUrl, title, year, price, phone, status, note,
+function useVehiclePhoto(src: string | null, retry: number) {
+  const [state, setState] = useState<{ src: string; retry: number; image?: HTMLImageElement; error?: string } | null>(null);
+  useEffect(() => {
+    if (!src) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    let image: HTMLImageElement | null = null;
+    void (async () => {
+      try {
+        const response = await fetch(src, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(response.status === 403 ? 'Sua sessão expirou. Entre novamente no painel.'
+            : response.status === 502 ? 'A foto não está disponível no armazenamento. Tente recarregar.'
+              : `Não foi possível carregar a foto (erro ${response.status}).`);
+        }
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('O arquivo recebido não é uma imagem.');
+        objectUrl = URL.createObjectURL(blob);
+        image = new window.Image();
+        const node = image;
+        await new Promise<void>((resolve, reject) => {
+          node.onload = () => resolve();
+          node.onerror = () => reject(new Error('Este aparelho não conseguiu abrir a foto. Escolha outra foto.'));
+          node.src = objectUrl!;
+        });
+        if (!controller.signal.aborted) setState({ src, retry, image: node });
+      } catch (error) {
+        if (!controller.signal.aborted) setState({ src, retry,
+          error: error instanceof Error ? error.message : 'Não foi possível carregar a foto.' });
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (image) { image.onload = null; image.onerror = null; }
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src, retry]);
+  return state?.src === src && state.retry === retry ? state : null;
+}
+
+export default function ArtCanvas({ format, template, photoUrl, photoRetry, title, year, price, phone, status, note,
   focalX, focalY, stageRef, onPhotoLoad }: {
   format: ArtFormat; template: ArtTemplate; photoUrl: string | null; title: string; year: number | null;
   price: string; phone: string; status: string; note: string; focalX: number; focalY: number;
-  stageRef: RefObject<Konva.Stage | null>; onPhotoLoad: (loaded: boolean) => void;
+  photoRetry: number; stageRef: RefObject<Konva.Stage | null>;
+  onPhotoLoad: (state: 'loading' | 'ready' | 'error', error?: string) => void;
 }) {
   const [availableWidth, setAvailableWidth] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(800);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const fontsReady = useFontsReady();
-  const photo = useLoadedImage(photoUrl);
+  const photoState = useVehiclePhoto(photoUrl, photoRetry);
+  const photo = photoState?.image ?? null;
   const logo = useLoadedImage('/logo-liberato-negativo.png');
   const { width, height } = artFormats[format];
   const choice = artTemplates.find((item) => item.id === template)!;
-  useEffect(() => { onPhotoLoad(Boolean(photo)); }, [photo, onPhotoLoad]);
+  useEffect(() => { onPhotoLoad(photo ? 'ready' : photoState?.error ? 'error' : 'loading', photoState?.error); },
+    [photo, photoState?.error, onPhotoLoad]);
   useEffect(() => {
     if (!container) return;
     const observer = new ResizeObserver(() => setAvailableWidth(container.clientWidth));

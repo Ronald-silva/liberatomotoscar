@@ -47,8 +47,9 @@ export async function checkVersion(fetcher: () => Promise<Response>): Promise<Ve
   return { ok: false, error: error || CHECK_FAILED };
 }
 
-// Imagem e versão são preparadas em paralelo para abrir o menu nativo enquanto o toque ainda está ativo.
-// A entrega só acontece depois de ambas terminarem; uma versão antiga nunca é compartilhada. Devolve a mensagem para
+// Na ação de baixar, imagem e versão podem ser preparadas em paralelo. Para compartilhar,
+// o editor prepara ambas antes do toque, pois o menu nativo exige ativação do usuário.
+// A entrega só acontece depois de ambas terminarem. Devolve a mensagem para
 // a pessoa, ou null quando não há o que dizer (cancelar a folha do sistema é decisão, não resultado).
 export async function runArtDelivery({ mode, render, check, deliver }: {
   mode: 'share' | 'download';
