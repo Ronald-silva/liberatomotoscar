@@ -17,6 +17,16 @@ beforeEach(() => {
 });
 
 describe('foto da arte', () => {
+  it('redireciona foto antiga pelo caminho público, sem host interno do Railway', async () => {
+    mocks.getArtVehicleData.mockResolvedValue({ photos: [{ id: 'foto',
+      storageKey: '/images/volkswagen-saveiro-robust-2024.png', storageProvider: 'legacy_public' }] });
+    const internalRequest = new Request('http://localhost:3000/api/admin/vehicles/veiculo/art-photo/foto');
+    const response = await GET(internalRequest, context);
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('/images/volkswagen-saveiro-robust-2024.png');
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+
   it('recebe o arquivo inteiro antes de responder ao celular', async () => {
     const bytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]);
     mocks.read.mockResolvedValue(bytes);

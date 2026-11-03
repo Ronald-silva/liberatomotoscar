@@ -21,6 +21,10 @@ export default async function ArtPage({ params }: { params: Promise<{ id: string
     priceCents: vehicle.priceCents, slug: vehicle.slug, type: vehicle.type,
     brand: vehicle.brand, model: vehicle.model, mileageKm: vehicle.mileageKm, color: vehicle.color,
     publicUrl: SITE_URL.startsWith('https://') ? `${SITE_URL}/veiculos/${vehicle.slug}` : null }}
-    photos={photos.map((photo) => ({ id: photo.id, isCover: photo.isCover }))}
+    photos={photos.map((photo) => ({ id: photo.id, isCover: photo.isCover,
+      // Fotos importadas já são públicas. Usar o arquivo diretamente evita
+      // redirecionamento pelo endereço interno do servidor no Railway.
+      src: photo.storageProvider === 'legacy_public' && /^\/images\/[a-zA-Z0-9._-]+$/.test(photo.storageKey)
+        ? photo.storageKey : `/api/admin/vehicles/${vehicle.id}/art-photo/${photo.id}` }))}
     phone={STORE.phoneDisplay} exportProblem={artExportProblem(data)} />;
 }

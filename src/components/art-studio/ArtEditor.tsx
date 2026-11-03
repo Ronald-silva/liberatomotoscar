@@ -39,7 +39,7 @@ function readShareSupport(): ShareSupport {
 }
 
 export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
-  vehicle: ArtVehicle; photos: { id: string; isCover: boolean }[]; phone: string; exportProblem: string | null;
+  vehicle: ArtVehicle; photos: { id: string; isCover: boolean; src: string }[]; phone: string; exportProblem: string | null;
 }) {
   const choices = templatesForStatus(vehicle.status);
   const [platform, setPlatform] = useState<SocialPlatform>('instagram');
@@ -70,7 +70,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
     setPhotoState(state);
     setPhotoError(error ?? null);
   }, [setPhotoState, setPhotoError]);
-  const photoUrl = photoId ? `/api/admin/vehicles/${vehicle.id}/art-photo/${photoId}` : null;
+  const photoUrl = photos.find((photo) => photo.id === photoId)?.src ?? null;
   const canCrop = photos.length > 0 && format !== 'story' && format !== 'tiktok' && template !== 'classic';
   const defaultNote = vehicle.status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     vehicle.status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições';
@@ -208,9 +208,9 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
                     if (photoId === photo.id) return;
                     setPhotoState('loading'); setPhotoId(photo.id);
                   }}>
-                  {/* A imagem já pertence ao anúncio e passa pela rota autenticada. */}
+                  {/* Fotos antigas usam /images; fotos R2 passam pela rota autenticada. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/api/admin/vehicles/${vehicle.id}/art-photo/${photo.id}`} alt="" loading="lazy" />
+                  <img src={photo.src} alt="" loading="lazy" />
                   <span>Foto {index + 1}{photo.isCover ? ' · capa' : ''}</span>
                 </button>)}</div>}
             {canCrop ? <><label className={artStyles.slider}>Enquadramento horizontal

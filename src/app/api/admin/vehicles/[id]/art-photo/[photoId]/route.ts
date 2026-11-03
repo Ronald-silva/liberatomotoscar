@@ -13,7 +13,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (!photo) return new Response(null, { status: 404 });
     if (photo.storageProvider === 'legacy_public') {
       if (!/^\/images\/[a-zA-Z0-9._-]+$/.test(photo.storageKey)) return new Response(null, { status: 404 });
-      return Response.redirect(new URL(photo.storageKey, _request.url));
+      // Location relativo preserva o domínio HTTPS visto pelo navegador, mesmo
+      // quando o servidor recebe a requisição por um host interno do Railway.
+      return new Response(null, { status: 307, headers: {
+        Location: photo.storageKey, 'Cache-Control': 'private, no-store',
+      } });
     }
     let bytes: Uint8Array;
     try {
