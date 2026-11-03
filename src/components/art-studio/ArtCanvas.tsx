@@ -177,6 +177,8 @@ export default function ArtCanvas({ format, template, photoUrl, photoRetry, titl
   const priceY = vertical ? 1070 : footerTop + (format === 'square' ? 191 : 203);
   const footerNote = note || (status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições');
+  const fittedNote = fitTitle({ text: footerNote, maxWidth: contentWidth, maxHeight: 40,
+    lineHeight: 1, candidates: [32, 30, 28, 26, 24, 22, 20], measure: measureTitle });
 
   return <div ref={setContainer} style={{ width: '100%' }}>
     <div style={{ width: width * scale, height: height * scale, marginInline: 'auto', overflow: 'hidden' }}>
@@ -242,9 +244,9 @@ export default function ArtCanvas({ format, template, photoUrl, photoRetry, titl
             {!vertical ? <Rect x={inset} y={height - 126} width={contentWidth} height={2}
               fill={classic ? '#8b918f' : '#57606c'} />
               : null}
-            <Text x={inset} y={vertical ? 1160 : height - 112} text={footerNote}
-              width={contentWidth} height={vertical ? 32 : 40} ellipsis fill={muted}
-              fontFamily={ART_FONT_FAMILY} fontSize={vertical ? 27 : 32} />
+            <Text x={inset} y={height - 112} text={fittedNote.lines.join('\n')}
+              width={contentWidth} height={40} fill={muted} wrap="none"
+              fontFamily={ART_FONT_FAMILY} fontSize={fittedNote.size} />
             <Text x={inset} y={vertical ? 1194 : height - 61} text={phone} fill={ink}
               fontFamily={ART_FONT_FAMILY} fontSize={vertical ? 40 : 42} fontStyle="bold" />
             {status === 'draft' || status === 'archived' ? <Text x={0} y={height / 2 - 70} width={width}

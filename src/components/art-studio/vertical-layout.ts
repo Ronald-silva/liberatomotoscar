@@ -1,19 +1,19 @@
 import type { ArtFormat, ArtTemplate } from './templates';
 
-/** Área conservadora para marca e texto. A foto pode ocupar mais largura, sem esconder dados na UI. */
-export const VERTICAL_SAFE = { left: 80, right: 920, top: 250, bottom: 1670 } as const;
+/** Marca e texto ficam livres dos controles do topo, da direita e da base dos apps verticais. */
+export const VERTICAL_SAFE = { left: 80, right: 900, top: 220, bottom: 1500 } as const;
 
 export const VERTICAL_LAYOUT = {
-  logo: { x: 108, y: 258, width: 238, height: 112 },
-  kicker: { x: 80, y: 423, width: 840, height: 44 },
-  title: { x: 80, y: 477, width: 840, height: 185 },
-  year: { x: 80, y: 671, width: 840, height: 38 },
-  photo: { x: 24, y: 713, width: 1032, height: 625 },
-  priceLabel: { x: 80, y: 1372, width: 840, height: 35 },
-  price: { x: 80, y: 1411, width: 840, height: 105 },
-  contactLabel: { x: 80, y: 1539, width: 840, height: 35 },
-  phone: { x: 80, y: 1576, width: 840, height: 60 },
-  note: { x: 80, y: 1638, width: 840, height: 30 },
+  logo: { x: 96, y: 228, width: 220, height: 104 },
+  kicker: { x: 80, y: 370, width: 820, height: 44 },
+  title: { x: 80, y: 420, width: 820, height: 165 },
+  year: { x: 80, y: 596, width: 820, height: 36 },
+  photo: { x: 16, y: 650, width: 1048, height: 528 },
+  priceLabel: { x: 80, y: 1202, width: 820, height: 34 },
+  price: { x: 80, y: 1240, width: 820, height: 101 },
+  contactLabel: { x: 80, y: 1362, width: 820, height: 30 },
+  phone: { x: 80, y: 1398, width: 820, height: 58 },
+  note: { x: 80, y: 1462, width: 820, height: 32 },
 } as const;
 
 export type VerticalTheme = {
@@ -38,8 +38,7 @@ export const VERTICAL_THEMES: Record<ArtTemplate, VerticalTheme> = {
     photoTop: '#ddd8ce', photoBottom: '#c8c2b8', photoStroke: '#121820', logoPlate: '#090d12', pricePlate: null },
 };
 
-export function verticalPhotoBounds(format: ArtFormat) {
-  const frame = VERTICAL_LAYOUT.photo;
+export function verticalPhotoBounds(format: ArtFormat, frame: { x: number; y: number; width: number; height: number } = VERTICAL_LAYOUT.photo) {
   // TikTok encosta controles à direita. A imagem permanece grande, mas deslocada levemente à esquerda.
   return format === 'tiktok'
     ? { x: frame.x + 24, y: frame.y + 14, width: frame.width - 112, height: frame.height - 28 }

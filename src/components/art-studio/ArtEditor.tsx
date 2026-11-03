@@ -28,7 +28,8 @@ const ArtCanvas = dynamic(() => import('./ArtCanvas'), { ssr: false,
 type ArtVehicle = CaptionVehicle & { id: string; version: number; slug: string };
 
 const formatLabels: Record<ArtFormat, string> = {
-  feed: 'Feed vertical', square: 'Feed quadrado', story: 'Stories / Status', tiktok: 'Foto vertical · TikTok',
+  feed: 'Feed · Instagram/Facebook (4:5)', square: 'Feed quadrado (1:1)',
+  story: 'Stories / Status (9:16)', tiktok: 'TikTok (9:16)',
 };
 
 type ShareSupport = 'checking' | 'available' | 'insecure' | 'unsupported';
@@ -43,7 +44,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
 }) {
   const choices = templatesForStatus(vehicle.status);
   const [platform, setPlatform] = useState<SocialPlatform>('instagram');
-  const [format, setFormat] = useState<ArtFormat>('feed');
+  const [format, setFormat] = useState<ArtFormat>('story');
   const shareSupport = useSyncExternalStore(subscribeShareSupport, readShareSupport, () => 'checking');
   const [template, setTemplate] = useState<ArtTemplate>(choices[0].id);
   const [photoId, setPhotoId] = useState(photos.find((photo) => photo.isCover)?.id ?? photos[0]?.id ?? '');
@@ -71,6 +72,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
     setPhotoError(error ?? null);
   }, [setPhotoState, setPhotoError]);
   const photoUrl = photos.find((photo) => photo.id === photoId)?.src ?? null;
+  const artTitle = [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.title;
   const canCrop = photos.length > 0 && format !== 'story' && format !== 'tiktok' && template !== 'classic';
   const defaultNote = vehicle.status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     vehicle.status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições';
@@ -195,7 +197,9 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
                 {formatLabels[value]}
                 <small>{artFormats[value].width} × {artFormats[value].height}</small>
               </button>)}</div>
-            <p className={artStyles.hint}>Nos formatos verticais, a prévia mostra a arte inteira. Confira no aplicativo antes de publicar: a posição dos controles muda conforme a plataforma.</p>
+            <p className={artStyles.hint}>{format === 'feed' || format === 'square'
+              ? 'Este arquivo é para publicações no feed. Para TikTok, Stories ou Status, escolha um formato 9:16 antes de compartilhar.'
+              : 'Este arquivo ocupa a tela vertical. Textos e preço ficam acima dos controles inferiores; confira a prévia no aplicativo antes de publicar.'}</p>
             {format === 'story' ? <p className={artStyles.hint}>Esta saída é uma imagem para Stories e Status. Reels em vídeo exigem edição separada.</p> : null}
             {format === 'tiktok' ? <p className={artStyles.hint}>Esta saída é uma foto para postagem. Anúncios em carrossel exigem mais imagens e conferência no TikTok Ads Manager.</p> : null}
           </fieldset>
@@ -241,7 +245,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
         <section className={artStyles.preview} aria-labelledby="art-preview-title">
           <h2 id="art-preview-title">4. Conferir e compartilhar</h2>
           <p className={artStyles.hint}>Prévia no formato escolhido. O arquivo mantém a dimensão indicada acima.</p>
-          <ArtCanvas format={format} template={template} photoUrl={photoUrl} photoRetry={photoRetry} title={vehicle.title}
+          <ArtCanvas format={format} template={template} photoUrl={photoUrl} photoRetry={photoRetry} title={artTitle}
             year={vehicle.year} price={vehicle.price} phone={phone} status={vehicle.status} note={note}
             focalX={focalX} focalY={focalY} stageRef={stageRef} onPhotoLoad={onPhotoLoad} />
           {photoState === 'error' ? <div className={artStyles.warning} role="alert">
@@ -262,7 +266,8 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
               <p className={artStyles.hint}>Selecione a rede e copie a sugestão antes de abrir o aplicativo.</p>
               <div className={`${artStyles.options} ${artStyles.platforms}`}>{(Object.keys(PLATFORM_LABELS) as SocialPlatform[]).map((value) =>
                 <button key={value} type="button" className={artStyles.option} aria-pressed={platform === value}
-                  onClick={() => { setPlatform(value); setCaptionMessage(null); }}>{PLATFORM_LABELS[value]}</button>)}</div>
+                  onClick={() => { setPlatform(value); if (value === 'tiktok') setFormat('tiktok');
+                    if (value === 'whatsapp') setFormat('story'); setCaptionMessage(null); }}>{PLATFORM_LABELS[value]}</button>)}</div>
               <label className={`${styles.field} ${artStyles.captionField}`}>Legenda para {PLATFORM_LABELS[platform]}
                 <textarea ref={captionRef} className={styles.input} value={caption} maxLength={1800} rows={11}
                   onChange={(event) => { setCaptionEdits((current) => ({ ...current, [captionKey]: event.target.value }));
@@ -285,6 +290,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
               <p className={artStyles.hint} role="status" aria-live="polite">{captionMessage}</p>
             </div>
           </details>
+          <p className={artStyles.hint}>Arquivo selecionado: {formatLabels[format]} · {artFormats[format].width} × {artFormats[format].height}</p>
           <div className={artStyles.downloads}>
             <button className={styles.button} type="button"
               disabled={busy || preparing || photoState !== 'ready' || !prepared || prepared.key !== artKey || Boolean(exportProblem) || shareSupport !== 'available'}
