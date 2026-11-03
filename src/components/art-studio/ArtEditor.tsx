@@ -103,7 +103,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
           if (!blob) throw new Error('Este aparelho não conseguiu gerar a imagem. Tente outra foto.');
           const checked = await verifyVehicle();
           if (!checked.ok) throw new Error(checked.error);
-          if (active) setPrepared({ key: artKey, blob });
+          if (active) { setPrepared({ key: artKey, blob }); setMessage(null); }
         } catch (error) {
           if (active) setPrepareError(error instanceof Error ? error.message : 'Não foi possível preparar a arte.');
         } finally { if (active) setPreparing(false); }
@@ -122,7 +122,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
         if (!active) return;
         if (!checked.ok) { setPrepared(null); setPrepareError(checked.error); }
       }).finally(() => { if (active) setPreparing(false); });
-    }, 12000);
+    }, 120000);
     return () => { active = false; window.clearInterval(timer); };
   }, [prepared, artKey, verifyVehicle]);
 
@@ -151,18 +151,32 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
     setBusy(true);
     setMessage(null);
     try {
+      if (exportProblem) throw new Error(exportProblem);
+      if (mode === 'share' && shareSupport !== 'available') throw new Error(shareSupport === 'insecure'
+        ? 'O envio direto exige HTTPS. Abra o endereço publicado no Chrome do celular.'
+        : 'Este navegador não oferece o menu de aplicativos. Abra esta página diretamente no Chrome.');
       if (note.trim() && !noteApproved) throw new Error('Revise e confirme o texto auxiliar antes de enviar.');
       if (photoState !== 'ready' || !stageRef.current) throw new Error(photoError || 'A foto ainda não carregou. Aguarde ou escolha outra foto.');
       if (mode === 'share') {
-        if (!prepared || prepared.key !== artKey || preparing) throw new Error('Aguarde a arte ficar pronta para compartilhar.');
+        if (!prepared || prepared.key !== artKey || preparing) throw new Error(prepareError || 'Aguarde a arte ficar pronta para compartilhar.');
+        let shareFailure: string | null = null;
         const outcome = await deliverArt({
           blob: prepared.blob, filename: `liberato-${vehicle.slug}-${format}.jpg`, download: downloadBlob,
           fallback: 'none',
           share: typeof navigator.share === 'function' ? (data) => navigator.share(data) : undefined,
           canShare: (data) => typeof navigator.canShare === 'function' ? navigator.canShare(data) : true,
+          onShareError: (error) => {
+            const name = error instanceof Error ? error.name : '';
+            shareFailure = name === 'NotAllowedError'
+              ? 'O navegador bloqueou o envio. Abra esta página diretamente no Chrome e tente novamente.'
+              : name === 'TypeError'
+                ? 'Este navegador não aceita compartilhar a imagem. Abra esta página diretamente no Chrome.'
+                : 'Não foi possível abrir o menu de aplicativos. Tente novamente ou use Baixar.';
+          },
         });
         setMessage(outcome === 'shared' ? 'Arte entregue ao menu do aparelho. Conclua a publicação no aplicativo.'
-          : outcome === 'unavailable' ? 'Este navegador não conseguiu abrir os aplicativos. Use Baixar ou tente outro navegador no celular.' : null);
+          : outcome === 'cancelled' ? 'Compartilhamento cancelado. Se nenhum aplicativo apareceu, abra esta página no Chrome.'
+            : outcome === 'unavailable' ? shareFailure || 'Este navegador não oferece o envio de imagens. Abra esta página no Chrome ou use Baixar.' : null);
         return;
       }
       const stage = stageRef.current;
@@ -291,10 +305,10 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
             </div>
           </details>
           <p className={artStyles.hint}>Arquivo selecionado: {formatLabels[format]} · {artFormats[format].width} × {artFormats[format].height}</p>
+          <p className={artStyles.hint} role="status" aria-live="polite">{message}</p>
           <div className={artStyles.downloads}>
             <button className={styles.button} type="button"
-              disabled={busy || preparing || photoState !== 'ready' || !prepared || prepared.key !== artKey || Boolean(exportProblem) || shareSupport !== 'available'}
-              style={shareSupport !== 'available' ? { cursor: 'not-allowed' } : undefined}
+              disabled={busy}
               onClick={() => void deliver('share')}>
               {busy ? 'Abrindo aplicativos…' : preparing ? 'Preparando arte…' : 'Compartilhar'}</button>
             <button className={`${styles.button} ${styles.buttonSecondary}`} type="button"
@@ -306,7 +320,6 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
             : shareSupport === 'unsupported'
               ? 'Este navegador não abre aplicativos instalados. Use o painel no celular com HTTPS ou toque em Baixar.'
               : 'Toque em Compartilhar, escolha um aplicativo instalado e finalize a publicação nele. Se precisar de texto, copie a legenda acima antes de compartilhar.'}</p>
-          <p className={artStyles.hint} role="status" aria-live="polite">{message}</p>
           <a className={`${styles.button} ${styles.buttonSecondary} ${artStyles.mobileJump}`} href="#art-options-title">Alterar opções</a>
         </section>
       </div>

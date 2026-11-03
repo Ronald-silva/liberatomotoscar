@@ -3,9 +3,11 @@ export type Delivery = 'shared' | 'cancelled' | 'downloaded' | 'unavailable';
 // Entrega a arte já gerada: pela folha de compartilhamento do aparelho (o dono manda direto ao WhatsApp, sem
 // procurar o arquivo em Downloads) ou, onde não houver, baixando. Quem chama injeta `share`/`canShare`/`download`
 // para o teste não depender do navegador; sem `share` o aparelho simplesmente não compartilha.
-export async function deliverArt({ blob, filename, title, text, share, canShare, download, fallback = 'download' }: {
+export async function deliverArt({ blob, filename, title, text, share, canShare, onShareError,
+  download, fallback = 'download' }: {
   blob: Blob; filename: string; title?: string; text?: string; fallback?: 'download' | 'none';
   share?: (data: ShareData) => Promise<void>; canShare?: (data: ShareData) => boolean;
+  onShareError?: (error: unknown) => void;
   download: (blob: Blob, filename: string) => void;
 }): Promise<Delivery> {
   const files = [new File([blob], filename, { type: blob.type })];
@@ -13,17 +15,20 @@ export async function deliverArt({ blob, filename, title, text, share, canShare,
   const accepted = (payload: ShareData) => {
     try { return canShare?.(payload) ?? false; } catch { return false; }
   };
-  const data: ShareData | null = accepted(withText) ? withText : accepted({ files }) ? { files } : null;
-  if (share && data) {
+  // Alguns navegadores embutidos respondem false em canShare para arquivos que
+  // share aceita. A tentativa acontece no toque e a recusa é tratada abaixo.
+  const data: ShareData = accepted(withText) ? withText : { files };
+  if (share) {
     try {
       await share(data);
       return 'shared';
     } catch (error) {
       // Fechar a folha do sistema é uma decisão da pessoa, não uma falha: nada a avisar nem a baixar.
       if (error instanceof Error && error.name === 'AbortError') return 'cancelled';
-      // Qualquer outra recusa (ativação expirada no iOS, tipo não aceito) cai no download, mas deixa rastro:
-      // sem ele, um aparelho que recusa o envio e um que nem tem envio seriam indistinguíveis na conferência.
-      console.warn('Compartilhamento recusado; caiu no download', error instanceof Error ? { name: error.name, message: error.message } : error);
+      onShareError?.(error);
+      // O editor mostra a causa ao lado do botão; o registro ajuda a distinguir
+      // recusa do navegador de ausência da API durante a conferência.
+      console.warn('Compartilhamento recusado', error instanceof Error ? { name: error.name, message: error.message } : error);
     }
   }
   if (fallback === 'none') return 'unavailable';

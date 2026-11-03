@@ -30,25 +30,38 @@ describe('entrega da arte', () => {
       .resolves.toBe('shared');
     expect(share).toHaveBeenCalledWith({ files: [expect.any(File)] });
   });
-  it('baixa quando o aparelho nao compartilha arquivo', async () => {
-    const share = vi.fn(); const download = vi.fn();
-    await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => false, download })).resolves.toBe('downloaded');
-    expect(share).not.toHaveBeenCalled();
-    expect(download).toHaveBeenCalledWith(blob, 'arte.jpg');
-  });
-  it('não abre a janela de salvar quando a pessoa pediu Compartilhar', async () => {
-    const share = vi.fn(); const download = vi.fn();
+  it('tenta compartilhar mesmo quando canShare falha neste navegador', async () => {
+    const share = vi.fn().mockResolvedValue(undefined); const download = vi.fn();
     await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => false,
-      download, fallback: 'none' })).resolves.toBe('unavailable');
-    expect(share).not.toHaveBeenCalled();
+      download, fallback: 'none' })).resolves.toBe('shared');
+    expect(share).toHaveBeenCalledOnce();
     expect(download).not.toHaveBeenCalled();
   });
+  it('baixa quando o aparelho recusa compartilhar o arquivo', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const share = vi.fn().mockRejectedValue(falha('TypeError')); const download = vi.fn();
+    await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => false, download })).resolves.toBe('downloaded');
+    expect(share).toHaveBeenCalledOnce();
+    expect(download).toHaveBeenCalledWith(blob, 'arte.jpg');
+    warn.mockRestore();
+  });
+  it('não abre a janela de salvar quando a pessoa pediu Compartilhar', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const share = vi.fn().mockRejectedValue(falha('TypeError')); const download = vi.fn();
+    await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => false,
+      download, fallback: 'none' })).resolves.toBe('unavailable');
+    expect(share).toHaveBeenCalledOnce();
+    expect(download).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
   it('baixa quando a verificação de compartilhamento do navegador falha', async () => {
-    const share = vi.fn(); const download = vi.fn();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const share = vi.fn().mockRejectedValue(falha('TypeError')); const download = vi.fn();
     await expect(deliverArt({ blob, filename: 'arte.jpg', share,
       canShare: () => { throw new Error('Web Share indisponível'); }, download })).resolves.toBe('downloaded');
-    expect(share).not.toHaveBeenCalled();
+    expect(share).toHaveBeenCalledOnce();
     expect(download).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
   it('baixa quando o aparelho nem tem compartilhamento', async () => {
     const download = vi.fn();
