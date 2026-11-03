@@ -63,14 +63,26 @@ function useVehiclePhoto(src: string | null, retry: number) {
     let image: HTMLImageElement | null = null;
     void (async () => {
       try {
-        const response = await fetch(src, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-        if (!response.ok) {
-          throw new Error(response.status === 403 ? 'Sua sessão expirou. Entre novamente no painel.'
-            : response.status === 502 ? 'A foto não está disponível no armazenamento. Tente recarregar.'
-              : `Não foi possível carregar a foto (erro ${response.status}).`);
+        let blob: Blob | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await fetch(src, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+            if (!response.ok) {
+              if (response.status >= 500 && attempt === 0) continue;
+              throw new Error(response.status === 403 ? 'Sua sessão expirou. Entre novamente no painel.'
+                : response.status === 502 ? 'A foto não está disponível no armazenamento. Tente recarregar.'
+                  : `Não foi possível carregar a foto (erro ${response.status}).`);
+            }
+            blob = await response.blob();
+            break;
+          } catch (error) {
+            if (controller.signal.aborted) return;
+            if (error instanceof TypeError && attempt === 0) continue;
+            if (error instanceof TypeError) throw new Error('Falha de rede ao buscar a foto. Confira a conexão e tente novamente.');
+            throw error;
+          }
         }
-        const blob = await response.blob();
-        if (!blob.type.startsWith('image/')) throw new Error('O arquivo recebido não é uma imagem.');
+        if (!blob || !blob.type.startsWith('image/')) throw new Error('O arquivo recebido não é uma imagem.');
         objectUrl = URL.createObjectURL(blob);
         image = new window.Image();
         const node = image;

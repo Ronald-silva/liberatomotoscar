@@ -15,6 +15,7 @@ export interface PhotoStorage {
 }
 
 export interface R2PhotoStorage extends PhotoStorage {
+  read(key: string): Promise<Uint8Array>;
   listPage(prefix: 'drafts/', continuationToken?: string): Promise<{
     objects: { key: string; modifiedAt: Date | null }[];
     nextToken?: string;
@@ -70,6 +71,24 @@ export function createR2Storage(): R2PhotoStorage {
     async signedReadUrl(key) {
       if (!isR2PhotoKey(key)) throw new Error('Chave de foto inválida.');
       return getSignedUrl(client, new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { expiresIn: SIGNED_READ_SECONDS });
+    },
+    async read(key) {
+      if (!isR2PhotoKey(key)) throw new Error('Chave de foto inválida.');
+      // Só entregamos a resposta ao celular depois de receber a foto inteira.
+      // Se o fluxo do R2 cair no meio, a segunda tentativa começa do zero.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const result = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
+          if (!result.Body || (result.ContentLength ?? 0) > MAX_PHOTO_BYTES) throw new Error('Foto indisponível.');
+          const bytes = await result.Body.transformToByteArray();
+          if (bytes.length === 0 || bytes.length > MAX_PHOTO_BYTES) throw new Error('Foto indisponível.');
+          return bytes;
+        } catch (error) {
+          const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+          if (attempt === 1 || status === 404) throw error;
+        }
+      }
+      throw new Error('Foto indisponível.');
     },
     async listPage(prefix, continuationToken) {
       const page = await client.send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix,

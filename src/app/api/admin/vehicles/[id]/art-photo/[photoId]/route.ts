@@ -15,11 +15,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       if (!/^\/images\/[a-zA-Z0-9._-]+$/.test(photo.storageKey)) return new Response(null, { status: 404 });
       return Response.redirect(new URL(photo.storageKey, _request.url));
     }
-    const url = await createR2Storage().signedReadUrl!(photo.storageKey);
-    const source = await fetch(url, { cache: 'no-store' });
-    if (!source.ok || !source.body) return new Response(null, { status: 502 });
-    return new Response(source.body, { headers: {
+    let bytes: Uint8Array;
+    try {
+      bytes = await createR2Storage().read(photo.storageKey);
+    } catch (error) {
+      // Nunca registrar chave, URL assinada ou credenciais do R2.
+      console.error('Falha ao ler foto da arte no R2', { reason: error instanceof Error ? error.name : 'unknown' });
+      return new Response(null, { status: 502, headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    return new Response(new Uint8Array(bytes), { headers: {
       'Content-Type': photo.mimeType,
+      'Content-Length': String(bytes.byteLength),
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',
     } });

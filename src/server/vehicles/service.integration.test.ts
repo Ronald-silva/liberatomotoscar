@@ -138,7 +138,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       storageProvider: 'legacy_public', mimeType: 'image/png', sizeBytes: 8, position: 0, isCover: true });
     const fresh = `drafts/${draft.id}/${randomUUID()}.png`;
     const old = new Date('2026-10-20T00:00:00Z');
-    const storage = { put: vi.fn(), delete: vi.fn(async () => {}), listPage: vi.fn(async () => ({ objects: [
+    const storage = { put: vi.fn(), delete: vi.fn(async () => {}), read: vi.fn(),
+      listPage: vi.fn(async () => ({ objects: [
       { key: orphan, modifiedAt: old }, { key: referenced, modifiedAt: old },
       { key: fresh, modifiedAt: new Date('2026-10-27T11:00:00Z') },
       { key: '/fotos/legado.png', modifiedAt: old },
