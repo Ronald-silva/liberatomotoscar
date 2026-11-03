@@ -5,6 +5,7 @@
 .group { min-width: 0; margin: 0; padding: var(--admin-space-3); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
 .group legend { padding: 0 var(--admin-space-1); font-weight: 700; font-size: 1.125rem; }
 .options { display: grid; gap: var(--admin-space-1); }
+.platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: var(--admin-space-2); }
 .option, .photoOption { min-width: 0; min-height: 48px; padding: var(--admin-space-1) var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-bg); color: var(--admin-ink); font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .option small { display: block; color: var(--admin-muted); }
 .option[aria-pressed="true"], .photoOption[aria-pressed="true"] { border-color: var(--admin-accent); box-shadow: inset 0 0 0 2px var(--admin-accent); }
@@ -21,6 +22,14 @@
 .noteField { margin-top: var(--admin-space-3); }
 .confirmNote { display: flex; align-items: center; gap: var(--admin-space-1); margin: var(--admin-space-2) 0; line-height: 1.4; cursor: pointer; }
 .confirmNote input { width: 24px; height: 24px; flex: 0 0 24px; accent-color: var(--admin-accent); }
+.captionField { margin-top: var(--admin-space-2); }
+.captionField textarea { min-height: 220px; resize: vertical; line-height: 1.5; white-space: pre-wrap; }
+.captionActions { display: flex; flex-wrap: wrap; gap: var(--admin-space-1); }
+.captionActions > * { min-width: 0; }
+.captionDetails { margin-top: var(--admin-space-3); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); }
+.captionDetails summary { min-height: 48px; padding: var(--admin-space-2); font-weight: 700; cursor: pointer; }
+.captionDetails summary:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
+.captionDetailsBody { padding: 0 var(--admin-space-2) var(--admin-space-2); }
 .warning { padding: var(--admin-space-2); border: 1px solid var(--admin-warn); border-radius: var(--admin-radius); color: var(--admin-warn); line-height: 1.5; }
 .preview { min-width: 0; padding: var(--admin-space-3); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
 .preview h2 { margin: 0; font-size: 1.25rem; }

@@ -7,17 +7,41 @@ const falha = (name: string) => Object.assign(new Error('x'), { name });
 describe('entrega da arte', () => {
   it('compartilha quando o aparelho aceita arquivos', async () => {
     const share = vi.fn().mockResolvedValue(undefined); const download = vi.fn();
-    await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => true, download })).resolves.toBe('shared');
+    await expect(deliverArt({ blob, filename: 'arte.jpg', title: 'Honda Titan', text: 'Legenda #HondaTitan',
+      share, canShare: () => true, download })).resolves.toBe('shared');
     expect(download).not.toHaveBeenCalled();
     const data = share.mock.calls[0][0] as ShareData;
     expect(data.files?.[0].name).toBe('arte.jpg');
     expect(data.files?.[0].type).toBe('image/jpeg');
+    expect(data.text).toBe('Legenda #HondaTitan');
+    expect(data.title).toBe('Honda Titan');
+  });
+  it('envia só a imagem se o aparelho não aceitar legenda junto do arquivo', async () => {
+    const share = vi.fn().mockResolvedValue(undefined); const download = vi.fn();
+    const canShare = vi.fn((data: ShareData) => !data.text);
+    await expect(deliverArt({ blob, filename: 'arte.jpg', text: 'Legenda', share, canShare, download }))
+      .resolves.toBe('shared');
+    expect(share).toHaveBeenCalledWith({ files: [expect.any(File)] });
   });
   it('baixa quando o aparelho nao compartilha arquivo', async () => {
     const share = vi.fn(); const download = vi.fn();
     await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => false, download })).resolves.toBe('downloaded');
     expect(share).not.toHaveBeenCalled();
     expect(download).toHaveBeenCalledWith(blob, 'arte.jpg');
+  });
+  it('não abre a janela de salvar quando a pessoa pediu Compartilhar', async () => {
+    const share = vi.fn(); const download = vi.fn();
+    await expect(deliverArt({ blob, filename: 'arte.jpg', share, canShare: () => false,
+      download, fallback: 'none' })).resolves.toBe('unavailable');
+    expect(share).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+  });
+  it('baixa quando a verificação de compartilhamento do navegador falha', async () => {
+    const share = vi.fn(); const download = vi.fn();
+    await expect(deliverArt({ blob, filename: 'arte.jpg', share,
+      canShare: () => { throw new Error('Web Share indisponível'); }, download })).resolves.toBe('downloaded');
+    expect(share).not.toHaveBeenCalled();
+    expect(download).toHaveBeenCalledOnce();
   });
   it('baixa quando o aparelho nem tem compartilhamento', async () => {
     const download = vi.fn();
@@ -39,7 +63,7 @@ describe('entrega da arte', () => {
   });
 });
 
-describe('ordem da entrega: gerar, conferir, entregar', () => {
+describe('entrega: prepara arte e versão, depois entrega', () => {
   const montar = (over: Partial<Parameters<typeof runArtDelivery>[0]> = {}) => {
     const calls: string[] = [];
     const render = vi.fn(async () => { calls.push('render'); return blob as Blob | null; });
@@ -48,9 +72,9 @@ describe('ordem da entrega: gerar, conferir, entregar', () => {
     return { calls, render, check, deliver, run: () => runArtDelivery({ mode: 'share', render, check, deliver, ...over }) };
   };
 
-  it('gera, depois confere, depois entrega', async () => {
+  it('prepara arte e versão antes de entregar', async () => {
     const t = montar();
-    await expect(t.run()).resolves.toBe('Arte enviada. Confira antes de publicar.');
+    await expect(t.run()).resolves.toBe('Arte entregue ao menu do aparelho. Conclua e confira a publicação no aplicativo.');
     expect(t.calls).toEqual(['render', 'check', 'deliver']);
     expect(t.deliver).toHaveBeenCalledWith(blob);
   });
@@ -64,10 +88,10 @@ describe('ordem da entrega: gerar, conferir, entregar', () => {
     await expect(t.run()).resolves.toBe('Não foi possível conferir o anúncio. Tente de novo.');
     expect(t.deliver).not.toHaveBeenCalled();
   });
-  it('imagem nao gerada: nem confere nem entrega', async () => {
+  it('imagem nao gerada: confere em paralelo, mas não entrega', async () => {
     const t = montar({ render: async () => null });
     await expect(t.run()).resolves.toMatch(/gerar a arte/);
-    expect(t.check).not.toHaveBeenCalled();
+    expect(t.check).toHaveBeenCalledOnce();
     expect(t.deliver).not.toHaveBeenCalled();
   });
   it('cancelar a folha do sistema nao produz mensagem', async () => {
@@ -77,6 +101,7 @@ describe('ordem da entrega: gerar, conferir, entregar', () => {
   it('baixou por falta de envio: avisa; baixar direto tem texto proprio', async () => {
     await expect(montar({ deliver: async () => 'downloaded' }).run()).resolves.toMatch(/não abriu o envio/);
     await expect(montar({ mode: 'download', deliver: async () => 'downloaded' }).run()).resolves.toMatch(/pronta para baixar/);
+    await expect(montar({ deliver: async () => 'unavailable' }).run()).resolves.toMatch(/não conseguiu abrir os aplicativos/);
   });
 });
 

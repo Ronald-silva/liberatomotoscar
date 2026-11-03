@@ -1,15 +1,20 @@
-export type Delivery = 'shared' | 'cancelled' | 'downloaded';
+export type Delivery = 'shared' | 'cancelled' | 'downloaded' | 'unavailable';
 
 // Entrega a arte já gerada: pela folha de compartilhamento do aparelho (o dono manda direto ao WhatsApp, sem
 // procurar o arquivo em Downloads) ou, onde não houver, baixando. Quem chama injeta `share`/`canShare`/`download`
 // para o teste não depender do navegador; sem `share` o aparelho simplesmente não compartilha.
-export async function deliverArt({ blob, filename, share, canShare, download }: {
-  blob: Blob; filename: string;
+export async function deliverArt({ blob, filename, title, text, share, canShare, download, fallback = 'download' }: {
+  blob: Blob; filename: string; title?: string; text?: string; fallback?: 'download' | 'none';
   share?: (data: ShareData) => Promise<void>; canShare?: (data: ShareData) => boolean;
   download: (blob: Blob, filename: string) => void;
 }): Promise<Delivery> {
-  const data: ShareData = { files: [new File([blob], filename, { type: blob.type })] };
-  if (share && canShare?.(data)) {
+  const files = [new File([blob], filename, { type: blob.type })];
+  const withText: ShareData = { files, ...(title ? { title } : {}), ...(text ? { text } : {}) };
+  const accepted = (payload: ShareData) => {
+    try { return canShare?.(payload) ?? false; } catch { return false; }
+  };
+  const data: ShareData | null = accepted(withText) ? withText : accepted({ files }) ? { files } : null;
+  if (share && data) {
     try {
       await share(data);
       return 'shared';
@@ -21,6 +26,7 @@ export async function deliverArt({ blob, filename, share, canShare, download }: 
       console.warn('Compartilhamento recusado; caiu no download', error instanceof Error ? { name: error.name, message: error.message } : error);
     }
   }
+  if (fallback === 'none') return 'unavailable';
   download(blob, filename);
   return 'downloaded';
 }
@@ -41,8 +47,8 @@ export async function checkVersion(fetcher: () => Promise<Response>): Promise<Ve
   return { ok: false, error: error || CHECK_FAILED };
 }
 
-// A ordem é a garantia: gerar a imagem, conferir a versão e só então entregar. A conferência existe para a arte nunca
-// sair com um preço que o dono já mudou, então nada é compartilhado nem baixado se ela falhar. Devolve a mensagem para
+// Imagem e versão são preparadas em paralelo para abrir o menu nativo enquanto o toque ainda está ativo.
+// A entrega só acontece depois de ambas terminarem; uma versão antiga nunca é compartilhada. Devolve a mensagem para
 // a pessoa, ou null quando não há o que dizer (cancelar a folha do sistema é decisão, não resultado).
 export async function runArtDelivery({ mode, render, check, deliver }: {
   mode: 'share' | 'download';
@@ -51,14 +57,16 @@ export async function runArtDelivery({ mode, render, check, deliver }: {
   deliver: (blob: Blob) => Promise<Delivery>;
 }): Promise<string | null> {
   try {
-    const blob = await render();
+    const [blob, checked] = await Promise.all([
+      render(),
+      Promise.resolve().then(check).catch(() => ({ ok: false, error: CHECK_FAILED } as VersionCheck)),
+    ]);
     if (!blob) return 'Não foi possível gerar a arte neste aparelho.';
-    let checked: VersionCheck;
-    try { checked = await check(); } catch { checked = { ok: false, error: CHECK_FAILED }; }
     if (!checked.ok) return checked.error;
     const outcome = await deliver(blob);
-    if (outcome === 'shared') return 'Arte enviada. Confira antes de publicar.';
+    if (outcome === 'shared') return 'Arte entregue ao menu do aparelho. Conclua e confira a publicação no aplicativo.';
     if (outcome === 'cancelled') return null;
+    if (outcome === 'unavailable') return 'Este navegador não conseguiu abrir os aplicativos. Use Baixar ou tente no celular com HTTPS.';
     return mode === 'share'
       ? 'Este aparelho não abriu o envio, então a arte foi baixada. Confira antes de publicar.'
       : 'Arte pronta para baixar. Confira antes de publicar.';

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getArtVehicleData, artExportProblem } from '@/server/art-studio/vehicle-art-data';
-import { STORE } from '@/data/store';
+import { SITE_URL, STORE } from '@/data/store';
 import { ArtEditor } from '@/components/art-studio/ArtEditor';
 
 export const metadata: Metadata = { title: 'Criar arte', robots: { index: false, follow: false } };
@@ -18,7 +18,9 @@ export default async function ArtPage({ params }: { params: Promise<{ id: string
     title: [vehicle.brand, vehicle.model, vehicle.version].filter(Boolean).join(' ') || 'Veículo sem título',
     year: vehicle.year, price: vehicle.priceCents ? new Intl.NumberFormat('pt-BR',
       { style: 'currency', currency: 'BRL' }).format(vehicle.priceCents / 100) : 'Preço não informado',
-    slug: vehicle.slug }}
+    priceCents: vehicle.priceCents, slug: vehicle.slug, type: vehicle.type,
+    brand: vehicle.brand, model: vehicle.model, mileageKm: vehicle.mileageKm, color: vehicle.color,
+    publicUrl: SITE_URL.startsWith('https://') ? `${SITE_URL}/veiculos/${vehicle.slug}` : null }}
     photos={photos.map((photo) => ({ id: photo.id, isCover: photo.isCover }))}
     phone={STORE.phoneDisplay} exportProblem={artExportProblem(data)} />;
 }

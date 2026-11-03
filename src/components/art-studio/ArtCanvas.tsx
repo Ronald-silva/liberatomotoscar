@@ -5,6 +5,7 @@ import { Stage, Layer, Rect, Text, Image as KonvaImage, Group } from 'react-konv
 import Konva from 'konva';
 import { artFormats, artTemplates, type ArtFormat, type ArtTemplate } from './templates';
 import { ART_FONT_FAMILY, fitTitle } from './title-fit';
+import { VerticalArt } from './VerticalArt';
 
 // O palco já tem 1080 px de largura. Em celulares HiDPI, duplicar a resolução
 // interna dos dois canvas do Konva gastaria memória sem melhorar o arquivo final.
@@ -60,6 +61,7 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
   stageRef: RefObject<Konva.Stage | null>; onPhotoLoad: (loaded: boolean) => void;
 }) {
   const [availableWidth, setAvailableWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(800);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const fontsReady = useFontsReady();
   const photo = useLoadedImage(photoUrl);
@@ -73,10 +75,18 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
     observer.observe(container);
     return () => observer.disconnect();
   }, [container]);
-  const scale = Math.min(1, (availableWidth || 360) / width);
+  useEffect(() => {
+    const update = () => setViewportHeight(window.innerHeight);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
   // No vertical, reservamos o topo e a base para a interface das plataformas;
   // a faixa direita também fica livre para os controles do TikTok.
   const vertical = format === 'story' || format === 'tiktok';
+  // A prévia cabe inteira na janela, enquanto o Stage exportado mantém 1080 × 1920.
+  const previewHeight = Math.min(1080, Math.max(600, viewportHeight - 200));
+  const scale = Math.min(1, (availableWidth || 360) / width, vertical ? previewHeight / height : 1);
   const inset = vertical ? 80 : 70;
   const contentWidth = vertical ? 800 : width - inset * 2;
   const footerTop = vertical ? 892 : height - (format === 'square' ? 395 : 470);
@@ -118,6 +128,9 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
       <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
         <Stage width={width} height={height} ref={stageRef}>
           <Layer key={String(fontsReady)}>
+            {vertical ? <VerticalArt format={format as 'story' | 'tiktok'} template={template}
+              photo={photo} logo={logo} title={title} year={year} price={price} phone={phone}
+              status={status} note={note} measure={measureTitle} /> : <>
             <Rect width={width} height={height} fill={classic ? '#eee9df' : '#090c11'} />
             {classic ? <Rect width={width} height={photoTop} fill="#090c11" /> : null}
             {photo && crop ? <KonvaImage image={photo} {...(containPhoto ? containedPhoto : photoBox)}
@@ -182,6 +195,7 @@ export default function ArtCanvas({ format, template, photoUrl, title, year, pri
             {status === 'draft' || status === 'archived' ? <Text x={0} y={height / 2 - 70} width={width}
               text="PRÉVIA · NÃO PUBLICAR" align="center" fill="#ffffff" shadowColor="#000000"
               shadowBlur={10} fontSize={56} fontStyle="bold" /> : null}
+            </>}
           </Layer>
         </Stage>
       </div>
