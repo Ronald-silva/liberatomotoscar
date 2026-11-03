@@ -30,6 +30,11 @@ function verifica(text: string, opcoes: { finishReason?: string; veiculos?: Veri
  * aqui é conferência de fato.
  */
 describe('guardas de saída do agente', () => {
+  it('não afirma visita marcada sem horário confirmado pela ferramenta', () => {
+    const state = estadoCom();
+    const result = checkAgentReply({ text: 'Marquei sua visita para sábado.', finishReason: 'stop', state });
+    expect(result).toMatchObject({ ok: false, violation: 'visita_nao_confirmada' });
+  });
   it('3.1 bloqueia valor em reais que nenhuma ferramenta devolveu', () => {
     const v = verifica('Essa moto sai por R$ 8.000 hoje.');
     expect(v.ok).toBe(false);

@@ -7,6 +7,7 @@ import { ensureAttendanceTables } from '@/server/attendance/ensure-schema';
 import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
 import { deterministicUuidFromWaMessageId } from '@/server/whatsapp/crypto';
+import { cleanCustomerName } from '@/server/attendance/customer-name';
 
 /**
  * Entrada da mensagem do cliente no WhatsApp. Separado do handler do webhook de propósito: o
@@ -21,7 +22,11 @@ export function whatsappConversationToken(tenantId: string, customerWaId: string
     .digest('base64url');
 }
 
-export async function ensureWhatsappConversation(token: string, now = new Date()) {
+export async function ensureWhatsappConversation(
+  token: string,
+  identity?: { tenantId: string; phone: string; name: string | null },
+  now = new Date(),
+) {
   await ensureAttendanceTables();
   const db = getDb();
   const tokenHash = hashConversationToken(token);
@@ -31,14 +36,24 @@ export async function ensureWhatsappConversation(token: string, now = new Date()
     .where(eq(conversations.tokenHash, tokenHash)).limit(1);
 
   if (existing) {
-    if (existing.expiresAt > now) return existing;
-    const [renewed] = await db.update(conversations).set({ expiresAt })
+    const name = cleanCustomerName(identity?.name ?? null);
+    const changes = {
+      ...(existing.expiresAt <= now ? { expiresAt } : {}),
+      ...(identity?.tenantId && !existing.tenantId ? { tenantId: identity.tenantId } : {}),
+      ...(identity?.phone && !existing.customerPhone ? { customerPhone: identity.phone } : {}),
+      ...(name && name !== existing.customerName ? { customerName: name } : {}),
+    };
+    if (!Object.keys(changes).length) return existing;
+    const [renewed] = await db.update(conversations).set(changes)
       .where(eq(conversations.id, existing.id)).returning();
     return renewed ?? null;
   }
 
   const [created] = await db.insert(conversations).values({
     channel: 'whatsapp', tokenHash, owner: 'automation', status: 'open',
+    customerName: cleanCustomerName(identity?.name ?? null),
+    customerPhone: identity?.phone ?? null,
+    tenantId: identity?.tenantId ?? null,
     createdAt: now, lastMessageAt: now, expiresAt,
   }).onConflictDoNothing().returning();
 
@@ -50,6 +65,7 @@ export type IncomingWhatsappMessage = {
   customerWaId: string;
   waMessageId: string;
   text: string;
+  customerName?: string | null;
 };
 
 /**
@@ -62,7 +78,11 @@ export async function recordIncomingWhatsappMessage(
   params: IncomingWhatsappMessage,
 ): Promise<string | null> {
   const token = whatsappConversationToken(params.tenantId, params.customerWaId);
-  const conversation = await ensureWhatsappConversation(token);
+  const conversation = await ensureWhatsappConversation(token, {
+    tenantId: params.tenantId,
+    phone: params.customerWaId.replace(/\D/g, ''),
+    name: params.customerName ?? null,
+  });
   if (!conversation) throw new Error('Não foi possível criar a conversa do WhatsApp.');
   const { duplicate } = await appendVisitorMessage(
     conversation.id,

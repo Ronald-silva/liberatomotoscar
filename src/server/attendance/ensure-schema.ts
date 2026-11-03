@@ -38,6 +38,9 @@ export function ensureAttendanceTables(): Promise<void> {
             "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
             "channel" text NOT NULL,
             "token_hash" text NOT NULL UNIQUE,
+            "customer_name" text,
+            "customer_phone" text,
+            "tenant_id" text,
             "owner" text DEFAULT 'automation' NOT NULL,
             "status" text DEFAULT 'open' NOT NULL,
             "assigned_to" text,
@@ -51,6 +54,12 @@ export function ensureAttendanceTables(): Promise<void> {
             "closed_at" timestamp with time zone,
             "closed_by" text
           )
+        `);
+        await db.execute(sql`
+          ALTER TABLE "conversations"
+            ADD COLUMN IF NOT EXISTS "customer_name" text,
+            ADD COLUMN IF NOT EXISTS "customer_phone" text,
+            ADD COLUMN IF NOT EXISTS "tenant_id" text
         `);
         await db.execute(sql`
           CREATE TABLE IF NOT EXISTS "conversation_messages" (
@@ -127,9 +136,42 @@ export function ensureAttendanceTables(): Promise<void> {
           CREATE INDEX IF NOT EXISTS "whatsapp_tenants_tenant_id_idx"
             ON "whatsapp_tenants" ("tenant_id")
         `);
+        // A agenda é lida pelo layout do admin em toda navegação. O banco local/remoto pode
+        // ainda não ter recebido a migração 0010; sem esta tabela o painel inteiro registra erro.
+        await db.execute(sql`
+          CREATE TABLE IF NOT EXISTS "visit_appointments" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "conversation_id" uuid,
+            "vehicle_id" uuid,
+            "customer_name" text,
+            "customer_phone" text,
+            "scheduled_for" timestamp with time zone,
+            "quote" text NOT NULL,
+            "source" text NOT NULL,
+            "created_by" text,
+            "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+            "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+            CONSTRAINT "visit_appointments_source_valid" CHECK ("source" IN ('agent', 'manual')),
+            CONSTRAINT "visit_appointments_conversation_id_conversations_id_fk"
+              FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE,
+            CONSTRAINT "visit_appointments_vehicle_id_vehicles_id_fk"
+              FOREIGN KEY ("vehicle_id") REFERENCES "vehicles"("id") ON DELETE SET NULL,
+            CONSTRAINT "visit_appointments_created_by_user_id_fk"
+              FOREIGN KEY ("created_by") REFERENCES "user"("id") ON DELETE RESTRICT
+          )
+        `);
+        await db.execute(sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS "visit_appointments_conversation_uidx"
+            ON "visit_appointments" ("conversation_id") WHERE "conversation_id" IS NOT NULL
+        `);
+        await db.execute(sql`
+          CREATE INDEX IF NOT EXISTS "visit_appointments_scheduled_idx"
+            ON "visit_appointments" ("scheduled_for")
+        `);
       } catch (error) {
         ensuredPromise = null;
         console.warn('Aviso ao verificar tabelas de atendimento:', error instanceof Error ? error.message : 'erro');
+        throw error;
       }
     })();
   }

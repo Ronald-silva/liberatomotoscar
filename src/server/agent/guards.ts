@@ -1,5 +1,6 @@
 import { MAP_URL, SITE_URL, STORE, STORE_ADDRESS_LINE, STORE_STREET_ADDRESS } from '@/data/store';
 import { semAcento, veiculosCitaveis, type AgentTurnState, type VerifiedVehicle } from './tools';
+import { storeClock } from '@/server/attendance/visit-slot';
 
 /**
  * Guardas de saída. Porte de `936d029:src/server/attendance/trade-in-phrasing.ts`, com duas
@@ -22,7 +23,8 @@ export type GuardViolation =
   | 'valor_nao_verificado'
   | 'veiculo_nao_verificado'
   | 'link_nao_autorizado'
-  | 'telefone_nao_autorizado';
+  | 'telefone_nao_autorizado'
+  | 'visita_nao_confirmada';
 
 export type GuardVerdict =
   | { ok: true }
@@ -151,6 +153,22 @@ function avaliar({ text, finishReason, state, customerText }: GuardInput): Guard
 
   const restante = removerTrechosDaLoja(texto);
   const plano = semAcento(restante);
+
+  // A ferramenta é a única que pode confirmar a visita. Isto confere o fato observável,
+  // sem tentar classificar toda a conversa por expressões de intenção.
+  const confirmouVisita = /\b(?:marquei|agendei|ficou marcada|esta marcada|ficou agendada|esta agendada)\b/i.test(plano)
+    && !/\b(?:nao|ainda nao)\s+(?:marquei|agendei)\b/i.test(plano);
+  if (confirmouVisita && !state.appointment?.scheduledFor) {
+    return { ok: false, violation: 'visita_nao_confirmada', detail: 'visita afirmada sem horário aceito pela ferramenta' };
+  }
+  if (confirmouVisita && state.appointment?.scheduledFor) {
+    const c = storeClock(state.appointment.scheduledFor);
+    const horaAfirmada = /\b(?:as|para as)\s+(\d{1,2})(?::(\d{2})|h(\d{0,2}))?\b/i.exec(plano);
+    if (horaAfirmada && (Number(horaAfirmada[1]) !== c.hour ||
+      Number(horaAfirmada[2] ?? horaAfirmada[3] ?? '0') !== c.minute)) {
+      return { ok: false, violation: 'visita_nao_confirmada', detail: 'hora afirmada difere da visita registrada' };
+    }
+  }
 
   // A verificação SEMÂNTICA — promessa, negociação, aceite, afirmação de estoque — saiu daqui
   // para `judge.ts`, decidida por modelo. Eram ~200 linhas de regex classificando português, o

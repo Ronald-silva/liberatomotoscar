@@ -124,7 +124,8 @@ export async function operateInboxConversation(_previous: InboxActionState, form
       return { message: 'Conversa excluída.', error: false };
     }
     if (intent === 'reply') {
-      await replyToInboxConversation(id, formData.get('body'));
+      const result = await replyToInboxConversation(id, formData.get('body'));
+      if (!result.delivered) return { message: result.reason ?? 'A resposta não foi entregue. Tente novamente.', error: true };
       revalidateAttendance();
       return { message: 'Resposta enviada.', error: false };
     }

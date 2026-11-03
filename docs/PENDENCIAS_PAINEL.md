@@ -1,6 +1,14 @@
 # Pendências conhecidas do painel
 
-Atualizado em 26/10/2026 após o cadastro guiado no celular.
+## Atualização de 03/11/2026 — segunda etapa da reformulação
+
+- O código agora recebe nome, telefone e tenant da Meta; o vendedor só envia resposta pelo painel dentro da janela de 24 horas, com confirmação da Cloud API. Conversas sem contato oferecem o caminho pelo celular da loja.
+- A Dayse recebeu a ferramenta `marcar_visita`, que confere dia e hora pelo calendário da loja; a Agenda mostra visitas automáticas e manuais com orçamento e troca quando constam da ficha.
+- A migração aditiva `drizzle/0011_whole_stepford_cuckoos.sql` foi **gerada, não aplicada em produção**. O fluxo completo também depende da migração `0010` e de um deploy deste código.
+- Em 03/11, o banco configurado neste ambiente não tinha `visit_appointments`; a garantia de esquema do atendimento criou a tabela e uma consulta confirmou que ela responde. Os arquivos `0010` e `0011` foram tornados seguros para bases já complementadas em runtime. O histórico `drizzle.__drizzle_migrations` continua defasado em relação ao diário local; não executar `db:migrate` sem reconciliar a migração antiga divergente.
+- Falta validar com número de WhatsApp autorizado e aparelho real o envio do vendedor, a marcação automática e o layout no celular. Os testes locais cobrem regras e falhas, mas não substituem a confirmação da Meta.
+
+Registro anterior: 26/10/2026, após o cadastro guiado no celular.
 
 ## Resolvido nesta entrega
 

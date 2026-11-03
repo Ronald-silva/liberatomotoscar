@@ -4,7 +4,7 @@ import type { AutomatedReply, MessageCard, MessageRow } from '@/server/attendanc
 import type { AgentTurnState } from './tools';
 import { checkAgentReply, type GuardVerdict } from './guards';
 import { judgeAgentReply } from './judge';
-import { AGENT_SYSTEM_PROMPT } from './prompt';
+import { agentSystemPromptAt } from './prompt';
 import { getAgentLanguageModel, normalizeProviderError } from './provider';
 import {
   createAgentToolFunctions, createAgentTools, createAgentTurnState, semAcento, veiculosCitaveis,
@@ -176,7 +176,8 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
     ? { model: deps.model, modelId: deps.modelId ?? 'injetado' }
     : getAgentLanguageModel();
   const state = createAgentTurnState();
-  const catalogDeps = { searchVehicles: deps.searchVehicles, readVehicle: deps.readVehicle };
+  const now = new Date();
+  const catalogDeps = { searchVehicles: deps.searchVehicles, readVehicle: deps.readVehicle, now };
   const tools = createAgentTools(state, catalogDeps);
   await reconferirVeiculosJaMostrados(input.history, createAgentToolFunctions(state, catalogDeps), state);
 
@@ -191,7 +192,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
       body: FALLBACK_BODY,
       cards: [],
       // Os fatos já anotados valem mesmo com a resposta descartada: o vendedor precisa deles.
-      facts: state.facts,
+      facts: state.facts.filter((fact) => fact.field !== 'visit' || !state.appointment),
       handoffReason: state.handoffReason ?? 'ai_suggested',
     },
     usage, guard, fallback: true, modelId: resolved.modelId, toolsUsed, modelText,
@@ -200,7 +201,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
   const messages = buildAgentMessages(input.history, input.message);
   const gerar = () => generateText({
     model: resolved.model,
-    system: AGENT_SYSTEM_PROMPT,
+    system: agentSystemPromptAt(now),
     messages,
     tools,
     stopWhen: isStepCount(MAX_PASSOS),
@@ -274,6 +275,7 @@ export async function runAgentTurn(input: AgentTurnInput, deps: AgentTurnDeps = 
         input.history.flatMap((m) => (m.cards ?? []).map((c) => c.id))),
       facts: state.facts,
       handoffReason: state.handoffReason,
+      appointment: state.appointment,
     },
     usage, guard, fallback: false, modelId: resolved.modelId, toolsUsed, modelText: text,
   };

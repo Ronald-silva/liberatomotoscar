@@ -7,6 +7,7 @@ import {
   createAgentTools,
   createAgentTurnState,
   registrarLeadSchema,
+  marcarVisitaSchema,
 } from './tools';
 
 /** Mesma forma que `publicFacts` devolve: marca, modelo e preço podem vir nulos do cadastro. */
@@ -57,6 +58,23 @@ function toolsComCatalogo(itens: LinhaCatalogo[] = [motoPublicada, carroPublicad
 }
 
 describe('ferramentas do agente sobre o catálogo', () => {
+  it('marca visita só quando dia e hora cabem no expediente', () => {
+    const state = createAgentTurnState();
+    const fn = createAgentToolFunctions(state, { now: new Date('2026-11-03T12:00:00Z') });
+    expect(fn.marcarVisita({ data: '2026-11-07', hora: '14:00', frase: 'sábado às 14h' }).marcada).toBe(true);
+    expect(state.appointment?.scheduledFor?.toISOString()).toBe('2026-11-07T17:00:00.000Z');
+    expect(state.facts).toContainEqual({ field: 'visit', quote: 'sábado às 14h' });
+    expect(marcarVisitaSchema.safeParse({ data: '2026-11-07', hora: '14:00', frase: 'sábado às 14h' }).success).toBe(true);
+  });
+
+  it('guarda a frase sem inventar hora e recusa domingo', () => {
+    const state = createAgentTurnState();
+    const fn = createAgentToolFunctions(state, { now: new Date('2026-11-03T12:00:00Z') });
+    expect(fn.marcarVisita({ frase: 'quero ver a moto' }).motivo).toBe('sem-data');
+    expect(state.appointment?.scheduledFor).toBeNull();
+    expect(fn.marcarVisita({ data: '2026-11-08', hora: '14:00', frase: 'domingo às 14h' }).motivo).toBe('fechado');
+    expect(state.appointment?.scheduledFor).toBeNull();
+  });
   it('buscar_veiculos filtra por marca e devolve só aquela marca', async () => {
     const { fn } = toolsComCatalogo();
     const saida = await fn.buscarVeiculos({ marca: 'Honda' });
@@ -144,10 +162,10 @@ describe('ferramentas do agente sobre o catálogo', () => {
     expect(chamarVendedorSchema.safeParse({ motivo: 'financing' }).success).toBe(true);
   });
 
-  it('expõe as cinco ferramentas com os nomes que o prompt cita', () => {
+  it('expõe as seis ferramentas com os nomes que o prompt cita', () => {
     const tools = createAgentTools(createAgentTurnState());
     expect(Object.keys(tools)).toEqual([
-      'buscar_veiculos', 'detalhar_veiculo', 'dados_da_loja', 'registrar_lead', 'chamar_vendedor',
+      'buscar_veiculos', 'detalhar_veiculo', 'dados_da_loja', 'registrar_lead', 'marcar_visita', 'chamar_vendedor',
     ]);
   });
 });

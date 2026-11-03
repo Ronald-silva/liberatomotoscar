@@ -1,7 +1,8 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
-import { visitAppointments } from '@/server/db/schema';
+import { conversations, visitAppointments } from '@/server/db/schema';
+import { organizarFicha } from '@/lib/customer-briefing';
 import { ensureAttendanceTables } from './ensure-schema';
 import { resolveVisitSlot, storeClock, storeDayNumber, storeWeekday, type VisitSlotReason } from './visit-slot';
 
@@ -10,7 +11,7 @@ export type AppointmentRow = typeof visitAppointments.$inferSelect;
 export type AppointmentTransaction = Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0];
 
 /** `passou`: a hora já foi, mas é de hoje; a tela mostra esmaecida em vez de sumir com ela. */
-export type AgendaRow = AppointmentRow & { passou: boolean };
+export type AgendaRow = AppointmentRow & { passou: boolean; briefing?: { budget: string | null; tradeIn: string | null } };
 
 export type Agenda = {
   /** Inclui as de hoje que já passaram (`passou`): às 15h ainda interessa saber quem veio às 14h. */
@@ -32,7 +33,7 @@ const SATURDAY = 6;
  * fica em `hoje`, marcada `passou`, até o fim do dia da loja; a de dia anterior sai da tela. Sem hora
  * (`scheduledFor` nulo) nunca "passa", fica em `semHora` até alguém resolver.
  */
-export function groupAgenda(rows: readonly AppointmentRow[], now: Date): Agenda {
+export function groupAgenda(rows: readonly (AppointmentRow & { briefing?: AgendaRow['briefing'] })[], now: Date): Agenda {
   const agenda: Agenda = { hoje: [], amanha: [], semana: [], depois: [], semHora: [] };
   const today = storeDayNumber(now);
   // Dias até o sábado: de domingo (0) são 6, e no próprio sábado são 0.
@@ -58,7 +59,26 @@ export async function listAgenda(now: Date): Promise<Agenda> {
   await ensureAttendanceTables();
   // Os grupos com hora são ordenados por `groupAgenda`; sem hora fica do mais recente ao mais antigo.
   const rows = await getDb().select().from(visitAppointments).orderBy(desc(visitAppointments.createdAt));
-  return groupAgenda(rows, now);
+  const conversationIds = [...new Set(rows.map((row) => row.conversationId).filter((id): id is string => id !== null))];
+  const linked = conversationIds.length
+    ? await getDb().select({ id: conversations.id, customerName: conversations.customerName,
+      customerPhone: conversations.customerPhone, facts: conversations.facts })
+      .from(conversations).where(inArray(conversations.id, conversationIds))
+    : [];
+  const byConversation = new Map(linked.map((row) => [row.id, row]));
+  return groupAgenda(rows.map((row) => {
+    const conversation = row.conversationId ? byConversation.get(row.conversationId) : null;
+    const ficha = conversation ? organizarFicha(conversation.facts) : null;
+    return {
+      ...row,
+      customerName: row.customerName ?? conversation?.customerName ?? null,
+      customerPhone: row.customerPhone ?? conversation?.customerPhone ?? null,
+      briefing: ficha ? {
+        budget: ficha.linhas.find((line) => line.campo === 'budget')?.valor ?? null,
+        tradeIn: ficha.linhas.find((line) => line.campo === 'trade_in')?.valor ?? null,
+      } : undefined,
+    };
+  }), now);
 }
 
 export type AgentAppointmentInput = {
@@ -94,6 +114,7 @@ export async function upsertAgentAppointment(
     target: visitAppointments.conversationId,
     // O alvo precisa repetir o predicado do índice parcial, ou o Postgres não o reconhece.
     targetWhere: sql`${visitAppointments.conversationId} is not null`,
+    setWhere: eq(visitAppointments.source, 'agent'),
     set: {
       scheduledFor: input.scheduledFor,
       quote: input.quote,
@@ -103,7 +124,11 @@ export async function upsertAgentAppointment(
       updatedAt: sql`now()`,
     },
   }).returning();
-  return row;
+  if (row) return row;
+  const [manual] = await executor.select().from(visitAppointments)
+    .where(eq(visitAppointments.conversationId, input.conversationId)).limit(1);
+  if (!manual) throw new Error('Não foi possível consultar a visita existente.');
+  return manual;
 }
 
 export type ManualAppointmentInput = { customerName: string; customerPhone: string; vehicleId: string | null; data: string; hora: string };

@@ -2,7 +2,7 @@
 
 Para seguir no celular, de pé, na frente do Elton. Nada aqui exige decisão na hora: se algo sair do roteiro, vá para a seção "Se algo falhar".
 
-Escrito em 2 de novembro de 2026. O painel não aparece em buscadores de propósito (o site espera o domínio próprio); isso não é defeito e não precisa ser explicado.
+Escrito em 2 de novembro de 2026; atualizado em 3 de novembro de 2026 para a segunda etapa. Este roteiro descreve o código após implantação e migração. O painel não aparece em buscadores de propósito (o site espera o domínio próprio); isso não é defeito e não precisa ser explicado.
 
 ---
 
@@ -10,9 +10,9 @@ Escrito em 2 de novembro de 2026. O painel não aparece em buscadores de propós
 
 ### 0.1 A agenda precisa do banco certo
 
-**Antes da demonstração, peça ao desenvolvedor para aplicar a atualização do banco de dados da Agenda.** Hoje ela não foi aplicada no banco de produção. Quem aplica é o desenvolvedor, só depois de você autorizar.
+**Antes da demonstração, confirme a aplicação das migrações `0010` (Agenda) e `0011` (contato da conversa) no banco do ambiente usado.** O código desta etapa não aplica migração em produção por conta própria.
 
-- Sem essa atualização, a aba Agenda mostra apenas "Não foi possível carregar a agenda agora". Nada quebra, mas não serve para mostrar.
+- Sem `0010`, a aba Agenda mostra apenas "Não foi possível carregar a agenda agora". Sem `0011`, os novos dados de contato dependem da criação idempotente das colunas no servidor e a migração formal continua pendente.
 - Confirme com o desenvolvedor, no dia anterior, que a atualização foi aplicada. Depois disso, abra a Agenda uma vez para ter certeza.
 - Se a demonstração for num banco de desenvolvimento que já tem a Agenda, nada a fazer.
 
@@ -26,12 +26,12 @@ O número é o de teste (`liberato-motos-car-teste`, `+1 555-195-6955`). Número
 - Nenhum cliente real alcança a Dayse hoje. Isso não é defeito do painel; é o número.
 - Sem uma das duas coisas resolvidas, **não prometa atendimento ao vivo**. Mostre a conversa que já está em Conversas (passo 3, seção 5 deste roteiro).
 
-### 0.3 O que ainda não existe (não diga que existe)
+### 0.3 O que confirmar antes de mostrar
 
-- **A agenda não se preenche sozinha.** A Dayse conversa e chama o vendedor, mas ainda não marca visita. Hoje a visita entra **à mão**, pelo botão "Marcar visita". Isso vem na próxima etapa.
-- **A resposta do vendedor pelo painel ainda não é enviada ao WhatsApp do cliente.** A caixa grava a mensagem no painel; o envio pela Meta é da próxima etapa. Não responda a um cliente de verdade pela caixa do painel.
+- **A agenda aceita visitas manuais e visitas anotadas pela Dayse.** Para demonstrar o preenchimento automático, faça uma conversa de teste com dia e hora válidos depois da implantação. Sem conversa nova, mostre a criação manual.
+- **A resposta do vendedor pelo painel depende do contato registrado e da janela de 24 horas da Meta.** Conversas antigas ou fora da janela mostram a explicação e o caminho para responder pelo celular da loja. Faça um envio de teste antes de demonstrar com cliente real.
 
-Frase segura para os dois casos: "A agenda hoje é preenchida pelo vendedor; fazer a Dayse marcar sozinha é o próximo passo."
+Frase segura: "A visita pode ser marcada aqui ou combinada pela Dayse no WhatsApp; só confirmamos o horário depois de conferir o expediente."
 
 ---
 
@@ -120,7 +120,7 @@ Cada passo abaixo: toque, o que aparece, o que dizer, o que costuma dar errado.
 
 **Diga:** "Às dez da noite de domingo, com a loja fechada, a Dayse responde sobre o estoque, o preço e o endereço. Quando o cliente fala de financiamento ou de troca, ela chama um vendedor de propósito, sem prometer aprovação. Esse cliente aparece aqui, aguardando, e o senhor vê tudo o que foi dito."
 
-**Não faça:** não use a caixa de resposta para "responder o cliente" na frente dele. Hoje ela grava no painel mas não envia ao WhatsApp (seção 0.3). Mostre **Assumir** e o histórico, e pare aí.
+**Antes de usar a caixa de resposta:** confirme com um número de teste que a Meta entrega a mensagem. O painel só mostra sucesso após a confirmação de envio. Se a caixa não aparecer, siga a explicação da tela e responda pelo celular da loja.
 
 **O que costuma dar errado:**
 - A Dayse não responde: quase certamente o telefone não está na lista da Meta. Não insista. Diga "o número de teste só fala com telefones liberados" e mostre a conversa existente.
@@ -140,7 +140,7 @@ Cada passo abaixo: toque, o que aparece, o que dizer, o que costuma dar errado.
 5. A visita aparece em "Hoje", "Amanhã" ou "Esta semana". Mostre o cartão: nome, hora, veículo, o botão **WhatsApp** e **Ver conversa**.
 6. Toque em **Corrigir** para mostrar que dá para mudar dia e hora, e em **Cancelar visita** para mostrar que há confirmação (**Manter visita** desfaz).
 
-**Diga:** "Hoje o vendedor marca a visita aqui, com hora, veículo e o telefone para chamar. O próximo passo é a Dayse marcar sozinha."
+**Diga:** "O vendedor pode marcar a visita aqui. Quando o cliente combina dia e hora com a Dayse, a agenda recebe o compromisso e mostra a conversa junto dele."
 
 **O que costuma dar errado:**
 - "Não foi possível carregar a agenda agora": a tabela não existe nesse banco (seção 0.1). Leia a mensagem em voz alta, diga "essa parte eu te mostro depois" e vá para o Ajustes.
@@ -175,7 +175,7 @@ Regra geral: **o painel agora explica a falha em português. Leia a mensagem em 
 - **Agenda com aviso:** a atualização do banco da Agenda não foi aplicada (seção 0.1). Diga "essa parte eu te mostro depois".
 - **Perdeu-se no meio:** toque em **Estoque**, o primeiro botão da barra. Recomece dali.
 
-O que **não** dizer: que a agenda se preenche sozinha, que a Dayse já marca visita, que a resposta do vendedor chega ao cliente pelo painel. Nada disso existe ainda.
+O que **não** dizer antes de testar no ambiente implantado: que a Dayse marcou uma visita ou que uma resposta chegou ao cliente. Confirme cada fluxo pelo WhatsApp e pela Agenda.
 
 ---
 
@@ -188,5 +188,6 @@ Anote o que travou e em que passo. Isso vale mais do que qualquer ajuste do rote
 ## Apêndice técnico (para o desenvolvedor, não para a apresentação)
 
 - A tabela é `visit_appointments`, criada pela migração `drizzle/0010_majestic_newton_destine.sql`. Em 2 de novembro de 2026 o registro de migrações da produção tinha 9 entradas, a mais nova de 27/10/2026, e a tabela não existia.
-- A migração é o único caminho que cria a tabela; o criador automático de tabelas do atendimento (`ensure-schema.ts`) deixou de criá-la. Abrir a Agenda antes da migração apenas mostra o aviso.
-- Aplicar a migração em produção exige autorização do proprietário.
+- A migração `drizzle/0011_whole_stepford_cuckoos.sql` acrescenta nome, telefone e tenant à conversa. `ensure-schema.ts` também cria essas colunas de forma idempotente quando o atendimento é iniciado.
+- `0010` é o único caminho que cria a tabela da agenda; o criador automático de tabelas do atendimento (`ensure-schema.ts`) deixou de criá-la. Abrir a Agenda antes de `0010` apenas mostra o aviso.
+- Aplicar as migrações em produção exige autorização do proprietário.

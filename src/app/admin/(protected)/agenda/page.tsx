@@ -50,6 +50,7 @@ export default async function AgendaPage() {
       id: row.id, scheduledFor: row.scheduledFor?.toISOString() ?? null, passou: row.passou,
       customerName: row.customerName, customerPhone: row.customerPhone, quote: row.quote,
       conversationId: row.conversationId, vehicleId: row.vehicleId,
+      briefing: row.briefing,
       vehicle: vehicle ? { label: titleOf(vehicle), year: vehicle.year, price: vehicle.priceCents !== null ? brl.format(vehicle.priceCents / 100) : null } : null,
     };
   };

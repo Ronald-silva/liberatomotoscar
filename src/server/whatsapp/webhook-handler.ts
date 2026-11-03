@@ -87,7 +87,7 @@ export type MetaWebhookPayload = {
 /** Quando o vendedor responde pelo celular da loja (Coexistence smb_message_echoes), pausa a IA para esse cliente. */
 async function pauseAutomationOnSellerEcho(tenantId: string, customerWaId: string, now = new Date()) {
   const token = whatsappConversationToken(tenantId, customerWaId);
-  const conv = await ensureWhatsappConversation(token, now);
+  const conv = await ensureWhatsappConversation(token, undefined, now);
   if (!conv) return;
 
   await getDb()
@@ -137,6 +137,7 @@ async function defaultRunAgentTurn(params: {
   const conversationId = await recordIncomingWhatsappMessage({
     tenantId: params.tenant.tenantId,
     customerWaId: params.customerWaId,
+    customerName: params.customerName,
     waMessageId: params.waMessageId,
     text: params.text,
   });

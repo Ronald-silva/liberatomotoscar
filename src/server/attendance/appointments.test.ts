@@ -214,6 +214,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('agendamento manual com PostgreS
       expect(fixed.scheduledFor?.toISOString()).toBe('2026-11-06T13:30:00.000Z');
       // A frase do cliente e a conversa ficam; so a origem muda, e e ela que protege a correcao.
       expect(fixed).toMatchObject({ source: 'manual', quote: 'sabado as 14h', conversationId: conversation.id, customerName: 'Beto' });
+      const afterAgent = await upsertAgentAppointment({
+        conversationId: conversation.id, vehicleId: null, customerName: 'Beto', customerPhone: '85988887777',
+        scheduledFor: at('2026-11-09T10:00:00-03:00'), quote: 'segunda de manhã',
+      });
+      expect(afterAgent).toMatchObject({ source: 'manual', quote: 'sabado as 14h' });
+      expect(afterAgent.scheduledFor?.toISOString()).toBe('2026-11-06T13:30:00.000Z');
     } finally {
       await db.delete(conversations).where(eq(conversations.id, conversation.id));
     }

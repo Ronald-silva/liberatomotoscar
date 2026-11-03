@@ -16,6 +16,7 @@ export type CorpusCase = {
     /** O turno devia (ou não devia) consultar o estoque. */
     buscaEstoque?: boolean;
     usaDadosDaLoja?: boolean;
+    usaMarcarVisita?: boolean;
     handoffEsperado?: string;
     handoffNao?: string[];
     /** Trechos proibidos, casados como PALAVRA inteira: "vale" não acusa "valeu". */
@@ -131,6 +132,9 @@ export function evaluateCase(caso: CorpusCase, outcome: CaseOutcome): Finding[] 
   }
   if (esperado.usaDadosDaLoja === false && ferramentas.has('dados_da_loja')) {
     add('dados_da_loja_a_toa', 'a mensagem não pedia os dados da loja');
+  }
+  if (esperado.usaMarcarVisita === true && !ferramentas.has('marcar_visita')) {
+    add('visita_nao_conferida', 'o pedido de visita não passou pela ferramenta de agenda');
   }
   if (esperado.handoffEsperado && !handoffs.has(esperado.handoffEsperado)) {
     add('handoff_faltando', `esperado ${esperado.handoffEsperado}, obtido ${[...handoffs].join(',') || 'nenhum'}`);

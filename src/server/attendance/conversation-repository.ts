@@ -71,6 +71,7 @@ export type AutomatedReply = {
   cards: MessageCard[];
   facts?: LeadFact[];
   handoffReason?: HandoffReason | null;
+  appointment?: { scheduledFor: Date | null; quote: string; vehicleId: string | null } | null;
 };
 
 /**
@@ -109,13 +110,23 @@ export async function commitAutomatedReply(conversationId: string, reply: Automa
     const facts = reply.facts?.length
       ? [...current.facts.filter((old) => !reply.facts!.some((next) => next.field === old.field)), ...reply.facts].slice(-7)
       : current.facts;
+    if (reply.appointment) {
+      // A agenda traz authz/NextAuth para o grafo; carregar só quando há visita evita esse
+      // custo nos turnos comuns e nos testes de formatação do agente.
+      const { upsertAgentAppointment } = await import('./appointments');
+      await upsertAgentAppointment({
+        conversationId, vehicleId: reply.appointment.vehicleId,
+        scheduledFor: reply.appointment.scheduledFor, quote: reply.appointment.quote,
+        customerName: current.customerName, customerPhone: current.customerPhone,
+      }, tx);
+    }
     await tx.update(conversations).set({
       turnLockedUntil: null, lastMessageAt: now,
       facts,
+      ...(handoff || reply.appointment ? { expiresAt: retentionFrom(now, true) } : {}),
       ...(handoff ? {
         owner: handoffPausesAutomation(reply.handoffReason) ? 'human' as const : 'automation' as const,
         handoffRequestedAt: current.handoffRequestedAt ?? now,
-        expiresAt: retentionFrom(now, true),
       } : {}),
     }).where(eq(conversations.id, conversationId));
     if (firstHandoffRequest) {

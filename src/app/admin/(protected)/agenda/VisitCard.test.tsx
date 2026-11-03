@@ -51,6 +51,15 @@ it('so oferece Ver conversa quando a visita veio de uma conversa', () => {
   expect(screen.queryByRole('link', { name: 'Ver conversa' })).toBeNull();
 });
 
+it('mostra nome tratado, orçamento, troca e frase da visita', () => {
+  render(<VisitCard visit={visit({ customerName: 'MARCOS ANDRADE', quote: 'SABADO AS 14H',
+    briefing: { budget: 'ATÉ 20 MIL', tradeIn: 'TENHO UMA FAN' } })} vehicles={vehicles} />);
+  expect(screen.getByText('Marcos andrade')).toBeTruthy();
+  expect(screen.getByText(/Até 20 mil/)).toBeTruthy();
+  expect(screen.getByText(/Tenho uma fan/)).toBeTruthy();
+  expect(screen.getByText(/“Sabado as 14h”/)).toBeTruthy();
+});
+
 it('visita de hoje que ja passou aparece apagada e dita, nao so pela cor', () => {
   const { container, rerender } = render(<VisitCard visit={visit({ passou: true })} vehicles={vehicles} />);
   expect(screen.getByText('Já passou')).toBeTruthy();

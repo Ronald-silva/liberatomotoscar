@@ -107,7 +107,7 @@ export default async function AttendancePage({
                         className={`${attendanceStyles.conversationLink} ${isSelected ? attendanceStyles.conversationLinkActive : ''}`}
                       >
                         <div className={attendanceStyles.conversationMeta}>
-                          <strong>Atendimento #{protocolOf(item.id)}</strong>
+                          <strong>{item.customerName ?? `Atendimento #${protocolOf(item.id)}`}</strong>
                           <time dateTime={item.lastMessageAt.toISOString()}>
                             {dateFormatter.format(item.lastMessageAt)}
                           </time>
@@ -136,7 +136,8 @@ export default async function AttendancePage({
                 <article className={attendanceStyles.conversationDetail} aria-label={`Conversa ${protocolOf(detail.conversation.id)}`}>
                   <header className={attendanceStyles.detailHeader}>
                     <div>
-                      <h3>Atendimento #{protocolOf(detail.conversation.id)}</h3>
+                      <h3>{detail.conversation.customerName ?? `Atendimento #${protocolOf(detail.conversation.id)}`}</h3>
+                      {detail.conversation.customerPhone ? <p className={attendanceStyles.current}>{detail.conversation.customerPhone}</p> : null}
                       <p className={attendanceStyles.current}>
                         Status:{' '}
                         <strong>
@@ -217,6 +218,9 @@ export default async function AttendancePage({
                     owner={detail.conversation.owner}
                     assignedTo={detail.conversation.assignedTo}
                     viewerUserId={detail.viewerUserId}
+                    customerPhone={detail.conversation.customerPhone}
+                    tenantId={detail.conversation.tenantId}
+                    lastVisitorMessageAt={detail.lastVisitorMessageAt?.toISOString() ?? null}
                   />
 
                   {detail.events.length > 0 ? (

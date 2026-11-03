@@ -4,6 +4,7 @@ import { requireAdmin } from '@/server/authz';
 import { getDb } from '@/server/db/client';
 import { conversationMessages, conversations } from '@/server/db/schema';
 import * as repository from './conversation-repository';
+import { sendOperatorReply } from './operator-reply';
 
 export const inboxFilterSchema = z.enum(['waiting', 'mine', 'automation', 'closed']).catch('waiting');
 export type InboxFilter = z.infer<typeof inboxFilterSchema>;
@@ -25,6 +26,7 @@ export async function listInbox(filter: InboxFilter) {
         : and(eq(conversations.status, 'closed'), hasMessage);
   return getDb().select({
     id: conversations.id, owner: conversations.owner, status: conversations.status,
+    customerName: conversations.customerName,
     assignedTo: conversations.assignedTo, facts: conversations.facts, visitorTurns: conversations.visitorTurns,
     handoffRequestedAt: conversations.handoffRequestedAt, lastMessageAt: conversations.lastMessageAt,
     createdAt: conversations.createdAt,
@@ -52,7 +54,12 @@ export async function getInboxConversation(id: string) {
     repository.listConversationMessages(conversation.id, 200),
     repository.listConversationHandoffs(conversation.id),
   ]);
-  return { conversation, messages, events, viewerUserId: admin.userId };
+  const [lastVisitor] = await getDb().select({ createdAt: conversationMessages.createdAt })
+    .from(conversationMessages)
+    .where(and(eq(conversationMessages.conversationId, conversation.id), eq(conversationMessages.sender, 'visitor')))
+    .orderBy(desc(conversationMessages.createdAt)).limit(1);
+  return { conversation, messages, events, lastVisitorMessageAt: lastVisitor?.createdAt ?? null,
+    viewerUserId: admin.userId };
 }
 
 export async function assumeInboxConversation(id: string) {
@@ -72,7 +79,7 @@ export async function closeInboxConversation(id: string) {
 
 export async function replyToInboxConversation(id: string, body: unknown) {
   const admin = await requireAdmin();
-  return repository.appendHumanReplyAs(conversationId.parse(id), admin.userId, replyBody.parse(body));
+  return sendOperatorReply(conversationId.parse(id), admin.userId, replyBody.parse(body));
 }
 
 export async function deleteInboxConversation(id: string) {

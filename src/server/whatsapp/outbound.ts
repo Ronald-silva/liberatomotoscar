@@ -10,6 +10,7 @@ export type SendWhatsAppTextParams = {
   previewUrl?: boolean;
   apiVersion?: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 };
 
 /** A Meta pode entregar o wa_id brasileiro sem o nono dígito, embora o número autorizado o inclua. */
@@ -30,6 +31,7 @@ export async function sendWhatsAppTextMessage(params: SendWhatsAppTextParams): P
 
   const response = await fetchFn(url, {
     method: 'POST',
+    signal: params.signal,
     headers: {
       Authorization: `Bearer ${params.accessToken}`,
       'Content-Type': 'application/json',

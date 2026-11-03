@@ -5,6 +5,7 @@ import { resumoDaPolitica } from '@/data/store-policy';
 import { buildVehicleTitle } from '@/lib/vehicle-title';
 import type { HandoffReason, LeadFact } from '@/server/attendance/conversation-repository';
 import { getVehicleDetails, searchAvailableVehicles } from '@/server/vehicles/agent-catalog';
+import { resolveVisitSlot, type VisitSlotReason } from '@/server/attendance/visit-slot';
 
 export function semAcento(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
@@ -62,6 +63,12 @@ export const registrarLeadSchema = z.object({
 });
 
 export const chamarVendedorSchema = z.object({ motivo: handoffReasonSchema });
+export const marcarVisitaSchema = z.object({
+  data: z.string().optional().describe('AAAA-MM-DD no calendário da loja, só se o cliente indicou o dia'),
+  hora: z.string().optional().describe('HH:MM no relógio da loja, só se o cliente indicou a hora'),
+  frase: z.string().trim().min(1).max(60).describe('frase curta do cliente sobre a visita'),
+  veiculoId: z.string().uuid().optional().describe('id exato de um veículo consultado neste turno'),
+});
 
 export type VerifiedVehicle = {
   id: string;
@@ -107,12 +114,13 @@ export type AgentTurnState = {
   reconferredIds: Set<string>;
   facts: LeadFact[];
   handoffReason: HandoffReason | null;
+  appointment: { scheduledFor: Date | null; quote: string; vehicleId: string | null } | null;
 };
 
 export function createAgentTurnState(): AgentTurnState {
   return {
     allowedVehicles: new Map(), searchedBrands: new Set(), searchedModels: new Set(),
-    searchFoundResults: false, reconferredIds: new Set(), facts: [], handoffReason: null,
+    searchFoundResults: false, reconferredIds: new Set(), facts: [], handoffReason: null, appointment: null,
   };
 }
 
@@ -132,6 +140,7 @@ export function veiculosCitaveis(state: AgentTurnState): VerifiedVehicle[] {
 export type AgentToolDeps = {
   searchVehicles?: typeof searchAvailableVehicles;
   readVehicle?: typeof getVehicleDetails;
+  now?: Date;
 };
 
 type CatalogRow = Awaited<ReturnType<typeof searchAvailableVehicles>>['items'][number];
@@ -162,6 +171,7 @@ function toVerified(row: CatalogRow): VerifiedVehicle | null {
 export function createAgentToolFunctions(state: AgentTurnState, deps: AgentToolDeps = {}) {
   const searchVehicles = deps.searchVehicles ?? searchAvailableVehicles;
   const readVehicle = deps.readVehicle ?? getVehicleDetails;
+  const now = deps.now ?? new Date();
 
   function remember(veiculos: VerifiedVehicle[]) {
     for (const veiculo of veiculos) state.allowedVehicles.set(veiculo.id, veiculo);
@@ -220,6 +230,22 @@ export function createAgentToolFunctions(state: AgentTurnState, deps: AgentToolD
       return { anotado: true as const, campo };
     },
 
+    marcarVisita({ data, hora, frase, veiculoId }: z.infer<typeof marcarVisitaSchema>) {
+      const slot = resolveVisitSlot({ data, hora, now });
+      const vehicleId = veiculoId && state.allowedVehicles.has(veiculoId) ? veiculoId : null;
+      state.appointment = { scheduledFor: slot.scheduledFor, quote: frase, vehicleId };
+      state.facts = [...state.facts.filter((fact) => fact.field !== 'visit'), { field: 'visit', quote: frase }];
+      const reasons: Record<VisitSlotReason, string> = {
+        ok: 'Visita marcada para o dia e hora informados.',
+        'sem-data': 'Falta o dia. Pergunte ao cliente; não diga que marcou.',
+        'sem-hora': 'Falta a hora. Pergunte ao cliente; não diga que marcou.',
+        fechado: 'A loja não atende nesse horário. Sugira um horário dentro do expediente e confirme com o cliente.',
+        passado: 'Esse horário já passou. Peça uma data futura.',
+        invalido: 'Dia ou hora inválidos. Peça confirmação.',
+      };
+      return { marcada: slot.reason === 'ok', motivo: slot.reason, orientacao: reasons[slot.reason] };
+    },
+
     chamarVendedor({ motivo }: z.infer<typeof chamarVendedorSchema>) {
       state.handoffReason = motivo;
       return { encaminhado: true as const, motivo };
@@ -260,6 +286,12 @@ export function createAgentTools(state: AgentTurnState, deps: AgentToolDeps = {}
         + 'combinados. O vendedor lê isso de relance antes de ligar.',
       inputSchema: registrarLeadSchema,
       execute: async (input) => fn.registrarLead(input),
+    }),
+    marcar_visita: tool({
+      description: 'Confere dia e hora de uma visita contra o horário da loja e registra o combinado. '
+        + 'Use quando o cliente disser que quer visitar, mesmo sem data completa. Só diga que está marcada quando o retorno trouxer marcada=true.',
+      inputSchema: marcarVisitaSchema,
+      execute: fn.marcarVisita,
     }),
     chamar_vendedor: tool({
       description: 'Encaminha a conversa a um vendedor humano. Use quando o cliente pedir pessoa, '

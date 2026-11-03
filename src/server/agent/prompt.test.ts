@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { STORE } from '@/data/store';
-import { AGENT_SYSTEM_PROMPT } from './prompt';
+import { AGENT_SYSTEM_PROMPT, agentSystemPromptAt } from './prompt';
 
 describe('prompt de sistema', () => {
+  it('dá o dia da loja ao modelo e exige confirmar horário antes de afirmar agendamento', () => {
+    const prompt = agentSystemPromptAt(new Date('2026-11-03T15:00:00Z'));
+    expect(prompt).toContain('terça-feira, 2026-11-03');
+    expect(prompt).toContain('marcada=true');
+  });
   it('codifica as decisões comerciais da Fase 0', () => {
     // 0.1 escopo: qualificar e encaminhar, sem negociar.
     expect(AGENT_SYSTEM_PROMPT).toMatch(/não negocia desconto/i);

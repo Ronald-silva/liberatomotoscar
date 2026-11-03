@@ -21,6 +21,7 @@ export type VisitView = {
   conversationId: string | null;
   vehicleId: string | null;
   vehicle: { label: string; year: number | null; price: string | null } | null;
+  briefing?: { budget: string | null; tradeIn: string | null };
 };
 
 const initial: AgendaFormState = { message: null, ok: false };
@@ -131,9 +132,11 @@ export function VisitCard({ visit, vehicles, vehiclesAvailable = true, showDay =
       </> : <span className={styles.visitDay}>Sem hora certa</span>}
       {visit.passou ? <span className={styles.badge}>Já passou</span> : null}
     </div>
-    <p className={styles.visitName}>{visit.customerName ?? 'Cliente sem nome'}</p>
+    <p className={styles.visitName}>{visit.customerName ? semGritar(visit.customerName) : 'Cliente sem nome'}</p>
     {visit.customerPhone ? <p className={styles.visitMeta}>{visit.customerPhone}</p> : null}
     <p className={styles.visitMeta}>{vehicleLine ?? 'Veículo não definido'}</p>
+    {visit.briefing?.budget ? <p className={styles.visitMeta}><strong>Orçamento:</strong> {semGritar(visit.briefing.budget)}</p> : null}
+    {visit.briefing?.tradeIn ? <p className={styles.visitMeta}><strong>Troca:</strong> {semGritar(visit.briefing.tradeIn)}</p> : null}
     {visit.quote ? <p className={styles.visitQuote} title={visit.quote}>“{semGritar(visit.quote)}”</p> : null}
     <div className={styles.visitActions}>
       {whatsapp ? <a className={`${styles.button} ${styles.buttonCompact}`} href={whatsapp} target="_blank" rel="noreferrer">WhatsApp</a> : null}

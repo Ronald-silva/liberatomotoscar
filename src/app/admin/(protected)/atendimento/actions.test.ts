@@ -69,6 +69,16 @@ it('exige administrador antes de registrar o número de teste', async () => {
   expect(result.message).not.toContain('token-sensivel');
 });
 
+it('não diz que enviou quando a Meta recusou a resposta', async () => {
+  const data = new FormData();
+  data.set('conversationId', '11111111-1111-4111-8111-111111111111');
+  data.set('intent', 'reply');
+  data.set('body', 'Oi.');
+  mocks.replyToInboxConversation.mockResolvedValueOnce({ delivered: false, reason: 'A Meta não confirmou o envio.', message: null });
+  expect(await operateInboxConversation({ message: null, error: false }, data))
+    .toEqual({ message: 'A Meta não confirmou o envio.', error: true });
+});
+
 it('devolve a versão nova e não pede repetição se a invalidação falhar depois de gravar', async () => {
   mocks.setWhatsappMode.mockResolvedValue({ mode: 'deterministic', version: 2 });
   mocks.revalidatePath.mockImplementation(() => { throw new Error('cache'); });
@@ -101,6 +111,7 @@ it('executa ações do operador na conversa (assumir, responder, devolver e ence
   replyForm.set('conversationId', convId);
   replyForm.set('intent', 'reply');
   replyForm.set('body', 'Olá, posso ajudar com a Titan.');
+  mocks.replyToInboxConversation.mockResolvedValueOnce({ delivered: true, reason: null, message: { id: 'm1' } });
   const replied = await operateInboxConversation({ message: null, error: false }, replyForm);
   expect(mocks.replyToInboxConversation).toHaveBeenCalledWith(convId, 'Olá, posso ajudar com a Titan.');
   expect(replied.error).toBe(false);

@@ -40,6 +40,13 @@ describe('4.1 corpus de avaliação', () => {
       expect(ids, `o corpus perdeu o caso ${id}`).toContain(id);
     }
   });
+
+  it('cobre pedido de visita completo, incompleto e fora do horário', () => {
+    const ids = new Set(corpus.map((c) => c.id));
+    for (const id of ['visita-dia-hora', 'visita-so-dia', 'visita-domingo', 'visita-noite']) {
+      expect(ids).toContain(id);
+    }
+  });
 });
 
 describe('4.3 critérios automáticos', () => {
