@@ -11,7 +11,7 @@ describe('composição vertical', () => {
       expect(box.y).toBeGreaterThanOrEqual(VERTICAL_SAFE.top);
       expect(box.y + box.height).toBeLessThanOrEqual(VERTICAL_SAFE.bottom);
     }
-    expect(VERTICAL_LAYOUT.note.y + VERTICAL_LAYOUT.note.height).toBeLessThanOrEqual(1500);
+    expect(VERTICAL_LAYOUT.note.y + VERTICAL_LAYOUT.note.height).toBeLessThanOrEqual(1390);
     expect(VERTICAL_LAYOUT.photo.height).toBeGreaterThanOrEqual(500);
     expect(VERTICAL_LAYOUT.title.y + VERTICAL_LAYOUT.title.height).toBeLessThan(VERTICAL_LAYOUT.year.y);
     expect(VERTICAL_LAYOUT.photo.y + VERTICAL_LAYOUT.photo.height).toBeLessThan(VERTICAL_LAYOUT.priceLabel.y);
@@ -21,6 +21,7 @@ describe('composição vertical', () => {
     const story = verticalPhotoBounds('story');
     const tiktok = verticalPhotoBounds('tiktok');
     expect(tiktok.x + tiktok.width).toBeLessThan(story.x + story.width);
+    expect(tiktok.x + tiktok.width).toBeLessThanOrEqual(VERTICAL_SAFE.right);
     expect(tiktok.height).toBe(story.height);
   });
 });
