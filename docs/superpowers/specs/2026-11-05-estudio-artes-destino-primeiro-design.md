@@ -181,6 +181,8 @@ Fontes consultadas: [socialsizes.io](https://socialsizes.io/instagram-stories-si
 
 A conferência definitiva é visual, no aparelho da loja, com o fantasma da interface ligado — e é para isso que o fantasma existe. Corrigir depois é trocar número num só lugar.
 
+> **Estado em 06/11/2026: a conferência visual não aconteceu.** O fantasma está pronto e a tela tem o interruptor que o liga, mas comparar a peça publicada com a prévia exige publicar de verdade numa conta de teste, em aparelho físico — que é aceite do dono da loja, não verificação técnica. Os quatro números de cada linha da tabela acima seguem como **ponto de partida declarado**. O roteiro de `docs/liberato-inteligente/05-CONFERENCIA-ESTUDIO-ARTES.md` diz, por destino, o que olhar e onde escrever a correção: `src/components/art-studio/destinations.ts`, no campo `safe` do destino, e depois a tabela acima.
+
 ---
 
 ## 6. Testes
@@ -235,7 +237,9 @@ Um toque. O formato se adequa no ato de compartilhar para a plataforma desejada 
 
 **Nota técnica importante:** o navegador **não pode saber** qual aplicativo a pessoa escolheu no menu nativo ([Web Share API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Share_API)). Então "adequar no ato do compartilhamento" se realiza como **um botão explícito por destino**, cada um já com o arquivo certo pronto, e não como detecção do aplicativo escolhido. O efeito para o operador é o desejado; a etapa de escolher formato desaparece.
 
-Para que todo botão responda no mesmo toque, os quatro arquivos são renderizados em segundo plano logo que foto e fonte estão prontas, em sequência, num único palco oculto reaproveitado (≈300 ms e ≈400 KB cada — folgado para celular). Se o toque chegar antes do arquivo daquele destino, ele é renderizado na hora; se a ativação do usuário se perder nesse caminho, a tela pede um segundo toque em vez de falhar em silêncio.
+Para que todo botão responda no mesmo toque, os quatro arquivos são renderizados em segundo plano logo que foto e fonte estão prontas, em sequência, num único palco oculto reaproveitado.
+
+> **Tempo e peso por arquivo: ainda não medidos.** A estimativa original desta seção — "≈300 ms e ≈400 KB cada" — era palpite de quem escreveu o spec, não medição, e **segue sendo**: ela só se mede nos dois aparelhos da loja (um Android/Chrome e um iPhone/Safari), com o painel por HTTPS e um veículo publicado com foto real, e nenhuma das duas coisas existe no ambiente onde o código foi escrito. Os números que entram aqui saem do roteiro de conferência (`docs/liberato-inteligente/05-CONFERENCIA-ESTUDIO-ARTES.md`), que diz o que cronometrar e o que anotar. Até lá, **não há número a citar** — e inventar um seria pior que não ter, porque é por ele que se decidiria se o aparelho da loja aguenta os quatro. Se o toque chegar antes do arquivo daquele destino, ele é renderizado na hora; se a ativação do usuário se perder nesse caminho, a tela pede um segundo toque em vez de falhar em silêncio.
 
 ### 8.3 A tela
 

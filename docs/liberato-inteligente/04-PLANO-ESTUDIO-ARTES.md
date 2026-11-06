@@ -1,5 +1,41 @@
 # P2 — estúdio de artes por veículo
 
+> **SUBSTITUÍDO EM 06/11/2026 no que diz respeito a layout e fluxo.**
+>
+> As decisões de **composição, formatos, modelos e fluxo de tela** registradas neste documento
+> descrevem o MVP de 27/10 e as revisões de 03/11. Elas foram substituídas pelo spec
+> `docs/superpowers/specs/2026-11-05-estudio-artes-destino-primeiro-design.md` e pelo plano
+> `docs/superpowers/plans/2026-11-06-estudio-artes-destino-primeiro.md`. Em conflito, **vale o spec
+> de 05/11**. O que mudou, em uma linha cada:
+>
+> - **Quatro formatos escolhidos à parte → quatro destinos.** Feed, Stories, Status do WhatsApp e
+>   TikTok. O formato quadrado 1080 × 1080 saiu; escolher o destino já escolhe dimensão, área segura,
+>   fantasma da interface, legenda, rótulo do botão e nome do arquivo (`destinations.ts`).
+> - **Seis modelos → cinco selos.** O tema claro e as molduras separadas saíram: a peça nova é foto
+>   cheia com véu escuro, e texto claro sobre fundo claro não se lê. Sobrou o que de fato mudava — o
+>   rótulo (`templates.ts`).
+> - **Seletor de plataforma dentro da legenda → nenhum.** A legenda passou a ser propriedade do
+>   destino; havia dois eixos que se sobrepunham, e uma legenda longa de Facebook podia sair num
+>   arquivo 9:16.
+> - **Foto enquadrada em faixa → foto como herói.** A foto aparece inteira sobre uma ampliação
+>   desfocada de si mesma que sangra até as bordas; o que absorve a sobra é o véu de gradiente.
+> - **Tipografia em 400/900 somente**, com a medição dos testes extraída dos TTFs em disco: antes o
+>   teste media com um modelo e a produção com outro, e por isso 674 testes passavam com a arte ruim.
+> - **Fluxo de seis interações com dois botões-âncora → um toque.** A tela abre pronta, lembra o
+>   último destino e o último selo, e os quatro arquivos são preparados antes do toque.
+>
+> **O que deste documento continua valendo, inalterado:** a escolha do React Konva e a comparação de
+> bibliotecas; os limites de dados (fato vem do cadastro, texto promocional é campo separado com
+> aprovação humana); a conferência de versão do anúncio antes de exportar; a foto privada do R2 por
+> rota autenticada same-origin, sem bucket público; e **o limite comercial do final deste
+> documento** — "Preço em destaque" não inventa desconto, e o estúdio não deve ser apresentado como
+> criador de ofertas promocionais. Esse parágrafo não foi substituído por nada.
+>
+> A conferência no aparelho que este documento pedia ("conferir peças com fotos reais da loja em
+> aparelho real") **segue pendente**, agora com roteiro próprio:
+> `docs/liberato-inteligente/05-CONFERENCIA-ESTUDIO-ARTES.md`.
+
+
 **Objetivo:** botão **Criar arte** no cadastro existente para gerar peça fiel aos dados do anúncio, com edição restrita e exportação de qualidade. Prioridade depois das correções P1. **MVP implementado localmente em 27/10/2026; ainda sem deploy.** A estimativa original era condicional: 5–10 dias úteis para editor enxuto, 6 templates × 3 tamanhos e QA móvel; aumenta se houver fontes/licenças/marca indefinidas.
 
 **Estado do MVP local:** o botão salva o cadastro antes de abrir `/admin/veiculos/[id]/arte`. A página autenticada oferece quatro formatos de arte, foto/enquadramento, modelos compatíveis com a situação, texto auxiliar com confirmação e legendas opcionais para Instagram, Facebook, TikTok e WhatsApp Status. React Konva gera JPEG no navegador; uma rota autenticada serve fotos R2 pelo mesmo domínio, e outra confere versão, situação e dados antes do download ou compartilhamento. Rascunho/arquivado têm marca de prévia e não podem gerar arquivo comercial. O modelo de preço em destaque não inventa desconto. Não há migration nem armazenamento das artes. A legenda com IA, aprovação explícita de oferta promocional e publicação automática seguem fora deste MVP.

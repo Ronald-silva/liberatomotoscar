@@ -27,9 +27,34 @@ Registro anterior: 26/10/2026, após o cadastro guiado no celular.
 - A migração não destrutiva `drizzle/0005_vehicle_status_discarded.sql` foi aplicada ao Neon atual em 26/10/2026, após ordem explícita do proprietário. O histórico passou de cinco para seis entradas; `vehicle_status_valid` aceita `discarded`. A exclusão de um rascunho de teste com uma foto passou no navegador, no banco, na auditoria e no R2.
 - O código está somente na branch `painel-cadastro-simples`; nenhum deploy ou configuração da Vercel foi alterado nesta entrega.
 
+## Estúdio de artes — conferência pendente no aparelho (06/11/2026)
+
+O estúdio foi reconstruído em torno do destino (Feed, Stories, Status do WhatsApp, TikTok), com a
+foto como protagonista e publicação em um toque. O código está no branch
+`feat/estudio-artes-destino-primeiro`: suíte verde, tipos e lint limpos. O spec é
+`docs/superpowers/specs/2026-11-05-estudio-artes-destino-primeiro-design.md`.
+
+**Quatro conferências só se fazem no aparelho, e nenhuma delas foi feita.** Elas exigem dois
+aparelhos físicos (Android/Chrome e iPhone/Safari), o painel por HTTPS, publicação real em conta de
+teste e o aceite do dono — nada disso existe no ambiente onde o código foi escrito. O roteiro passo a
+passo está em `docs/liberato-inteligente/05-CONFERENCIA-ESTUDIO-ARTES.md`:
+
+1. **Tempo e peso dos quatro arquivos.** O spec trazia "≈300 ms e ≈400 KB cada" como palpite; o
+   aviso do §8.2 agora diz que o número não foi medido, em vez de citá-lo como se fosse.
+2. **Área segura de cada rede, com o fantasma ligado.** Os números do §5 são ponto de partida
+   declarado: nenhuma plataforma publica mapa em pixels, e o do Status do WhatsApp não tem nem guia
+   de terceiro atrás. Correção fica em `destinations.ts`, num lugar só.
+3. **Limiar de recorte da foto** (`COVER_TOLERANCE`, hoje 0,15), com as fotos de celular em retrato
+   do estoque, que são o caso difícil.
+4. **Aceite comercial dos selos**, incluindo confirmar com o dono que a perda do tema claro e das
+   molduras separadas não custou nada que ele usava.
+
+Dimensão exata dos arquivos (1080 × 1350 no Feed, 1080 × 1920 nos outros três) é requisito do spec e
+também só se prova decodificando arquivo baixado de verdade — está no passo 2 do roteiro.
+
 ## Limites e melhorias posteriores
 
-- A vitrine pública continua lendo o catálogo estático. Publicar no painel ainda não coloca o veículo na vitrine.
+- **Corrigido em 06/11/2026:** a afirmação anterior — "a vitrine pública continua lendo o catálogo estático" — estava **errada** e ficou desatualizada neste arquivo. A home usa `listPublicVehiclesWithCover` e a página de detalhe usa `getPublicVehicleWithPhotos`, as duas de `src/server/vehicles/service.ts`, as duas consultando o banco (`vehicles` com `status` público, capa por `vehicle_images`, URL de foto assinada no pedido). A imagem de compartilhamento (`opengraph-image`) lê da mesma fonte. Publicar no painel **coloca** o veículo na vitrine.
 - O upload depende da redução de imagem no navegador e do limite de corpo da server action.
 - URLs assinadas do R2 expiram em 15 minutos; uma tela aberta por mais tempo pode precisar de recarga.
 - Se o `delete` compensatório no R2 falhar, um objeto órfão pode permanecer. A limpeza automática desses órfãos continua pendente.
