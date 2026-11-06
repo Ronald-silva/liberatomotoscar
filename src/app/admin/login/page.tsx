@@ -24,7 +24,7 @@ export default async function AdminLoginPage({ searchParams }: LoginPageProps) {
   const limited = params.status === 'limit';
   const failed = Boolean(params.error);
 
-  return <main id="conteudo" className={styles.screen}>
+  return <main id="conteudo" className={`${styles.screen} ${styles.loginScreen}`}>
     <section className={styles.panel} aria-labelledby="admin-login-title">
       <Image className={styles.logo} src="/logo-liberato-negativo.png" alt="Liberato Motos Car" width={160} height={75} priority />
       <p className={styles.eyebrow}>Área do proprietário</p>

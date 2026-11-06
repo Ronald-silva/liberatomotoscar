@@ -18,6 +18,14 @@
   /* Altura real da barra fixa: botão de 52px + o padding de .stickyAction. Quem precisa
      reservar espaço embaixo usa este token, em vez de um número solto que envelhece sozinho. */
   --admin-sticky-action: calc(52px + var(--admin-space-2) * 2);
+  /* A reserva em `vh` vem antes de propósito. Onde `dvh` não existe — navegador embutido anterior
+     ao Chrome 108, que é o do aplicativo de onde a loja abre links — a declaração com `dvh` é
+     descartada inteira; sem a reserva, `min-height` volta a `auto`, a caixa encolhe até o conteúdo
+     e a centralização deixa de ter folga para distribuir. Foi assim que o cartão de entrada
+     apareceu colado no topo: 24px de folga, que é o padding daqui, em vez dos 100px da
+     centralização. Quem entende `dvh` lê a segunda linha e ganha a altura que acompanha a barra do
+     navegador ao aparecer e sumir. */
+  min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   align-items: center;
@@ -27,18 +35,39 @@
   background: var(--admin-bg);
 }
 
+/**
+ * A tela de entrada. É a única do painel sem `.listScreen`, ou seja a única que centraliza — e a
+ * única em que a peça inteira cabe numa olhada, então ela pode ter atmosfera em vez de fundo chapado.
+ * O clarão é neutro e discreto: um vermelho aqui disputaria com a logo e com o botão, que já são a
+ * cor da marca.
+ */
+.loginScreen { background: radial-gradient(135% 95% at 50% 45%, #111823 0%, #070a0e 72%); }
+
 .panel {
   width: min(100%, 440px);
+  /* Centraliza com margem automática, não só com `align-items`: centralizar por alinhamento corta
+     o que não cabe, e o que passa da borda de cima não rola. Com margem automática o cartão
+     centraliza quando há folga e encosta no padding quando não há — telas baixas, deitadas, ou com
+     dois avisos abertos continuam alcançáveis. */
+  margin-block: auto;
   padding: var(--admin-space-4);
   border: 1px solid var(--admin-line);
   border-radius: var(--admin-radius);
   background: var(--admin-surface);
+  /* Um eixo só para a composição inteira. A tela tem uma ação, e o botão de largura cheia já
+     escreve o rótulo no centro: com o resto alinhado à esquerda, a peça tinha dois eixos. */
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
 
-.logo { display: block; width: 160px; height: auto; margin-bottom: var(--admin-space-4); }
-.eyebrow { margin: 0 0 var(--admin-space-1); color: var(--admin-muted); font-size: 0.875rem; }
+.logo { display: block; width: 152px; height: auto; margin: 0 auto var(--admin-space-3); }
+/* Rótulo, não frase: caixa alta e espaçamento maior dizem isso sem precisar de outra cor. */
+.eyebrow { margin: 0 0 var(--admin-space-1); color: var(--admin-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .heading { margin: 0; font-size: clamp(1.8rem, 7vw, 2.3rem); line-height: 1.12; }
 .description { margin: var(--admin-space-2) 0 0; color: var(--admin-muted); line-height: 1.5; }
+/* Medida de linha no cartão de entrada: centralizado e em largura cheia, o texto quebra torto e
+   deixa uma palavra sozinha na última linha. */
+.panel .description, .panel .small { max-width: 32ch; margin-inline: auto; }
 .notice { margin: var(--admin-space-3) 0 0; padding: var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); line-height: 1.45; }
 .form { margin-top: var(--admin-space-4); }
 /* Formulário com barra fixa: reserva a altura dela no fim, senão o último campo nunca sobe acima
@@ -138,7 +167,11 @@
 .listPanel > .buttonCompact { display: inline-flex; align-items: center; margin-bottom: var(--admin-space-3); text-decoration: none; }
 
 @media (max-width: 480px) {
-  .screen { align-items: flex-start; padding-top: var(--admin-space-5); }
+  /* `.screen` não ancora mais no topo aqui. A troca existia para as telas de lista não ficarem
+     centralizadas no celular, mas essas já ancoram pela própria `.listScreen` — e a única tela que
+     usa `.screen` sozinha é a de entrada, que é justamente a que precisa centralizar. O que
+     protegia contra cortar o cartão numa tela baixa agora é a margem automática de `.panel`, que
+     recua sozinha quando não há folga. */
   .panel { padding: var(--admin-space-3); }
   .listScreen { padding-top: var(--admin-space-2); }
 }
