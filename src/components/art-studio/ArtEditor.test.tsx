@@ -27,6 +27,8 @@ const estado = vi.hoisted(() => ({
   desmontagens: [] as number[],
   desenhos: [] as { id: number; destino: string; opcoes: unknown; pintado: boolean }[],
   foto: { estado: 'loading' as 'loading' | 'ready' | 'error', erro: undefined as string | undefined },
+  /** O que o teto de altura obrigou o layout a deixar de fora. '' é o caso normal. */
+  descartados: '',
   // O palco oculto busca a foto por conta própria: até ela chegar, exportar sairia sem o veículo.
   fotoOculta: { estado: 'ready' as 'loading' | 'ready' | 'error' },
   // Permite segurar um `toBlob` no meio do caminho, para observar lote em curso e aborto.
@@ -38,8 +40,9 @@ vi.mock('./ArtCanvas', async () => {
   type Props = {
     destination: ArtDestination; showChrome: boolean; title: string;
     stageRef: { current: unknown }; onPhotoLoad: (estado: 'loading' | 'ready' | 'error', erro?: string) => void;
+    onDropped?: (descartados: string) => void;
   };
-  function ArtCanvasDuplo({ destination, showChrome, title, stageRef, onPhotoLoad }: Props) {
+  function ArtCanvasDuplo({ destination, showChrome, title, stageRef, onPhotoLoad, onDropped }: Props) {
     const id = useRef(0);
     if (id.current === 0) id.current = ++estado.proximo.id;
     const meu = id.current;
@@ -67,6 +70,7 @@ vi.mock('./ArtCanvas', async () => {
     const minhaFoto = meu === 1 ? estado.foto.estado : estado.fotoOculta.estado;
     useEffect(() => { onPhotoLoad(minhaFoto, meu === 1 ? estado.foto.erro : undefined); },
       [onPhotoLoad, destination, minhaFoto, meu]);
+    useEffect(() => { onDropped?.(estado.descartados); }, [onDropped, destination]);
     return createElement('div', { 'data-destino': destination, 'data-fantasma': String(showChrome), 'data-titulo': title });
   }
   return { default: ArtCanvasDuplo };
@@ -129,6 +133,7 @@ beforeEach(() => {
   estado.espera = { ativa: false, fila: [] };
   estado.foto = { estado: 'loading', erro: undefined };
   estado.fotoOculta = { estado: 'ready' };
+  estado.descartados = '';
   entregas.chamadas.length = 0;
   lotes.chamadas.length = 0;
   compartilhamentos = [];
@@ -622,15 +627,85 @@ it('toque antes do arquivo pronto renderiza na hora e pede um segundo toque se a
   expect(estado.desenhos.some((d) => d.destino === 'tiktok')).toBe(true);
 });
 
-it('o nome da arte é o mesmo que a legenda diz, e nunca fica vazio', () => {
+// A peça diz **marca e modelo**, e a versão não entra: `ArtContent.title` documenta isso em letra
+// ("arte de rede se lê em meio segundo"), o §4.2 do spec desenha "Honda CG 160 Titan" e o §13
+// registra que a arte escapa do dado sujo justamente por usar só marca + modelo. Medido: com a
+// versão de uma picape de concessionária (99 caracteres) o título vai a 4 linhas, o bloco de texto
+// sobe a 54,8% do teto de 55% e a foto visível cai de 39% para 31% da peça. O nome completo do
+// anúncio continua viajando no mesmo toque — na legenda.
+it('a arte diz marca e modelo; a versão fica na legenda e no cabeçalho', () => {
   const { container } = render(<ArtEditor {...props()} />);
-  const titulo = container.querySelector('[data-palco="previa"] [data-titulo]')?.getAttribute('data-titulo');
-  expect(titulo).toBe('Honda CG 160 Titan Start');
+  expect(container.querySelector('[data-palco="previa"] [data-titulo]')?.getAttribute('data-titulo'))
+    .toBe('Honda CG 160 Titan');
   expect((screen.getByLabelText(/Legenda/) as HTMLTextAreaElement).value).toContain('Honda CG 160 Titan Start');
-  cleanup();
-  const vazio = render(<ArtEditor {...props({ vehicle: { ...VEICULO, title: '   ' } })} />);
-  expect(vazio.container.querySelector('[data-palco="previa"] [data-titulo]')?.getAttribute('data-titulo'))
+  expect(screen.getByText(/Honda CG 160 Titan Start · R\$ 18\.900,00/)).toBeTruthy();
+});
+
+it('a arte não fica com o maior corpo da peça vazio quando o cadastro não dá marca nem modelo', () => {
+  const semNome = render(<ArtEditor {...props({ vehicle: { ...VEICULO, brand: null, model: null,
+    title: 'Veículo sem título' } })} />);
+  expect(semNome.container.querySelector('[data-palco="previa"] [data-titulo]')?.getAttribute('data-titulo'))
     .toBe('Veículo sem título');
+  cleanup();
+  // Marca e modelo em branco, mas a página compôs um nome pela versão: é esse nome que a arte usa,
+  // não o texto de reserva.
+  const pelaVersao = render(<ArtEditor {...props({ vehicle: { ...VEICULO, brand: null, model: null,
+    title: 'Saveiro Robust' } })} />);
+  expect(pelaVersao.container.querySelector('[data-palco="previa"] [data-titulo]')?.getAttribute('data-titulo'))
+    .toBe('Saveiro Robust');
+});
+
+// §8.2: "Abrir a tela no último destino usado e tocar o botão primário é um toque." Começar o lote
+// sempre pelo Feed deixaria o destino lembrado — o único que a pessoa vai tocar — como o último a
+// ficar pronto, e o toque cairia no caminho de desenhar na hora, que pede um segundo toque.
+it('o lote começa pelo destino lembrado, que é o que a pessoa vai tocar', async () => {
+  window.localStorage.setItem('liberato:arte:destino', 'tiktok');
+  comFotoPronta();
+  render(<ArtEditor {...props()} />);
+  await loteCompleto();
+  expect(estado.desenhos.map((d) => d.destino)).toEqual(['tiktok', 'feed', 'story', 'whatsapp']);
+});
+
+it('e o toque no destino lembrado entrega sem pedir segundo toque', async () => {
+  window.localStorage.setItem('liberato:arte:destino', 'whatsapp');
+  comFotoPronta();
+  render(<ArtEditor {...props()} />);
+  await waitFor(() => expect(estado.desenhos.length).toBeGreaterThanOrEqual(1));
+  fireEvent.click(botao('Publicar no Status'));
+  expect(entregas.chamadas.length).toBe(1);
+  expect(entregas.chamadas[0].filename).toBe('liberato-honda-cg-160-titan-status.jpg');
+});
+
+// §3.3.13: "O resultado na tela diz que a legenda foi copiada: sobrescrever a área de transferência
+// é efeito visível, não silencioso." Quem tinha outra coisa copiada precisa saber que perdeu.
+it('a tela diz que a legenda foi copiada, no caminho de publicar', async () => {
+  comFotoPronta();
+  render(<ArtEditor {...props()} />);
+  await loteCompleto();
+  expect(screen.queryByText(/legenda foi copiada/i)).toBeNull();
+  fireEvent.click(botao(/Publicar no/));
+  await waitFor(() => expect(screen.getByText(/legenda foi copiada/i)).toBeTruthy());
+});
+
+it('e também no caminho de Baixar, onde a cópia também acontece', async () => {
+  comFotoPronta();
+  render(<ArtEditor {...props()} />);
+  await loteCompleto();
+  fireEvent.click(botao('Baixar'));
+  await waitFor(() => expect(screen.getByText(/legenda foi copiada/i)).toBeTruthy());
+});
+
+// A área de transferência só é anunciada quando o aparelho de fato aceitou o texto: um WebView que
+// recusa a cópia não pode deixar a tela dizendo que a legenda está lá.
+it('não anuncia cópia que o aparelho recusou', async () => {
+  comFotoPronta();
+  Object.defineProperty(navigator, 'clipboard', { configurable: true,
+    value: { writeText: async () => { throw new Error('sem permissão'); } } });
+  render(<ArtEditor {...props()} />);
+  await loteCompleto();
+  fireEvent.click(botao(/Publicar no/));
+  await waitFor(() => expect(compartilhamentos.length).toBe(1));
+  expect(screen.queryByText(/legenda foi copiada/i)).toBeNull();
 });
 
 it('o botão manual de copiar a legenda confere o anúncio antes de copiar', async () => {
@@ -670,4 +745,61 @@ it('trocar o selo refaz os quatro arquivos', async () => {
   fireEvent.click(botao('Destaque da semana'));
   await waitFor(() => expect(lotes.chamadas.length).toBe(2));
   await waitFor(() => expect(estado.desenhos.length).toBe(8));
+});
+
+// `art-layout.ts` escreve a razão de `dropped` existir: "descartar a observação de uma peça é
+// decisão visível: quem monta precisa poder saber que a linha que digitou não entrou, e a tela só
+// pode dizer isso se o layout contar". O layout contava e a tela não dizia — então a pessoa
+// digitava a frase, marcava "Confirmei que o texto auxiliar está correto" e publicava uma peça sem
+// ela.
+it('a tela avisa quando o texto auxiliar não cabe na peça', () => {
+  estado.descartados = 'note';
+  render(<ArtEditor {...props()} />);
+  expect(screen.getByText(/texto auxiliar não cabe nesta peça/i)).toBeTruthy();
+  expect(screen.queryByText(/ano, quilometragem e cor/i)).toBeNull();
+});
+
+it('e quando a linha de ano, quilometragem e cor também não cabe', () => {
+  estado.descartados = 'note,meta';
+  render(<ArtEditor {...props()} />);
+  expect(screen.getByText(/texto auxiliar não cabe nesta peça/i)).toBeTruthy();
+  expect(screen.getByText(/ano, quilometragem e cor/i)).toBeTruthy();
+});
+
+it('e não avisa nada no caso normal, que é o do estoque de hoje', () => {
+  render(<ArtEditor {...props()} />);
+  expect(screen.queryByText(/não cabe nesta peça/i)).toBeNull();
+});
+
+// A revisão final achou este mutante vivo: `items: { ...atual.items, [art.destination]: art }`, sem
+// conferir a chave, deixa as peças de dois `artKey` diferentes convivendo no mapa sob a chave nova.
+// Efeito: muda o preço, o lote novo entrega só o Feed, a pessoa toca em "Publicar no Stories" e
+// recebe o arquivo com o **preço anterior** — o pior resultado que este produto pode dar. A guarda
+// de leitura (`arts.key === artKey`) não pega isto, porque a chave do mapa já é a nova.
+it('a peça de um destino não sobrevive à troca de dado só porque outro destino ficou pronto', async () => {
+  comFotoPronta();
+  render(<ArtEditor {...props()} />);
+  await loteCompleto();
+  expect(estado.desenhos.length).toBe(4);
+
+  estado.espera.ativa = true;
+  fireEvent.change(screen.getByLabelText(/Texto auxiliar/), { target: { value: 'Entrada facilitada' } });
+  fireEvent.click(screen.getByLabelText(/Confirmei/));
+  // O lote novo começa pelo destino na tela (Feed) e fica preso no `toBlob` dele.
+  await waitFor(() => expect(estado.desenhos.length).toBe(5));
+  // Só o Feed novo é liberado: os outros três do dado novo não existem ainda.
+  estado.espera.fila.shift()!();
+  await waitFor(() => expect(entregas.chamadas.length + estado.desenhos.length).toBeGreaterThan(5));
+
+  fireEvent.click(botao(ART_DESTINATIONS.story.label));
+  fireEvent.click(botao('Publicar no Stories'));
+  // Nada é entregue de imediato: o arquivo do Stories com o dado novo ainda não existe, e o antigo
+  // não serve. A tela desenha na hora.
+  expect(entregas.chamadas).toEqual([]);
+  const desenhosAntes = estado.desenhos.length;
+  estado.espera.ativa = false;
+  for (const solta of estado.espera.fila.splice(0)) solta();
+  await waitFor(() => expect(entregas.chamadas.length).toBe(1));
+  expect(estado.desenhos.length).toBeGreaterThan(desenhosAntes);
+  expect(await (entregas.chamadas[0].blob as Blob).text()).toBe('story');
 });

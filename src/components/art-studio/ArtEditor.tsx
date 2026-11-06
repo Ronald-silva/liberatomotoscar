@@ -9,7 +9,7 @@ import artStyles from './art-studio.module.css';
 import type { BrandKit } from '@/data/brand';
 import { buildMetaLine } from './art-layout';
 import { renderDestinations, type RenderedArt } from './art-render';
-import { FALLBACK_TITLE } from './art-title';
+import { composeVehicleTitle, FALLBACK_TITLE } from './art-title';
 import { createCaption, type CaptionVehicle } from './caption';
 import { ART_DESTINATIONS, DESTINATION_ORDER, type ArtDestination } from './destinations';
 import { checkVersion, deliverArt, runArtDelivery } from './share-art';
@@ -121,10 +121,15 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
   const [message, setMessage] = useState<string | null>(null);
   const [captionMessage, setCaptionMessage] = useState<string | null>(null);
   const [copyBusy, setCopyBusy] = useState(false);
+  // Só vira verdade quando o aparelho **aceitou** o texto: um WebView que recusa a cópia não pode
+  // deixar a tela dizendo que a legenda está na área de transferência.
+  const [captionCopied, setCaptionCopied] = useState(false);
   // O pedido ao palco oculto: qual destino desenhar. O `id` muda a cada pedido para que pedir o
   // mesmo destino duas vezes ainda seja um pedido novo.
   const [pedido, setPedido] = useState<{ destination: ArtDestination; id: number } | null>(null);
   const [offstageReady, setOffstageReady] = useState(false);
+  // O que o teto de altura deixou de fora da peça, para a tela poder dizer. '' é o caso normal.
+  const [descartados, setDescartados] = useState('');
   const previewStage = useRef<Konva.Stage | null>(null);
   const offstageStage = useRef<Konva.Stage | null>(null);
   const captionRef = useRef<HTMLTextAreaElement | null>(null);
@@ -132,6 +137,9 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
   const contador = useRef(0);
   const liberar = useRef<(() => void) | null>(null);
   const lote = useRef<AbortController | null>(null);
+  // O destino do momento, para o lote começar por ele sem entrar nas dependências do efeito: nas
+  // dependências, cada troca de ficha refaria os quatro arquivos.
+  const destinoAtual = useRef<ArtDestination>(DESTINATION_ORDER[0]);
 
   const onPhotoLoad = useCallback((state: 'loading' | 'ready' | 'error', error?: string) => {
     setPhotoState(state);
@@ -142,15 +150,28 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
   }, []);
 
   const photoUrl = photos.find((photo) => photo.id === photoId)?.src ?? null;
-  // O nome vem composto da página (`composeVehicleTitle`), que é a mesma fonte da legenda: a arte e
-  // a legenda têm de dizer o mesmo nome. Aqui sobra a garantia de que o maior corpo da peça nunca
-  // fica vazio, nem quando o cadastro chega sem título por outro caminho.
-  const artTitle = vehicle.title.trim() || FALLBACK_TITLE;
+  /**
+   * O nome **na peça** é marca e modelo; a versão não entra.
+   *
+   * `ArtContent.title` documenta isso em letra ("arte de rede se lê em meio segundo"), o §4.2 do
+   * spec desenha "Honda CG 160 Titan" e o §13 registra que a arte escapa do dado sujo do cadastro
+   * justamente por usar só marca + modelo. A versão de uma picape de concessionária tem 99
+   * caracteres: medida, ela põe o título em 4 linhas, leva o bloco de texto a 54,8% do teto de 55%
+   * e derruba a foto visível de 39% para 31% da peça — a parede de texto que esta composição existe
+   * para desfazer. O nome completo do anúncio não se perde: ele viaja na legenda, no mesmo toque, e
+   * é o que o cabeçalho da tela mostra.
+   *
+   * A deduplicação é a mesma de `composeVehicleTitle` (um dono só), com `version: null`. Quando
+   * marca e modelo não dão nome nenhum, vale o que a página compôs — e só depois o texto de reserva.
+   */
+  const nomeCurto = composeVehicleTitle({ brand: vehicle.brand, model: vehicle.model, version: null });
+  const artTitle = nomeCurto !== FALLBACK_TITLE ? nomeCurto : (vehicle.title.trim() || FALLBACK_TITLE);
   const artMeta = buildMetaLine(vehicle.year, vehicle.mileageKm, vehicle.color);
   const defaultNote = vehicle.status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     vehicle.status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições';
   const spec = ART_DESTINATIONS[destination];
-  const generatedCaption = createCaption({ ...vehicle, title: artTitle }, destination, phone);
+  // A legenda leva o nome **completo** do anúncio, com a versão: ela é o detalhe, a peça é o relance.
+  const generatedCaption = createCaption(vehicle, destination, phone);
   const caption = captionEdits[destination] ?? generatedCaption;
   const verifyVehicle = useCallback(() => checkVersion(() => fetch(
     `/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' })),
@@ -162,9 +183,12 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
   const artKey = JSON.stringify([vehicle.version, artTitle, vehicle.year, vehicle.price, vehicle.status,
     phone, photoId, photoRetry, badge, artMeta, note]);
 
+  useEffect(() => { destinoAtual.current = destination; }, [destination]);
+
   function escolherDestino(alvo: ArtDestination) {
     setDestinoEscolhido(alvo);
     setMessage(null);
+    setCaptionCopied(false);
     setCaptionMessage(null);
     lembrar(LEMBRADO.destino, alvo);
   }
@@ -223,8 +247,13 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
           const conferido = await verifyVehicle();
           if (controller.signal.aborted) return;
           if (!conferido.ok) throw new Error(conferido.error);
+          // Começa pelo destino que está na tela: é o único que a pessoa pode tocar agora, e o
+          // §8.2 promete que abrir no último destino usado e tocar é **um** toque. Começar sempre
+          // pelo Feed deixaria o destino lembrado por último em três casos de quatro, e o toque
+          // cairia no caminho de desenhar na hora, que pede um segundo toque.
+          const alvo = destinoAtual.current;
           await renderDestinations({
-            order: DESTINATION_ORDER,
+            order: [alvo, ...DESTINATION_ORDER.filter((outro) => outro !== alvo)],
             renderOne,
             filename: fileNameFor,
             signal: controller.signal,
@@ -278,6 +307,15 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
     return null;
   }
 
+  /**
+   * A cópia que viaja com a entrega. **Não é esperada por ninguém** — quem a chama é o `deliverArt`,
+   * com `void`, porque é o `await` entre ela e o `share` que consome a ativação do usuário. O
+   * `then` daqui corre depois, só para a tela poder dizer que a área de transferência foi
+   * sobrescrita (§3.3.13): efeito visível, não silencioso.
+   */
+  const copiarLegendaNaEntrega = useCallback((texto: string) =>
+    navigator.clipboard.writeText(texto).then(() => setCaptionCopied(true)), []);
+
   // A entrega. Do toque até aqui não há `await` quando o arquivo já está pronto, e daqui até o
   // `navigator.share` quem garante o mesmo é o `deliverArt`.
   async function entregar(art: RenderedArt, naHora: boolean) {
@@ -288,7 +326,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
       // pessoa achando que publicou. Quem quer o arquivo toca em Baixar, que é explícito.
       fallback: 'none',
       caption,
-      copyText: (texto) => navigator.clipboard.writeText(texto),
+      copyText: copiarLegendaNaEntrega,
       share: typeof navigator.share === 'function' ? (data) => navigator.share(data) : undefined,
       canShare: (data) => typeof navigator.canShare === 'function' ? navigator.canShare(data) : true,
       onShareError: (error) => {
@@ -314,6 +352,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
   async function publicar() {
     if (busy) return;
     setMessage(null);
+    setCaptionCopied(false);
     const problema = impedimento('share');
     if (problema) { setMessage(problema); return; }
     if (pronta) {
@@ -343,6 +382,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
     if (busy) return;
     setBusy(true);
     setMessage(null);
+    setCaptionCopied(false);
     try {
       const problema = impedimento('download');
       if (problema) throw new Error(problema);
@@ -351,7 +391,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
         render: async () => pronta?.blob ?? await renderOne(destination),
         check: verifyVehicle,
         deliver: (blob) => deliverArt({ blob, filename: fileNameFor(destination), download: downloadBlob,
-          caption, copyText: (texto) => navigator.clipboard.writeText(texto) }),
+          caption, copyText: copiarLegendaNaEntrega }),
       });
       setMessage(resultado);
     } catch (error) {
@@ -385,7 +425,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
     <div className={artStyles.editor}>
       <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact} ${artStyles.backLink}`} href={`/admin/veiculos/${vehicle.id}`}>Voltar ao veículo</Link>
       <h1 className={styles.heading}>Criar arte</h1>
-      <p className={styles.description}>{artTitle} · {vehicle.price}</p>
+      <p className={styles.description}>{vehicle.title} · {vehicle.price}</p>
       {exportProblem ? <p className={artStyles.warning} role="status">Prévia disponível. Para publicar ou baixar: {exportProblem}</p> : null}
 
       <div className={artStyles.stack}>
@@ -395,7 +435,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
             <ArtCanvas destination={destination} badge={badge} brand={brand} showChrome={showChrome}
               photoUrl={photoUrl} photoRetry={photoRetry} title={artTitle} meta={artMeta}
               price={vehicle.price} phone={phone} status={vehicle.status} note={note}
-              stageRef={previewStage} onPhotoLoad={onPhotoLoad} />
+              stageRef={previewStage} onPhotoLoad={onPhotoLoad} onDropped={setDescartados} />
           </div>
           <label className={artStyles.chromeToggle}>
             <input type="checkbox" checked={showChrome} onChange={(event) => setShowChrome(event.target.checked)} />
@@ -407,6 +447,11 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
               onClick={() => { setPhotoState('loading'); setPhotoRetry((valor) => valor + 1); }}>Tentar carregar foto novamente</button>
           </div> : null}
           {photoState === 'loading' ? <p className={artStyles.hint} role="status">Carregando foto da arte…</p> : null}
+          {/* O teto de altura do bloco de texto (§4.3) descarta a observação antes da linha de
+              dados, e nunca uma palavra do título. Quando descarta, a tela diz: a pessoa confirmou
+              um texto e precisa saber que ele não entrou na peça. */}
+          {descartados.includes('note') ? <p className={artStyles.warning} role="status">O texto auxiliar não cabe nesta peça e não entrou na arte. A prévia mostra o que vai sair.</p> : null}
+          {descartados.includes('meta') ? <p className={artStyles.warning} role="status">A linha de ano, quilometragem e cor não cabe nesta peça e não entrou na arte.</p> : null}
           {podePreparar && preparing ? <p className={artStyles.hint} role="status">Preparando os arquivos dos quatro destinos…</p> : null}
           {prepareError ? <div className={artStyles.warning} role="alert">
             <p>{prepareError}</p>
@@ -430,6 +475,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
             disabled={bloqueado} onClick={() => void baixar()}>Baixar</button>
         </div>
         <p className={artStyles.hint} role="status" aria-live="polite">{message}</p>
+        {captionCopied ? <p className={artStyles.hint} role="status" aria-live="polite">A legenda foi copiada. Cole no aplicativo ao publicar.</p> : null}
         <p className={artStyles.hint}>{shareSupport === 'insecure'
           ? 'O compartilhamento direto exige HTTPS no celular. Este endereço da rede local permite somente Baixar.'
           : shareSupport === 'unsupported'

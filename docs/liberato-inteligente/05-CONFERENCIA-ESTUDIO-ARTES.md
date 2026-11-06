@@ -35,6 +35,20 @@ desaparecer. Repita três vezes (feche e abra a tela), nos dois aparelhos.
 **O que anotar:** o tempo dos quatro juntos, em cada aparelho, e se o aparelho esquentou, travou a
 rolagem ou recarregou a página sozinho (sinal de falta de memória).
 
+**Três coisas a mais para observar aqui, apontadas na revisão de 06/11:**
+
+- **Cronometre também digitando.** Abra a seção "Foto, selo e texto auxiliar", digite no texto
+  auxiliar e veja se a digitação engasga. Cada tecla refaz a prévia inteira, com o desfoque do
+  fundo; se engasgar no aparelho da loja, há uma correção conhecida (memoizar a prévia) que só vale
+  aplicar depois de ver o problema de verdade.
+- **Veja se a foto é baixada outra vez.** Troque o selo e repare se a foto recarrega (ela pisca, ou
+  o indicador de rede do aparelho acende). O palco que desenha os arquivos busca a foto por conta
+  própria, então cada lote pode custar um download. No 4G da loja isso é dado e é espera.
+- **Memória:** enquanto os quatro arquivos são desenhados, há **dois** palcos vivos (a prévia e o
+  oculto), e cada um aloca mais de uma tela interna. São cerca de quatro telas de 1080 × 1920 ao
+  mesmo tempo, não uma. Se o iPhone recarregar a página sozinho no meio do lote, é isso — anote em
+  qual destino aconteceu.
+
 **Depois:** toque em `Baixar` nos quatro destinos, um por um, e veja o tamanho de cada arquivo em
 Downloads (toque e segure → detalhes).
 
@@ -80,6 +94,11 @@ guias de terceiros divergem entre si. O do Status do WhatsApp não tem nem guia 
 **O que anotar:** por destino, qual borda ficou apertada (topo, base, esquerda, direita) e em quantos
 dedos de folga — ou, se preferir, tire uma captura da tela com a publicação aberta.
 
+**Olhe também o topo da peça.** Em 06/11 entrou um véu curto e suave no alto, para a logo branca não
+desaparecer sobre céu claro ou lataria branca. É mudança visível: diga se ficou bom, se está escuro
+demais ou de menos. (Se a logo não carregar, a marca sai escrita ali, e aí o véu fica mais fechado
+de propósito, para a palavra se ler.)
+
 **Onde o número vai:** `src/components/art-studio/destinations.ts`, no campo `safe` do destino
 (`top`, `right`, `bottom`, `left`, em pixels de uma peça de 1080 de largura). **É um lugar só**: a
 prévia, o fantasma e o arquivo saem todos desse mesmo dado, então corrigir ali corrige as três
@@ -123,7 +142,7 @@ não anuncia desconto, não tem validade e não passou por aprovação de campan
 ser apresentado como criador de ofertas promocionais**, e o texto auxiliar não deve ser usado para
 simular redução de preço, financiamento ou garantia.
 
-## 6. Dois comportamentos que podem surpreender, e estão certos
+## 6. Comportamentos que podem surpreender, e estão certos
 
 - **Compartilhar não diz para qual aplicativo foi.** O navegador não pode saber o que você escolheu
   no menu do aparelho. Por isso há um botão por destino, cada um com o arquivo certo já pronto.
@@ -135,6 +154,13 @@ simular redução de preço, financiamento ou garantia.
   segundo toque abre o menu, e o arquivo já está na mão.
 - **Rascunho e arquivado não geram peça comercial.** A prévia aparece, mas publicar e baixar ficam
   desligados, e a tela diz o motivo. É proposital.
+- **A peça diz marca e modelo; a legenda diz o nome completo.** A versão do veículo ("Robust",
+  "High Country Cabine Dupla 2.8 Turbo Diesel") não entra na arte de propósito: arte de rede se lê
+  num relance, e um nome de 99 caracteres viraria quatro linhas de título comendo o espaço da foto.
+  O nome completo vai na legenda, que viaja no mesmo toque.
+- **Se a tela avisar que o texto auxiliar "não cabe nesta peça"**, é verdade e é proposital: o bloco
+  de texto tem teto de altura, e a observação é a primeira linha a ceder — nunca uma palavra do
+  título. A prévia sempre mostra o que vai sair.
 
 ---
 
@@ -147,3 +173,5 @@ simular redução de preço, financiamento ou garantia.
 | Veículo saindo cortado | `art-layout.ts`, `COVER_TOLERANCE` |
 | Dimensão do arquivo errada | não é ajuste de número: avisar quem programa (`pixelRatio` do export) |
 | Selo faltando ou tema claro fazendo falta | conversa de desenho; nada a trocar sozinho |
+| Véu do topo escuro demais ou de menos | conversa de desenho (`LOGO_SCRIM_SOFT` em `art-layout.ts`) |
+| Digitação engasgando ou foto recarregando | avisar quem programa; há correção conhecida para as duas |

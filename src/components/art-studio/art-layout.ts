@@ -152,6 +152,12 @@ export type ArtLayout = {
   logo: Frame;
   fit: PhotoFit;
   scrim: Scrim;
+  /**
+   * O véu curto do topo, que dá leito à logo (§4.2). Separado do véu de baixo de propósito: este é
+   * **suave e curto** e existe para a marca não desaparecer sobre foto clara; aquele é o que torna
+   * o bloco de texto legível. Juntá-los num só faria a peça virar túnel.
+   */
+  logoScrim: Scrim;
   /** Fundo sólido do selo. O selo sem pílula vira legenda da logo em vez de etiqueta do anúncio. */
   badgePill: Frame;
   badge: Placed;
@@ -276,6 +282,18 @@ const SCRIM_RISE = 0.35;
 const SCRIM_FLOOR = 0.82;
 /** O piso é alcançado estes pixels **antes** da primeira linha, não em cima dela. */
 const SCRIM_LEAD = 12;
+/**
+ * O véu curto do topo, que dá leito à logo (§4.2 do spec, em letra).
+ *
+ * `LOGO_SCRIM_SOFT` é leito, não tarja: a logo negativa é branca e, sobre céu claro ou lataria
+ * branca — a cor mais comum do corpus do §13 —, sem véu ela desaparece. Quando a imagem da logo não
+ * carrega, o desenho escreve a marca ali, e aí não é mais um gráfico: é **linha de texto**, então
+ * vale a Global Constraint do véu composto ≥ 0,82. Por isso são dois valores, escolhidos pelo mesmo
+ * dado que diz se há imagem (`logoAspect`).
+ */
+const LOGO_SCRIM_SOFT = 0.55;
+/** O quanto o véu do topo continua desbotando abaixo da logo, para não terminar numa linha reta. */
+const LOGO_SCRIM_TAIL = 0.8;
 
 const tracked = (lines: readonly string[], size: number, weight: number, tracking: number, measure: Measure) =>
   Math.max(...lines.map((line) => measure(line, size, weight) + tracking * line.length));
@@ -352,8 +370,8 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
   const plateHeight = h.priceLabel + GAP.price + h.price + PLATE_PAD.y * 2;
 
   type Fit = { size: number; lines: readonly string[] };
-  type Pilha = Omit<ArtLayout, 'spec' | 'column' | 'logo' | 'fit' | 'scrim' | 'statusBand' | 'watermark'>
-    & { textTop: number };
+  type Pilha = Omit<ArtLayout, 'spec' | 'column' | 'logo' | 'fit' | 'scrim' | 'logoScrim'
+    | 'statusBand' | 'watermark'> & { textTop: number };
 
   /**
    * A pilha montada **de baixo para cima**, a partir da base da área segura: observação, telefone,
@@ -450,6 +468,20 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
   const logoWidth = Math.min(width, LOGO_HEIGHT * usableAspect(content.logoAspect, LOGO_ASPECT_FALLBACK));
   const logo: Frame = { x, y: spec.safe.top, width: logoWidth, height: LOGO_HEIGHT };
 
+  // O véu do topo: da borda de cima até a base da logo em opacidade cheia, desbotando depois. A
+  // opacidade é escolhida pelo que será desenhado ali — imagem da logo ou a marca escrita.
+  const logoScrimHeight = logo.y + logo.height + Math.round(LOGO_SCRIM_TAIL * LOGO_HEIGHT);
+  const logoScrimAlpha = usableAspect(content.logoAspect, 0) > 0 ? LOGO_SCRIM_SOFT : SCRIM_FLOOR;
+  const logoScrim: Scrim = {
+    y: 0,
+    height: logoScrimHeight,
+    stops: [
+      { offset: 0, alpha: logoScrimAlpha },
+      { offset: (logo.y + logo.height) / logoScrimHeight, alpha: logoScrimAlpha },
+      { offset: 1, alpha: 0 },
+    ],
+  };
+
   // O véu começa acima do topo do texto e vai até a borda de baixo da peça. O piso de 0,82 é o que
   // fixa quão cedo a rampa precisa começar; a forma dela entre o piso e a borda é escolha daqui.
   const blockHeight = bottom - textTop;
@@ -495,7 +527,7 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
     : null;
 
   return { spec, column: { x, width }, logo, fit: fitPhoto(spec, content.photoAspect, logo, scrim),
-    scrim, ...blocos, statusBand, watermark };
+    scrim, logoScrim, ...blocos, statusBand, watermark };
 }
 
 /**

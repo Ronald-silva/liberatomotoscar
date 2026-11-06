@@ -685,3 +685,48 @@ describe('buildMetaLine', () => {
     expect(buildMetaLine(null, 1200, null)).toBe('1.200 km');
   });
 });
+
+describe('o véu do topo, que dá leito à logo', () => {
+  // O §4.2 pede, em letra, "um véu suave e curto no topo dá leito à logo", e isso não existia: a
+  // logo **negativa** (branca) era desenhada direto sobre a foto crua. "Branca" é a cor mais comum
+  // do corpus do §13, e céu claro é o fundo mais comum de foto de pátio: sobre os dois, a marca
+  // desaparecia. É o §14.2 ("a marca é pequena, discreta e sempre no mesmo lugar") falhando por
+  // contraste, em silêncio, nos quatro destinos.
+  it('cobre a faixa da logo nos quatro destinos e acaba antes do bloco de texto', () => {
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo(), measure);
+      expect(l.logoScrim.y, id).toBe(0);
+      // Pega a logo inteira, da borda de cima até a base dela.
+      expect(scrimAlphaAt(l.logoScrim, l.logo.y), `${id}: topo da logo`).toBeGreaterThan(0.4);
+      expect(scrimAlphaAt(l.logoScrim, l.logo.y + l.logo.height), `${id}: base da logo`).toBeGreaterThan(0.4);
+      // E é **curto**: acaba acima do bloco de texto, senão é um segundo véu e a peça vira túnel.
+      expect(l.logoScrim.y + l.logoScrim.height, `${id}: curto`).toBeLessThan(l.title.y);
+      expect(scrimAlphaAt(l.logoScrim, l.logoScrim.y + l.logoScrim.height), `${id}: ponta`).toBe(0);
+    }
+  });
+
+  it('é suave com a logo carregada, e opaco o bastante quando a marca sai escrita', () => {
+    for (const id of DESTINATION_ORDER) {
+      const comLogo = layoutArt(id, conteudo({ logoAspect: 800 / 376 }), measure);
+      const semLogo = layoutArt(id, conteudo({ logoAspect: null }), measure);
+      // Com a imagem, o véu é leito, não tarja: fica longe do piso de texto.
+      expect(scrimAlphaAt(comLogo.logoScrim, comLogo.logo.y + 40), `${id}: suave`).toBeLessThan(0.82);
+      // Sem a imagem, o ArtCanvas escreve "LIBERATO" ali — e aí é **linha de texto**, então vale a
+      // Global Constraint do véu composto ≥ 0,82. A faixa inteira do texto de reserva, não um ponto.
+      for (const dy of [30, 50, 68]) {
+        expect(scrimAlphaAt(semLogo.logoScrim, semLogo.logo.y + dy), `${id}: reserva +${dy}`)
+          .toBeGreaterThanOrEqual(0.82);
+      }
+    }
+  });
+
+  it('não rouba espaço da pilha nem muda o que é descartado', () => {
+    for (const id of DESTINATION_ORDER) {
+      const comLogo = layoutArt(id, conteudo({ logoAspect: 800 / 376 }), measure);
+      const semLogo = layoutArt(id, conteudo({ logoAspect: null }), measure);
+      expect(semLogo.title.y, id).toBe(comLogo.title.y);
+      expect(semLogo.dropped, id).toEqual(comLogo.dropped);
+      expect(semLogo.scrim.y, id).toBe(comLogo.scrim.y);
+    }
+  });
+});

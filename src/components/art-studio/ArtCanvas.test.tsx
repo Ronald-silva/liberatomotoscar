@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import ArtCanvasDefault, { ArtScene, artContentFor, drawBackdrop, scrimColorStops,
   BACKDROP_BLUR } from './ArtCanvas';
-import { layoutArt, type ArtContent, type ArtLayout } from './art-layout';
+import { layoutArt, scrimAlphaAt, type ArtContent, type ArtLayout } from './art-layout';
 import { createArchivoMeasure } from './measure-archivo';
 import { artBadges } from './templates';
 import { BRAND } from '@/data/brand';
@@ -117,7 +117,7 @@ describe('a ordem do palco', () => {
     // A ordem inteira, não um par solto: é ela que faz a foto aparecer sobre o fundo desfocado e
     // o texto sobre o véu. Qualquer troca de dois elementos quebra este teste.
     expect(nomes(palco(deitar()))).toEqual([
-      'fundo', 'fundo-desfocado', 'foto', 'veu', 'logo',
+      'fundo', 'fundo-desfocado', 'foto', 'veu', 'veu-logo', 'logo',
       'selo-pilula', 'selo', 'titulo', 'dados',
       'placa', 'preco-rotulo', 'preco', 'telefone', 'observacao',
     ]);
@@ -273,6 +273,35 @@ describe('a foto é a protagonista', () => {
     const reserva = acharNo(elementos, 'logo-reserva')!;
     expect(String(reserva.props.text).toUpperCase()).toContain('LIBERATO');
     expect(String(reserva.props.fontStyle)).toBe('900');
+  });
+
+  // O §4.2 pede "um véu suave e curto no topo dá leito à logo", e a logo é a versão **negativa**
+  // (branca): sem véu ela desaparecia sobre céu claro ou lataria branca. Quando a marca sai escrita
+  // em vez de desenhada, aquilo é linha de texto e vale a Global Constraint do véu ≥ 0,82 — o que o
+  // layout entrega como opacidade maior, e aqui se confere que o desenho usa as paradas dele.
+  // O componente não monta sob happy-dom (não há contexto 2D), e `dropped` só existe dentro dele:
+  // esta é uma das poucas linhas que não há como observar por comportamento. O outro lado — a tela
+  // mostrando o aviso — é afirmado em `ArtEditor.test.tsx`.
+  it('devolve a quem chama o que o teto de altura deixou de fora', () => {
+    const texto = fonte();
+    expect(texto).toMatch(/onDropped\?:/);
+    expect(texto).toMatch(/const descartados = L\.dropped\.join\(','\)/);
+    expect(texto).toMatch(/onDropped\?\.\(descartados\)/);
+  });
+
+  it('o véu do topo usa as paradas que o layout calculou, e cobre a linha da marca escrita', () => {
+    const layout = deitar();
+    const veu = acharNo(palco(layout), 'veu-logo')!;
+    expect(veu.props.fillLinearGradientColorStops)
+      .toEqual(scrimColorStops(layout.logoScrim, BRAND.palette.scrim));
+    expect(veu.props.y).toBe(layout.logoScrim.y);
+    expect(veu.props.height).toBe(layout.logoScrim.height);
+    // Largura cheia: o fundo da marca não é uma caixinha em volta da logo.
+    expect(veu.props.width).toBe(layout.spec.width);
+
+    const semLogo = layoutArt('story', conteudo({ logoAspect: null }), measure);
+    const reserva = acharNo(palco(semLogo, { logo: null }), 'logo-reserva')!;
+    expect(scrimAlphaAt(semLogo.logoScrim, Number(reserva.props.y))).toBeGreaterThanOrEqual(0.82);
   });
 });
 

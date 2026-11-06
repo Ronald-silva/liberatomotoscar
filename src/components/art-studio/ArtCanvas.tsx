@@ -169,8 +169,9 @@ export function artContentFor({ title, meta, price, phone, note, status, badge, 
 }
 
 /**
- * O palco, na ordem em que o Konva desenha: fundo desfocado, foto inteira, tarja de situação, véu,
- * logo, pílula do selo, título, linha de dados, placa de preço, telefone, observação, marca d'água.
+ * O palco, na ordem em que o Konva desenha: fundo desfocado, foto inteira, tarja de situação, véu
+ * de baixo, véu curto do topo, logo, pílula do selo, título, linha de dados, placa de preço,
+ * telefone, observação, marca d'água.
  *
  * É uma função pura, separada do componente, porque a ordem do palco é o contrato visual da peça —
  * foto sobre o fundo, texto sobre o véu — e dentro de um componente com hooks ela só poderia ser
@@ -209,6 +210,14 @@ export function ArtScene({ layout, brand, photo, logo }: {
       fillLinearGradientStartPoint={{ x: 0, y: 0 }}
       fillLinearGradientEndPoint={{ x: 0, y: scrim.height }}
       fillLinearGradientColorStops={scrimColorStops(scrim, ink.scrim)} listening={false} />
+
+    {/* O véu curto do topo: a logo é a versão negativa (branca) e, sem leito, desaparece sobre céu
+        claro ou lataria branca. Quando a imagem não carrega, a marca sai **escrita** aqui, e o
+        layout já devolve opacidade de linha de texto (≥ 0,82) para este mesmo véu. */}
+    <Rect name="veu-logo" x={0} y={layout.logoScrim.y} width={spec.width} height={layout.logoScrim.height}
+      fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+      fillLinearGradientEndPoint={{ x: 0, y: layout.logoScrim.height }}
+      fillLinearGradientColorStops={scrimColorStops(layout.logoScrim, ink.scrim)} listening={false} />
 
     {logo
       ? <KonvaImage name="logo" image={logo} x={layout.logo.x} y={layout.logo.y}
@@ -329,12 +338,18 @@ function useVehiclePhoto(src: string | null, retry: number) {
 }
 
 export default function ArtCanvas({ destination, badge, brand, showChrome, photoUrl, photoRetry,
-  title, meta, price, phone, status, note, stageRef, onPhotoLoad }: {
+  title, meta, price, phone, status, note, stageRef, onPhotoLoad, onDropped }: {
   destination: ArtDestination; badge: ArtBadge; brand: BrandKit; showChrome: boolean;
   photoUrl: string | null; title: string; meta: string;
   price: string; phone: string; status: string; note: string;
   photoRetry: number; stageRef: RefObject<Konva.Stage | null>;
   onPhotoLoad: (state: 'loading' | 'ready' | 'error', error?: string) => void;
+  /**
+   * O que o teto de altura obrigou a deixar de fora, como lista separada por vírgula ('' no caso
+   * normal). Descartar a observação é decisão **visível**: quem monta precisa poder saber que a
+   * linha que digitou não entrou na peça, e só a tela pode dizer isso.
+   */
+  onDropped?: (descartados: string) => void;
 }) {
   const [availableWidth, setAvailableWidth] = useState(0);
   // Um palpite de altura de janela de celular, só até o primeiro `resize` responder.
@@ -369,6 +384,8 @@ export default function ArtCanvas({ destination, badge, brand, showChrome, photo
     photoAspect: photo ? photo.width / photo.height : null,
     logoAspect: logo ? logo.width / logo.height : null });
   const L = layoutArt(destination, content, measureText);
+  const descartados = L.dropped.join(',');
+  useEffect(() => { onDropped?.(descartados); }, [onDropped, descartados]);
 
   return <div ref={setContainer} style={{ width: '100%' }}>
     <div style={{ width: width * scale, height: height * scale, marginInline: 'auto',
