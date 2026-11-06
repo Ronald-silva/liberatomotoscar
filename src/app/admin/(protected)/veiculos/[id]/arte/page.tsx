@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getArtVehicleData, artExportProblem } from '@/server/art-studio/vehicle-art-data';
 import { SITE_URL, STORE } from '@/data/store';
 import { ArtEditor } from '@/components/art-studio/ArtEditor';
+import { composeVehicleTitle } from '@/components/art-studio/art-title';
 
 export const metadata: Metadata = { title: 'Criar arte', robots: { index: false, follow: false } };
 
@@ -15,7 +16,7 @@ export default async function ArtPage({ params }: { params: Promise<{ id: string
   if (!data) notFound();
   const { vehicle, photos } = data;
   return <ArtEditor vehicle={{ id: vehicle.id, version: vehicle.versionNumber, status: vehicle.status,
-    title: [vehicle.brand, vehicle.model, vehicle.version].filter(Boolean).join(' ') || 'Veículo sem título',
+    title: composeVehicleTitle({ brand: vehicle.brand, model: vehicle.model, version: vehicle.version }),
     year: vehicle.year, price: vehicle.priceCents ? new Intl.NumberFormat('pt-BR',
       { style: 'currency', currency: 'BRL' }).format(vehicle.priceCents / 100) : 'Preço não informado',
     priceCents: vehicle.priceCents, slug: vehicle.slug, type: vehicle.type,

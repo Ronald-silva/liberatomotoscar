@@ -1,4 +1,5 @@
 import { STORE } from './store';
+import type { VehicleType } from './catalogo-marcas-modelos';
 
 /**
  * A identidade da loja como dado, não como código.
@@ -17,7 +18,22 @@ export type BrandKit = {
   /** Versão escura, para peça impressa ou fundo claro fora do estúdio. */
   logoPositive: string;
   phoneDisplay: string;
-  hashtags: readonly string[];
+  /**
+   * As hashtags da loja, por família. A hashtag do **modelo** não está aqui: ela nasce do veículo,
+   * não da identidade, e segue derivada em `caption.ts`.
+   *
+   * `local` e `category` são indexadas pelo tipo do veículo porque a praça é a mesma e só a palavra
+   * muda ("Motos" / "Carros"). Elas estão aqui, e não cravadas na legenda, porque "Fortaleza" e
+   * "CE" são a praça **desta** loja: é o que o §9 do spec quer dizer com identidade como dado.
+   */
+  hashtags: {
+    /** Vão em toda legenda que leva hashtag. */
+    brand: readonly string[];
+    /** A praça da loja. */
+    local: Readonly<Record<VehicleType, readonly string[]>>;
+    /** Categoria mais ampla, para busca por assunto. Só o destino que vive de busca a recebe. */
+    category: Readonly<Record<VehicleType, readonly string[]>>;
+  };
   palette: {
     background: string;
     ink: string;
@@ -43,7 +59,11 @@ export const BRAND: BrandKit = {
   // O telefone sai de `STORE` de propósito: duas fontes para o mesmo número é como um deles
   // envelhece sem ninguém perceber, e este aqui vai impresso na peça que o cliente guarda.
   phoneDisplay: STORE.phoneDisplay,
-  hashtags: ['#LiberatoMotosCar'],
+  hashtags: {
+    brand: ['#LiberatoMotosCar'],
+    local: { motorcycle: ['#MotosFortaleza'], car: ['#CarrosFortaleza'] },
+    category: { motorcycle: ['#MotosCE'], car: ['#CarrosCE'] },
+  },
   palette: {
     background: '#0a0e13',
     ink: '#ffffff',
