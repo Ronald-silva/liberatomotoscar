@@ -93,7 +93,12 @@ export type ArtContent = {
   title: string;
   /** Ano, quilometragem e cor numa linha só. */
   meta: string;
-  kicker: string;
+  /**
+   * O rótulo da pílula — "RECÉM-CHEGADO", "VENDIDO". Chamava-se `kicker` enquanto o layout falava
+   * de `kickerPill`; o vocabulário da saída virou `badge`/`badgePill` na Tarefa 4 e a entrada
+   * acompanha aqui, para o campo e o bloco que ele produz terem o mesmo nome.
+   */
+  badge: string;
   priceLabel: string;
   price: string;
   phone: string;
@@ -203,7 +208,7 @@ const BADGE_PAD = { x: 20, y: 11 } as const;
 const PLATE_PAD = { x: 26, y: 22 } as const;
 
 /** O Konva soma o espaçamento depois de cada caractere; o cálculo da pílula tem de somar também. */
-export const KICKER_TRACKING = 2.2;
+export const BADGE_TRACKING = 2.2;
 export const PRICE_LABEL_TRACKING = 1.6;
 
 /**
@@ -319,8 +324,8 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
   const bottom = spec.height - spec.safe.bottom;
   const plateWidth = width - PLATE_PAD.x * 2;
 
-  const badge = fitLines({ text: content.kicker, maxLines: 1, sizes: [26, 24, 22], weight: WEIGHT.black, measure,
-    maxWidth: width - BADGE_PAD.x * 2 - KICKER_TRACKING * content.kicker.length });
+  const badge = fitLines({ text: content.badge, maxLines: 1, sizes: [26, 24, 22], weight: WEIGHT.black, measure,
+    maxWidth: width - BADGE_PAD.x * 2 - BADGE_TRACKING * content.badge.length });
   const meta = fitLines({ text: content.meta, maxWidth: width, maxLines: 1, sizes: [27, 25, 23], weight: WEIGHT.regular, measure });
   const priceLabel = fitLines({ text: content.priceLabel, maxLines: 1, sizes: [23, 21], weight: WEIGHT.black, measure,
     maxWidth: plateWidth - PRICE_LABEL_TRACKING * content.priceLabel.length });
@@ -397,7 +402,7 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
 
     y -= pillHeight;
     const badgePill: Frame = { x, y, height: pillHeight,
-      width: Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, KICKER_TRACKING, measure)) + BADGE_PAD.x * 2 };
+      width: Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, BADGE_TRACKING, measure)) + BADGE_PAD.x * 2 };
     const badgeAt: Placed = { x: x + BADGE_PAD.x, y: y + BADGE_PAD.y,
       width: badgePill.width - BADGE_PAD.x * 2, height: h.badge, size: badge.size, lines: badge.lines };
 

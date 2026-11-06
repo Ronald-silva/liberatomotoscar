@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DESTINATION_ORDER, destinationSpec } from './destinations';
 import { createArchivoMeasure } from './measure-archivo';
-import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt, KICKER_TRACKING, PRICE_LABEL_TRACKING,
+import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt, BADGE_TRACKING, PRICE_LABEL_TRACKING,
   TEXT_BLOCK_MAX,
   type ArtContent, type ArtLayout, type Measure, type Placed } from './art-layout';
 import { artBadges } from './templates';
@@ -29,7 +29,7 @@ function conteudo(overrides: Partial<ArtContent> = {}): ArtContent {
   return {
     title: 'Honda CG 160 Titan',
     meta: '2019 · 42.380 km · Preta',
-    kicker: 'RECÉM-CHEGADO',
+    badge: 'RECÉM-CHEGADO',
     priceLabel: 'PREÇO DO ANÚNCIO',
     price: 'R$ 18.900,00',
     phone: '(85) 99636-5664',
@@ -59,7 +59,7 @@ function blocos(l: ArtLayout) {
  */
 function blocosMedidos(l: ArtLayout) {
   return [
-    { nome: 'selo', bloco: l.badge, weight: 900, tracking: KICKER_TRACKING },
+    { nome: 'selo', bloco: l.badge, weight: 900, tracking: BADGE_TRACKING },
     { nome: 'titulo', bloco: l.title, weight: 900, tracking: 0 },
     // A linha de dados é anulável desde que o teto de altura pode descartá-la (§4.3): listá-la
     // sem checar fazia este helper explodir com `null` em vez de medir o que existe.
@@ -306,7 +306,7 @@ describe('o conteúdo respeita a área segura de cada destino', () => {
     // que pega tracking esquecido na conta da pílula ou largura errada alimentando o preço.
     for (const caso of CORPUS) {
       for (const selo of artBadges) {
-        const l = layoutArt(id, conteudo({ ...caso, kicker: selo.heading }), measure);
+        const l = layoutArt(id, conteudo({ ...caso, badge: selo.heading }), measure);
         for (const alvo of blocosMedidos(l)) {
           expect(larguraDesenhada(alvo), `${id} / ${selo.id} / ${alvo.nome}`)
             .toBeLessThanOrEqual(alvo.bloco.width);
@@ -396,8 +396,8 @@ describe('os blocos sólidos contêm o texto que anunciam', () => {
   });
 
   it('a pílula acompanha o texto do selo em vez de ocupar a coluna inteira', () => {
-    const curto = layoutArt('story', conteudo({ kicker: 'NOVO' }), measure);
-    const longo = layoutArt('story', conteudo({ kicker: 'DESTAQUE DA SEMANA' }), measure);
+    const curto = layoutArt('story', conteudo({ badge: 'NOVO' }), measure);
+    const longo = layoutArt('story', conteudo({ badge: 'DESTAQUE DA SEMANA' }), measure);
     expect(curto.badgePill.width).toBeLessThan(longo.badgePill.width);
     expect(longo.badgePill.width).toBeLessThan(longo.column.width);
   });
