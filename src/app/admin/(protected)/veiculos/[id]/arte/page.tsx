@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getArtVehicleData, artExportProblem } from '@/server/art-studio/vehicle-art-data';
 import { SITE_URL, STORE } from '@/data/store';
+import { BRAND } from '@/data/brand';
 import { ArtEditor } from '@/components/art-studio/ArtEditor';
 import { composeVehicleTitle } from '@/components/art-studio/art-title';
 
@@ -27,5 +28,5 @@ export default async function ArtPage({ params }: { params: Promise<{ id: string
       // redirecionamento pelo endereço interno do servidor no Railway.
       src: photo.storageProvider === 'legacy_public' && /^\/images\/[a-zA-Z0-9._-]+$/.test(photo.storageKey)
         ? photo.storageKey : `/api/admin/vehicles/${vehicle.id}/art-photo/${photo.id}` }))}
-    phone={STORE.phoneDisplay} exportProblem={artExportProblem(data)} />;
+    phone={STORE.phoneDisplay} exportProblem={artExportProblem(data)} brand={BRAND} />;
 }

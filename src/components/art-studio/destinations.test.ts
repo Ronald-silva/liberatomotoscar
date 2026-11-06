@@ -53,6 +53,23 @@ describe('os quatro destinos', () => {
     }
   });
 
+  it('cada forma do fantasma é grande o bastante para ser vista na prévia', () => {
+    // Pendência registrada nas revisões anteriores: com as formas encolhidas a 1×1, os testes de
+    // não-invasão e de cobertura das faixas continuavam passando — um fantasma de pontinhos passa
+    // por "cobre o topo" e não mostra nada a quem confere. A prévia no celular sai por volta de um
+    // terço da peça, então o que tem 6 px aqui tem 2 px na tela: abaixo disso o fantasma deixa de
+    // ser instrumento e vira enfeite invisível.
+    for (const id of DESTINATION_ORDER) {
+      const { chrome, width, height } = ART_DESTINATIONS[id];
+      for (const forma of chrome) {
+        const rotulo = `${id}: ${forma.kind}`;
+        expect(Math.min(forma.width, forma.height), `${rotulo} espessura`).toBeGreaterThanOrEqual(6);
+        expect(Math.max(forma.width, forma.height), `${rotulo} extensão`).toBeGreaterThanOrEqual(24);
+        expect(forma.width * forma.height / (width * height), `${rotulo} área`).toBeGreaterThan(0.001);
+      }
+    }
+  });
+
   it('o fantasma do TikTok ocupa a coluna de ícones que a área segura reserva à direita', () => {
     const { chrome, width, safe } = ART_DESTINATIONS.tiktok;
     expect(chrome.some((forma) => forma.kind === 'rail' && forma.x >= width - safe.right)).toBe(true);
