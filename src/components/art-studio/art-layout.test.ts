@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DESTINATION_ORDER, destinationSpec } from './destinations';
 import { createArchivoMeasure } from './measure-archivo';
 import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt, KICKER_TRACKING, PRICE_LABEL_TRACKING,
+  TEXT_BLOCK_MAX,
   type ArtContent, type ArtLayout, type Measure } from './art-layout';
 import { artBadges } from './templates';
 
@@ -57,7 +58,9 @@ function blocosMedidos(l: ArtLayout) {
   return [
     { nome: 'selo', bloco: l.badge, weight: 900, tracking: KICKER_TRACKING },
     { nome: 'titulo', bloco: l.title, weight: 900, tracking: 0 },
-    { nome: 'dados', bloco: l.meta, weight: 400, tracking: 0 },
+    // A linha de dados é anulável desde que o teto de altura pode descartá-la (§4.3): listá-la
+    // sem checar fazia este helper explodir com `null` em vez de medir o que existe.
+    ...(l.meta ? [{ nome: 'dados', bloco: l.meta, weight: 400, tracking: 0 }] : []),
     { nome: 'rotulo do preco', bloco: l.priceLabel, weight: 900, tracking: PRICE_LABEL_TRACKING },
     { nome: 'preco', bloco: l.price, weight: 900, tracking: 0 },
     { nome: 'telefone', bloco: l.phone, weight: 900, tracking: 0 },
@@ -406,7 +409,7 @@ describe('a pilha de texto cresce para cima a partir da base da área segura', (
   it.each(DESTINATION_ORDER)('%s: a ordem de baixo para cima é a do spec', (id) => {
     const l = layoutArt(id, conteudo(), measure);
     // §4.2: observação, telefone, placa de preço, linha de dados, título, pílula do selo.
-    const deBaixoParaCima = [l.note!.y, l.phone.y, l.pricePlate.y, l.meta.y, l.title.y, l.badgePill.y];
+    const deBaixoParaCima = [l.note!.y, l.phone.y, l.pricePlate.y, l.meta!.y, l.title.y, l.badgePill.y];
     for (let i = 1; i < deBaixoParaCima.length; i += 1) {
       expect(deBaixoParaCima[i]).toBeLessThan(deBaixoParaCima[i - 1]);
     }
@@ -427,6 +430,127 @@ describe('somente os pesos 400 e 900', () => {
     const espia: Measure = (text, size, weight) => { pesos.add(weight); return measure(text, size, weight); };
     for (const id of DESTINATION_ORDER) layoutArt(id, conteudo(), espia);
     expect([...pesos].sort((a, b) => a - b)).toEqual([400, 900]);
+  });
+});
+
+describe('degradação sob aperto', () => {
+  /**
+   * O destino em que o teto de fato morde é o **Feed**: a altura segura dele é 1050 px, contra
+   * 1270 do TikTok, 1330 do Stories e 1440 do Status. Medido antes de escrever estes testes, o
+   * conteúdo mais apertado que se consegue montar com dado plausível chega a 57,3% no Feed e só a
+   * 51,3% no TikTok — ou seja, um teste de aperto escrito no TikTok passa sem nunca exercitar a
+   * degradação, e foi assim que ele chegou ao plano. Por isso o aperto é medido no Feed.
+   */
+  const TITULO_LONGO = 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica';
+  const TITULO_MAX = `${TITULO_LONGO} Couro Multimidia Teto Solar`;
+  const META_LONGA = '2016 · 189.000 km · Branca com banco vermelho e teto preto';
+  const NOTA_LONGA = 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora';
+  /** Acima de qualquer título real (o maior do estoque tem 50 caracteres). Existe só para alcançar
+   * o terceiro degrau do §4.3, que com dado plausível nunca é alcançado em nenhum destino. */
+  const TITULO_ABSURDO = `${TITULO_MAX} Unico Dono Revisado Garantia de Fabrica Pneus Novos`;
+  /** Longo até além do terceiro degrau: nem o menor corpo da lista o põe em 3 linhas. */
+  const TITULO_IMPOSSIVEL = `${TITULO_ABSURDO} Ipva Pago Aceita Troca Financiamento Proprio`;
+
+  /** 57,3% da altura segura no Feed antes da degradação: o teto dispara de verdade. */
+  const APERTO = { title: TITULO_MAX, meta: META_LONGA, note: NOTA_LONGA };
+
+  const fracaoDoBloco = (l: ArtLayout, id: Parameters<typeof destinationSpec>[0]) => {
+    const spec = destinationSpec(id);
+    const topo = Math.min(l.badgePill.y, ...blocos(l).map((b) => b.y));
+    return (spec.height - spec.safe.bottom - topo) / (spec.height - spec.safe.top - spec.safe.bottom);
+  };
+
+  it('o bloco de texto nunca passa de 55% da altura segura', () => {
+    for (const id of DESTINATION_ORDER) {
+      expect(fracaoDoBloco(layoutArt(id, conteudo(APERTO), measure), id), id).toBeLessThanOrEqual(0.55);
+    }
+  });
+
+  it('descarta a observação antes da linha de dados', () => {
+    const l = layoutArt('feed', conteudo(APERTO), measure);
+    expect(l.dropped[0]).toBe('note');
+    expect(l.note).toBeNull();
+    // A ordem só é ordem se o segundo da fila ainda estiver em pé. Sem estas duas linhas, uma
+    // implementação que descarta observação e dados de uma vez passa pelas asserções acima.
+    expect(l.dropped).not.toContain('meta');
+    expect(l.meta).not.toBeNull();
+  });
+
+  it('nunca descarta palavra do título, mesmo no aperto máximo', () => {
+    for (const titulo of [TITULO_MAX, TITULO_ABSURDO, TITULO_IMPOSSIVEL]) {
+      for (const id of DESTINATION_ORDER) {
+        const l = layoutArt(id, conteudo({ title: titulo, meta: META_LONGA, note: NOTA_LONGA }), measure);
+        expect(l.title.lines.join(' '), `${id} / ${titulo.length} caracteres`).toBe(titulo);
+        expect(l.title.lines.join('')).not.toContain('…');
+      }
+    }
+  });
+
+  it('título, preço e telefone nunca são descartados', () => {
+    const l = layoutArt('feed', conteudo({ title: TITULO_ABSURDO, note: 'x'.repeat(200) }), measure);
+    expect(l.dropped).not.toContain('title');
+    expect(l.title.lines.join(' ')).toBeTruthy();
+    expect(l.price.lines.join(' ')).toBeTruthy();
+    expect(l.phone.lines.join(' ')).toBeTruthy();
+  });
+
+  it('a cor longa real do estoque não estoura o aperto', () => {
+    // "Branca com banco vermelho" é dado real, e a linha de dados é onde o estouro nasce.
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo({ meta: '660 km · Branca com banco vermelho' }), measure);
+      expect(l.meta?.lines.join(' '), id).toContain('Branca com banco vermelho');
+    }
+  });
+
+  it('com o conteúdo do estoque de hoje nada é descartado', () => {
+    // O outro lado do teto. Sem esta linha, um teto baixo demais — ou um descarte incondicional —
+    // satisfaz todas as asserções de aperto e entrega peças mutiladas no caso comum, que é o de
+    // todo dia. O corpus é o estoque real, inclusive a cor livre de 25 caracteres.
+    for (const id of DESTINATION_ORDER) {
+      for (const caso of CORPUS) {
+        const l = layoutArt(id, conteudo(caso), measure);
+        expect(l.dropped, `${id} / ${caso.title}`).toEqual([]);
+        expect(l.note, `${id} / ${caso.title}`).not.toBeNull();
+        expect(l.meta, `${id} / ${caso.title}`).not.toBeNull();
+      }
+    }
+  });
+
+  it('esgotado o descarte, o título cede corpo em vez de a peça estourar', () => {
+    // O terceiro degrau do §4.3: com observação e dados fora, quem cede é o corpo do título.
+    // Sem isto, o degrau pode simplesmente não existir e o teto só valer por sorte do conteúdo.
+    const normal = layoutArt('feed', conteudo(), measure);
+    const extremo = layoutArt('feed', conteudo({ title: TITULO_ABSURDO, meta: META_LONGA, note: NOTA_LONGA }), measure);
+    expect(extremo.dropped).toEqual(['note', 'meta']);
+    // Abaixo do piso da lista normal (48), não só abaixo do corpo do caso comum: é a lista
+    // estendida do terceiro degrau que está sendo presa aqui.
+    expect(extremo.title.size).toBeLessThan(48);
+    expect(extremo.title.size).toBeLessThan(normal.title.size);
+    expect(extremo.title.lines.length).toBeLessThanOrEqual(3);
+    expect(extremo.title.lines.join(' ')).toBe(TITULO_ABSURDO);
+    expect(fracaoDoBloco(extremo, 'feed')).toBeLessThanOrEqual(0.55);
+  });
+
+  it('não cabendo em 3 linhas nem no menor corpo, o título fica inteiro e não em 3 linhas', () => {
+    // A hierarquia das garantias, explícita: "até 3 linhas" é a preferência do §4.3, e "em nenhuma
+    // hipótese uma palavra é descartada" é a garantia. Quando as duas se cruzam, quem cede é a
+    // preferência — e é melhor ter isto preso num teste do que descobrir na peça.
+    const l = layoutArt('feed', conteudo({ title: TITULO_IMPOSSIVEL, meta: META_LONGA, note: NOTA_LONGA }), measure);
+    expect(l.title.lines.join(' ')).toBe(TITULO_IMPOSSIVEL);
+    expect(l.title.lines.length).toBeGreaterThan(3);
+    expect(l.title.size).toBeLessThan(48);
+  });
+
+  it('o bloco descartado não deixa vão: o último bloco segue encostado na base', () => {
+    // Descartar a observação sem reancorar a pilha deixaria o telefone flutuando acima da base.
+    const spec = destinationSpec('feed');
+    const l = layoutArt('feed', conteudo(APERTO), measure);
+    expect(l.note).toBeNull();
+    expect(l.phone.y + l.phone.height).toBe(spec.height - spec.safe.bottom);
+  });
+
+  it('o teto é 55% e está declarado, não espalhado pelo cálculo', () => {
+    expect(TEXT_BLOCK_MAX).toBe(0.55);
   });
 });
 

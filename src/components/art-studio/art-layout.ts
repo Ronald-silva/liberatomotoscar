@@ -145,7 +145,8 @@ export type ArtLayout = {
   badgePill: Frame;
   badge: Placed;
   title: Placed;
-  meta: Placed;
+  /** A linha de dados é o segundo bloco a cair sob aperto (§4.3): sem ela, `null`. */
+  meta: Placed | null;
   /** Placa do preço. É o que faz o preço vencer o telefone sem precisar de corpo maior. */
   pricePlate: Frame;
   priceLabel: Placed;
@@ -153,6 +154,15 @@ export type ArtLayout = {
   phone: Placed;
   /** A observação é a linha mais dispensável da peça: sem texto, o bloco não existe. */
   note: Placed | null;
+  /**
+   * O que o teto de altura obrigou a deixar de fora, na ordem em que foi deixado. Vazio é o caso
+   * normal — e é o que todo conteúdo do estoque de hoje produz.
+   *
+   * Existe como dado, e não como silêncio, porque descartar a observação de uma peça é decisão
+   * visível: quem monta precisa poder saber que a linha que digitou não entrou, e a tela da
+   * Tarefa 11 só pode dizer isso se o layout contar. Título, preço e telefone nunca entram aqui.
+   */
+  dropped: readonly ('note' | 'meta')[];
 };
 
 /**
@@ -194,6 +204,30 @@ const COLUMN_INSET = 0;
  * 9:16 cai de um lado e uma 4:3 de câmera cai do outro.
  */
 export const COVER_TOLERANCE = 0.15;
+
+/**
+ * O teto do bloco de texto, em fração da altura da área segura (§4.3 do spec e Global Constraint
+ * do plano). Passar disto é a peça deixar de ser uma foto com legenda e voltar a ser a parede de
+ * texto que esta reescrita existe para desfazer.
+ *
+ * O teto morde onde a área segura é mais baixa: o Feed tem 1050 px de altura segura, contra 1270
+ * do TikTok, 1330 do Stories e 1440 do Status. Com conteúdo plausível só o Feed chega a passar —
+ * é por isso que os testes de aperto são escritos nele.
+ */
+export const TEXT_BLOCK_MAX = 0.55;
+
+/** Os corpos do título no caminho normal: até duas linhas, do maior que couber para baixo. */
+const TITLE_SIZES = [76, 68, 60, 54, 48] as const;
+/**
+ * O terceiro degrau do §4.3 — "o título desce de corpo e aceita até 3 linhas".
+ *
+ * A lista **se estende para baixo** porque é o corpo que derruba a altura: aceitar mais linhas num
+ * corpo maior produz um bloco mais alto, não mais baixo (texto largura escala com o corpo, então
+ * corpo menor dá menos linhas *e* linhas menores). As 3 linhas são o limite que impede o título de
+ * virar parágrafo num corpo minúsculo; a escolha do corpo é guiada pelo teto de altura.
+ */
+const TITLE_SIZES_TIGHT = [...TITLE_SIZES, 44, 40, 36, 32] as const;
+const TITLE_LINES_TIGHT = 3;
 
 /** O que o estoque real tem quando o banco não registrou dimensão: 1600×1200. */
 const FALLBACK_PHOTO_ASPECT = 4 / 3;
@@ -254,7 +288,6 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
 
   const badge = fitLines({ text: content.kicker, maxLines: 1, sizes: [26, 24, 22], weight: WEIGHT.black, measure,
     maxWidth: width - BADGE_PAD.x * 2 - KICKER_TRACKING * content.kicker.length });
-  const title = fitLines({ text: content.title, maxWidth: width, maxLines: 2, sizes: [76, 68, 60, 54, 48], weight: WEIGHT.black, measure });
   const meta = fitLines({ text: content.meta, maxWidth: width, maxLines: 1, sizes: [27, 25, 23], weight: WEIGHT.regular, measure });
   const priceLabel = fitLines({ text: content.priceLabel, maxLines: 1, sizes: [23, 21], weight: WEIGHT.black, measure,
     maxWidth: plateWidth - PRICE_LABEL_TRACKING * content.priceLabel.length });
@@ -271,7 +304,6 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
 
   const h = {
     badge: lineBox(badge),
-    title: lineBox(title, 1.04),
     meta: lineBox(meta),
     priceLabel: lineBox(priceLabel),
     price: lineBox(price, 1.02),
@@ -281,45 +313,99 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
   const pillHeight = h.badge + BADGE_PAD.y * 2;
   const plateHeight = h.priceLabel + GAP.price + h.price + PLATE_PAD.y * 2;
 
-  // A pilha é montada **de baixo para cima**, a partir da base da área segura: observação,
-  // telefone, placa de preço, linha de dados, título, pílula do selo. É esta direção que faz o
-  // texto crescer para dentro do véu em vez de para dentro da foto.
-  let y = bottom;
+  type Fit = { size: number; lines: readonly string[] };
+  type Pilha = Omit<ArtLayout, 'spec' | 'column' | 'logo' | 'fit' | 'scrim' | 'statusBand' | 'watermark'>
+    & { textTop: number };
 
-  let noteAt: Placed | null = null;
-  if (note) {
-    y -= h.note;
-    noteAt = { x, y, width, height: h.note, size: note.size, lines: note.lines };
-    y -= GAP.note;
+  /**
+   * A pilha montada **de baixo para cima**, a partir da base da área segura: observação, telefone,
+   * placa de preço, linha de dados, título, pílula do selo. É esta direção que faz o texto crescer
+   * para dentro do véu em vez de para dentro da foto — e é ela que mantém o último bloco encostado
+   * na base mesmo quando um bloco do meio é descartado.
+   */
+  const montar = (title: Fit, { comMeta, comNote }: { comMeta: boolean; comNote: boolean }): Pilha => {
+    const dropped: ('note' | 'meta')[] = [];
+    let y = bottom;
+
+    let noteAt: Placed | null = null;
+    if (note && comNote) {
+      y -= h.note;
+      noteAt = { x, y, width, height: h.note, size: note.size, lines: note.lines };
+      y -= GAP.note;
+    } else if (note) {
+      dropped.push('note');
+    }
+
+    y -= h.phone;
+    const phoneAt: Placed = { x, y, width, height: h.phone, size: phone.size, lines: phone.lines };
+    y -= GAP.phone;
+
+    y -= plateHeight;
+    const pricePlate: Frame = { x, y, width, height: plateHeight };
+    const priceLabelAt: Placed = { x: x + PLATE_PAD.x, y: y + PLATE_PAD.y, width: plateWidth,
+      height: h.priceLabel, size: priceLabel.size, lines: priceLabel.lines };
+    const priceAt: Placed = { x: x + PLATE_PAD.x, y: priceLabelAt.y + h.priceLabel + GAP.price,
+      width: plateWidth, height: h.price, size: price.size, lines: price.lines };
+    y -= GAP.plate;
+
+    let metaAt: Placed | null = null;
+    if (comMeta) {
+      y -= h.meta;
+      metaAt = { x, y, width, height: h.meta, size: meta.size, lines: meta.lines };
+      y -= GAP.meta;
+    } else {
+      dropped.push('meta');
+    }
+
+    const titleHeight = lineBox(title, 1.04);
+    y -= titleHeight;
+    const titleAt: Placed = { x, y, width, height: titleHeight, size: title.size, lines: title.lines };
+    y -= GAP.title;
+
+    y -= pillHeight;
+    const badgePill: Frame = { x, y, height: pillHeight,
+      width: Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, KICKER_TRACKING, measure)) + BADGE_PAD.x * 2 };
+    const badgeAt: Placed = { x: x + BADGE_PAD.x, y: y + BADGE_PAD.y,
+      width: badgePill.width - BADGE_PAD.x * 2, height: h.badge, size: badge.size, lines: badge.lines };
+
+    return { badgePill, badge: badgeAt, title: titleAt, meta: metaAt, pricePlate,
+      priceLabel: priceLabelAt, price: priceAt, phone: phoneAt, note: noteAt, dropped,
+      textTop: badgePill.y };
+  };
+
+  // O teto, e o que cede ao bater nele. A ordem é a do §4.3: primeiro a observação, depois a linha
+  // de dados, e só então o título desce de corpo. Título, preço e telefone não cedem nunca.
+  const limite = TEXT_BLOCK_MAX * (spec.height - spec.safe.top - spec.safe.bottom);
+  const cabe = (p: Pilha) => bottom - p.textTop <= limite;
+
+  const tituloNormal = fitLines({ text: content.title, maxWidth: width, maxLines: 2,
+    sizes: TITLE_SIZES, weight: WEIGHT.black, measure });
+
+  let pilha = montar(tituloNormal, { comMeta: true, comNote: true });
+  if (!cabe(pilha)) pilha = montar(tituloNormal, { comMeta: true, comNote: false });
+  if (!cabe(pilha)) pilha = montar(tituloNormal, { comMeta: false, comNote: false });
+  if (!cabe(pilha)) pilha = montar(tituloApertado(), { comMeta: false, comNote: false });
+
+  /**
+   * O terceiro degrau. Desce a lista de corpos e devolve o primeiro em que o título ocupa no
+   * máximo 3 linhas **e** a pilha inteira cabe no teto; se nenhum cabe, o menor que ainda respeita
+   * as 3 linhas; se nem isso, o texto inteiro no menor corpo — porque palavra nenhuma é descartada
+   * em hipótese alguma, nem aqui.
+   */
+  function tituloApertado(): Fit {
+    let ultimo: Fit | null = null;
+    for (const size of TITLE_SIZES_TIGHT) {
+      const lines = wrapByWidth(content.title, size, width, WEIGHT.black, measure);
+      if (lines.length > TITLE_LINES_TIGHT) continue;
+      ultimo = { size, lines };
+      if (cabe(montar(ultimo, { comMeta: false, comNote: false }))) return ultimo;
+    }
+    if (ultimo) return ultimo;
+    const size = TITLE_SIZES_TIGHT[TITLE_SIZES_TIGHT.length - 1];
+    return { size, lines: wrapByWidth(content.title, size, width, WEIGHT.black, measure) };
   }
 
-  y -= h.phone;
-  const phoneAt: Placed = { x, y, width, height: h.phone, size: phone.size, lines: phone.lines };
-  y -= GAP.phone;
-
-  y -= plateHeight;
-  const pricePlate: Frame = { x, y, width, height: plateHeight };
-  const priceLabelAt: Placed = { x: x + PLATE_PAD.x, y: y + PLATE_PAD.y, width: plateWidth,
-    height: h.priceLabel, size: priceLabel.size, lines: priceLabel.lines };
-  const priceAt: Placed = { x: x + PLATE_PAD.x, y: priceLabelAt.y + h.priceLabel + GAP.price,
-    width: plateWidth, height: h.price, size: price.size, lines: price.lines };
-  y -= GAP.plate;
-
-  y -= h.meta;
-  const metaAt: Placed = { x, y, width, height: h.meta, size: meta.size, lines: meta.lines };
-  y -= GAP.meta;
-
-  y -= h.title;
-  const titleAt: Placed = { x, y, width, height: h.title, size: title.size, lines: title.lines };
-  y -= GAP.title;
-
-  y -= pillHeight;
-  const badgePill: Frame = { x, y, height: pillHeight,
-    width: Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, KICKER_TRACKING, measure)) + BADGE_PAD.x * 2 };
-  const badgeAt: Placed = { x: x + BADGE_PAD.x, y: y + BADGE_PAD.y,
-    width: badgePill.width - BADGE_PAD.x * 2, height: h.badge, size: badge.size, lines: badge.lines };
-
-  const textTop = badgePill.y;
+  const { textTop, ...blocos } = pilha;
 
   // A logo é ancorada no topo da área segura e agora tem largura de verdade, derivada da proporção
   // da imagem. Presa à largura da coluna para que uma logo muito deitada não vaze de lado.
@@ -342,8 +428,7 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
   };
 
   return { spec, column: { x, width }, logo, fit: fitPhoto(spec, content.photoAspect, logo, scrim),
-    scrim, badgePill, badge: badgeAt, title: titleAt, meta: metaAt,
-    pricePlate, priceLabel: priceLabelAt, price: priceAt, phone: phoneAt, note: noteAt };
+    scrim, ...blocos };
 }
 
 /**
