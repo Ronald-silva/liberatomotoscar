@@ -83,6 +83,111 @@ describe('entrega da arte', () => {
   });
 });
 
+describe('entrega: a legenda viaja no mesmo toque', () => {
+  it('dispara a cópia da legenda antes de compartilhar, sem esperar por ela', async () => {
+    const ordem: string[] = [];
+    let resolverCopia: () => void = () => {};
+    await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      copyText: () => { ordem.push('copiar'); return new Promise((r) => { resolverCopia = r; }); },
+      share: async () => { ordem.push('compartilhar'); },
+    });
+    // Se houvesse `await` na cópia, 'compartilhar' não teria acontecido ainda.
+    expect(ordem).toEqual(['copiar', 'compartilhar']);
+    resolverCopia();
+  });
+
+  it('não há volta do laço de eventos entre copiar e compartilhar', async () => {
+    // O teste de ordem acima NÃO pega um `await` de microtarefa entre os dois, e é exatamente isso
+    // que a Global Constraint proíbe: no WebKit o `await` consome a ativação do usuário e o menu
+    // nativo não abre. Aqui a cópia deixa um marcador numa microtarefa própria: se ele cair ANTES
+    // de 'compartilhar', houve volta do laço no meio.
+    const ordem: string[] = [];
+    await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      canShare: () => true,
+      copyText: () => { ordem.push('copiar'); return Promise.resolve().then(() => { ordem.push('microtarefa da cópia'); }); },
+      share: async () => { ordem.push('compartilhar'); },
+    });
+    expect(ordem).toEqual(['copiar', 'compartilhar', 'microtarefa da cópia']);
+  });
+
+  it('com legenda, ainda chama o compartilhamento no mesmo ciclo do toque', async () => {
+    // Extensão do teste de ativação do usuário para o caminho com cópia: uma cópia que nunca
+    // resolve não pode atrasar o `share` nem por uma volta do laço.
+    const share = vi.fn().mockResolvedValue(undefined);
+    const resultado = deliverArt({ blob, filename: 'arte.jpg', caption: 'legenda',
+      copyText: () => new Promise<void>(() => {}), share, canShare: () => true,
+      download: vi.fn(), fallback: 'none' });
+    expect(share).toHaveBeenCalledOnce();
+    await expect(resultado).resolves.toBe('shared');
+  });
+
+  it('falha de cópia não aborta o compartilhamento', async () => {
+    const resultado = await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      copyText: () => Promise.reject(new Error('sem permissão')),
+      share: async () => {} });
+    expect(resultado).toBe('shared');
+  });
+
+  it('cópia que estoura na hora também não aborta o compartilhamento', async () => {
+    // `navigator.clipboard` ausente lança na chamada, não devolve promessa recusada.
+    const share = vi.fn().mockResolvedValue(undefined);
+    const resultado = await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      copyText: () => { throw new Error('sem área de transferência'); }, share });
+    expect(resultado).toBe('shared');
+    expect(share).toHaveBeenCalledOnce();
+  });
+
+  it('a legenda também viaja no ShareData', async () => {
+    let recebido: ShareData | null = null;
+    await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      canShare: () => true, share: async (d) => { recebido = d; } });
+    expect(recebido!.text).toBe('legenda');
+  });
+
+  it('a legenda do destino tem precedência sobre o texto genérico', async () => {
+    let recebido: ShareData | null = null;
+    await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda do destino', text: 'texto antigo',
+      download: vi.fn(), canShare: () => true, share: async (d) => { recebido = d; } });
+    expect(recebido!.text).toBe('legenda do destino');
+  });
+
+  it('sem legenda, nada é copiado', async () => {
+    let copiou = false;
+    await deliverArt({ blob, filename: 'x.jpg', download: vi.fn(),
+      copyText: async () => { copiou = true; }, share: async () => {} });
+    expect(copiou).toBe(false);
+  });
+
+  it('copia a legenda mesmo quando o aparelho não compartilha', async () => {
+    // Quem baixa a arte também vai colar a legenda; condicionar a cópia ao `share` deixaria a área
+    // de transferência vazia justamente no aparelho que não compartilha.
+    const copiado: string[] = [];
+    await expect(deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      copyText: async (t) => { copiado.push(t); } })).resolves.toBe('downloaded');
+    expect(copiado).toEqual(['legenda']);
+  });
+
+  it('a legenda copiada é a mesma que vai na folha do sistema', async () => {
+    const copiado: string[] = [];
+    let recebido: ShareData | null = null;
+    await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda única', download: vi.fn(),
+      copyText: async (t) => { copiado.push(t); }, canShare: () => true,
+      share: async (d) => { recebido = d; } });
+    expect(copiado).toEqual([recebido!.text]);
+  });
+
+  it('a legenda não some do envio quando o aparelho recusa texto junto do arquivo', async () => {
+    // O recuo que manda só a imagem é comportamento real de WebView; a legenda, nesse caso, vive
+    // só na área de transferência — e é por isso que a cópia não pode depender do `canShare`.
+    const copiado: string[] = [];
+    const share = vi.fn().mockResolvedValue(undefined);
+    await deliverArt({ blob, filename: 'x.jpg', caption: 'legenda', download: vi.fn(),
+      copyText: async (t) => { copiado.push(t); }, canShare: (d: ShareData) => !d.text, share });
+    expect(share).toHaveBeenCalledWith({ files: [expect.any(File)] });
+    expect(copiado).toEqual(['legenda']);
+  });
+});
+
 describe('entrega: prepara arte e versão, depois entrega', () => {
   const montar = (over: Partial<Parameters<typeof runArtDelivery>[0]> = {}) => {
     const calls: string[] = [];

@@ -3,21 +3,37 @@ export type Delivery = 'shared' | 'cancelled' | 'downloaded' | 'unavailable';
 // Entrega a arte já gerada: pela folha de compartilhamento do aparelho (o dono manda direto ao WhatsApp, sem
 // procurar o arquivo em Downloads) ou, onde não houver, baixando. Quem chama injeta `share`/`canShare`/`download`
 // para o teste não depender do navegador; sem `share` o aparelho simplesmente não compartilha.
-export async function deliverArt({ blob, filename, title, text, share, canShare, onShareError,
-  download, fallback = 'download' }: {
+export async function deliverArt({ blob, filename, title, text, caption, copyText, share, canShare,
+  onShareError, download, fallback = 'download' }: {
   blob: Blob; filename: string; title?: string; text?: string; fallback?: 'download' | 'none';
+  /**
+   * A legenda do destino. Vai para a área de transferência **e** para o `ShareData`, e tem
+   * precedência sobre `text`: a pessoa não pode colar um texto diferente do que acabou de
+   * compartilhar.
+   */
+  caption?: string;
+  copyText?: (text: string) => Promise<void>;
   share?: (data: ShareData) => Promise<void>; canShare?: (data: ShareData) => boolean;
   onShareError?: (error: unknown) => void;
   download: (blob: Blob, filename: string) => void;
 }): Promise<Delivery> {
   const files = [new File([blob], filename, { type: blob.type })];
-  const withText: ShareData = { files, ...(title ? { title } : {}), ...(text ? { text } : {}) };
+  const shared = caption ?? text;
+  const withText: ShareData = { files, ...(title ? { title } : {}), ...(shared ? { text: shared } : {}) };
   const accepted = (payload: ShareData) => {
     try { return canShare?.(payload) ?? false; } catch { return false; }
   };
   // Alguns navegadores embutidos respondem false em canShare para arquivos que
   // share aceita. A tentativa acontece no toque e a recusa é tratada abaixo.
   const data: ShareData = accepted(withText) ? withText : { files };
+  // A cópia é disparada e abandonada: NENHUM `await` entre ela e o `share`, porque é o `await` que
+  // consome a ativação do usuário no WebKit e faz o menu nativo não abrir. Falha de cópia é
+  // engolida — perder a área de transferência não vale cancelar a publicação. A cópia acontece em
+  // todo caminho de entrega, inclusive no download: quem baixa também vai colar a legenda, e
+  // quando o aparelho recusa texto junto do arquivo ela é o único lugar onde a legenda sobra.
+  if (caption && copyText) {
+    try { void copyText(caption).catch(() => undefined); } catch { /* sem área de transferência neste aparelho */ }
+  }
   if (share) {
     try {
       await share(data);
