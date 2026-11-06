@@ -12,6 +12,7 @@
  * inversão que importa: o texto nunca perde, porque quem cede é a imagem.
  */
 
+import type { SafeArea } from './destinations';
 import { artFormats, type ArtFormat } from './templates';
 
 /**
@@ -24,7 +25,12 @@ export const ART_FONT_FAMILY = '"Archivo", "Archivo Fallback"';
 /** Mede o texto como o Konva vai desenhá-lo. O peso importa: medir tudo como negrito superestima. */
 export type Measure = (text: string, size: number, weight: number) => number;
 
-export type SafeArea = { top: number; right: number; bottom: number; left: number };
+/**
+ * A área segura agora é propriedade do destino e mora em `destinations.ts`, junto do fantasma
+ * que a desenha — uma fonte só, para que as duas não divirjam na primeira correção. Fica aqui o
+ * reexport, porque quem já importava o tipo daqui não tem motivo para mudar.
+ */
+export type { SafeArea };
 export type FormatSpec = { width: number; height: number; safe: SafeArea };
 
 /** As medidas do arquivo continuam em `templates.ts`; aqui mora só o que a interface da rede ocupa. */
