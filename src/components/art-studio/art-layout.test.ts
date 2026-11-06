@@ -3,7 +3,7 @@ import { DESTINATION_ORDER, destinationSpec } from './destinations';
 import { createArchivoMeasure } from './measure-archivo';
 import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt, KICKER_TRACKING, PRICE_LABEL_TRACKING,
   TEXT_BLOCK_MAX,
-  type ArtContent, type ArtLayout, type Measure } from './art-layout';
+  type ArtContent, type ArtLayout, type Measure, type Placed } from './art-layout';
 import { artBadges } from './templates';
 
 /**
@@ -34,6 +34,9 @@ function conteudo(overrides: Partial<ArtContent> = {}): ArtContent {
     price: 'R$ 18.900,00',
     phone: '(85) 99636-5664',
     note: 'Consulte disponibilidade e condições',
+    // A situação do cadastro, que decide a tarja e a marca d'água. O caso comum é o publicado:
+    // nem tarja nem marca d'água.
+    status: 'published',
     photoAspect: 3 / 4,
     logoAspect: null,
     ...overrides,
@@ -428,7 +431,13 @@ describe('somente os pesos 400 e 900', () => {
     // disco, e medir num peso que não é o desenhado é o defeito que a Tarefa 1 existe para matar.
     const pesos = new Set<number>();
     const espia: Measure = (text, size, weight) => { pesos.add(weight); return measure(text, size, weight); };
-    for (const id of DESTINATION_ORDER) layoutArt(id, conteudo(), espia);
+    // Varre as situações também: a tarja e a marca d'água da Tarefa 6 são blocos medidos, e sem
+    // passar por aqui elas poderiam nascer medidas num peso que não existe em disco.
+    for (const id of DESTINATION_ORDER) {
+      for (const status of ['published', 'sold', 'reserved', 'draft', 'archived']) {
+        layoutArt(id, conteudo({ status }), espia);
+      }
+    }
     expect([...pesos].sort((a, b) => a - b)).toEqual([400, 900]);
   });
 });
@@ -551,6 +560,118 @@ describe('degradação sob aperto', () => {
 
   it('o teto é 55% e está declarado, não espalhado pelo cálculo', () => {
     expect(TEXT_BLOCK_MAX).toBe(0.55);
+  });
+});
+
+describe('a tarja de situação e a marca d\'água entram na medição', () => {
+  /** A largura que o Konva desenha para um bloco sem espaçamento extra. */
+  const desenhada = (bloco: Placed, weight: number) =>
+    Math.max(...bloco.lines.map((linha) => measure(linha, bloco.size, weight)));
+
+  it.each(DESTINATION_ORDER)('%s: a tarja de situação cabe na própria faixa, em toda proporção de foto', (id) => {
+    for (const aspect of PROPORCOES) {
+      for (const status of ['sold', 'reserved'] as const) {
+        const l = layoutArt(id, conteudo({ photoAspect: aspect, status }), measure);
+        expect(l.statusBand).not.toBeNull();
+        expect(dentro(l.statusBand!.text, l.statusBand!.frame)).toBe(true);
+        expect(l.statusBand!.text.lines).toHaveLength(1);
+      }
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: o texto desenhado da tarja cabe na faixa, não só o declarado', (id) => {
+    // `Placed.width` é largura declarada: `dentro()` sozinho é identidade aritmética e passa com a
+    // palavra vazando da faixa — que é exatamente o defeito desta tarefa ("RESERVADO" pedia 334 px
+    // num painel de 202 e, sendo palavra única, o Konva não quebra).
+    for (const status of ['sold', 'reserved'] as const) {
+      const l = layoutArt(id, conteudo({ status }), measure);
+      expect(desenhada(l.statusBand!.text, 900), `${id} / ${status}`)
+        .toBeLessThanOrEqual(l.statusBand!.text.width);
+      expect(l.statusBand!.text.width).toBeLessThanOrEqual(l.statusBand!.frame.width);
+    }
+  });
+
+  it('a tarja diz qual é a situação, e não a outra', () => {
+    // Sem isto, uma tarja com qualquer texto — ou com o texto trocado — passa por todo o resto.
+    expect(layoutArt('story', conteudo({ status: 'sold' }), measure).statusBand!.text.lines.join(' '))
+      .toBe('VENDIDO');
+    expect(layoutArt('story', conteudo({ status: 'reserved' }), measure).statusBand!.text.lines.join(' '))
+      .toBe('RESERVADO');
+  });
+
+  it('a tarja fica sobre a foto, não no rodapé do texto', () => {
+    // Trava comercial: pílula discreta no rodapé é garantia mais fraca que tarja sobre o veículo.
+    const l = layoutArt('story', conteudo({ status: 'sold' }), measure);
+    expect(l.statusBand!.frame.y).toBeLessThan(l.scrim.y);
+  });
+
+  it.each(DESTINATION_ORDER)('%s: a tarja fica sobre a foto mesmo no aperto máximo e não encobre a logo', (id) => {
+    // O véu sobe com o texto; se a faixa fosse ancorada por número fixo, no aperto ela cairia
+    // dentro do véu e a trava comercial viraria mais uma linha de rodapé.
+    for (const status of ['sold', 'reserved'] as const) {
+      const l = layoutArt(id, conteudo({
+        status,
+        title: 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica Couro Multimidia',
+        meta: '2016 · 189.000 km · Branca com banco vermelho e teto preto',
+        note: 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora',
+      }), measure);
+      expect(l.statusBand!.frame.y, `${id} / ${status}`).toBeLessThan(l.scrim.y);
+      expect(l.statusBand!.frame.y).toBeGreaterThanOrEqual(l.logo.y + l.logo.height);
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: a faixa e a marca d\'água cabem na área segura', (id) => {
+    // §6 do spec: "todo bloco de texto, incluindo logo, selo de situação e marca d'água, cabe na
+    // área segura". O brief só confere a marca d'água; a faixa é maior e é a que corre risco.
+    const spec = destinationSpec(id);
+    for (const status of ['sold', 'reserved', 'draft', 'archived']) {
+      const l = layoutArt(id, conteudo({ status }), measure);
+      for (const caixa of [l.statusBand?.frame, l.statusBand?.text, l.watermark?.frame, l.watermark?.text]) {
+        if (!caixa) continue;
+        expect(caixa.x, `${id} / ${status}`).toBeGreaterThanOrEqual(spec.safe.left);
+        expect(caixa.x + caixa.width, `${id} / ${status}`).toBeLessThanOrEqual(spec.width - spec.safe.right);
+        expect(caixa.y, `${id} / ${status}`).toBeGreaterThanOrEqual(spec.safe.top);
+        expect(caixa.y + caixa.height, `${id} / ${status}`).toBeLessThanOrEqual(spec.height - spec.safe.bottom);
+      }
+    }
+  });
+
+  it('publicado não tem tarja nem marca d\'água', () => {
+    const l = layoutArt('feed', conteudo({ status: 'published' }), measure);
+    expect(l.statusBand).toBeNull();
+    expect(l.watermark).toBeNull();
+  });
+
+  it.each(['draft', 'archived'])('%s: a marca d\'água cabe na área segura', (status) => {
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ status }), measure);
+      expect(l.watermark!.text.x).toBeGreaterThanOrEqual(spec.safe.left);
+      expect(l.watermark!.text.x + l.watermark!.text.width)
+        .toBeLessThanOrEqual(spec.width - spec.safe.right);
+      expect(l.watermark!.text.lines.join(' ')).toBe('PRÉVIA · NÃO PUBLICAR');
+    }
+  });
+
+  it.each(['draft', 'archived'])('%s: a marca d\'água é desenhada dentro da própria faixa e sem tarja de situação', (status) => {
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo({ status }), measure);
+      expect(l.statusBand, `${id} / ${status}`).toBeNull();
+      expect(dentro(l.watermark!.text, l.watermark!.frame)).toBe(true);
+      expect(desenhada(l.watermark!.text, 900), id).toBeLessThanOrEqual(l.watermark!.text.width);
+      expect(l.watermark!.text.lines).toHaveLength(1);
+    }
+  });
+
+  it('a tarja não rouba espaço do bloco de texto nem muda o que é descartado', () => {
+    // A faixa mora sobre a foto; se ela entrasse na pilha, "VENDIDO" passaria a descartar a
+    // observação de peças que hoje a mantêm — degradação por situação do cadastro, não por aperto.
+    const publicado = layoutArt('feed', conteudo({ status: 'published' }), measure);
+    const vendido = layoutArt('feed', conteudo({ status: 'sold' }), measure);
+    expect(vendido.dropped).toEqual(publicado.dropped);
+    expect(vendido.title.y).toBe(publicado.title.y);
+    expect(vendido.title.size).toBe(publicado.title.size);
+    expect(vendido.scrim.y).toBe(publicado.scrim.y);
   });
 });
 

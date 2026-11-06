@@ -98,6 +98,12 @@ export type ArtContent = {
   price: string;
   phone: string;
   note: string;
+  /**
+   * A situação do cadastro (`published`, `reserved`, `sold`, `draft`, `archived`). Decide a tarja
+   * de situação e a marca d'água de prévia — e nada mais da composição. É `string` e não uma união
+   * fechada porque o valor vem do banco: um estado novo no cadastro não deve derrubar a arte.
+   */
+  status: string;
   /** Largura dividida pela altura da foto escolhida; `null` quando ainda não carregou. */
   photoAspect: number | null;
   /**
@@ -154,6 +160,18 @@ export type ArtLayout = {
   phone: Placed;
   /** A observação é a linha mais dispensável da peça: sem texto, o bloco não existe. */
   note: Placed | null;
+  /**
+   * A tarja de VENDIDO/RESERVADO, **sobre a foto** e não no rodapé — §3.3.11 e §4.5 do spec. É
+   * trava comercial: uma pílula discreta no rodapé é garantia bem mais fraca que uma tarja
+   * atravessando o veículo, e "veículo vendido parecendo oferta disponível" é o anti-objetivo que o
+   * estúdio inteiro existe para não cometer. `frame` é a faixa com véu próprio; `text` é o bloco
+   * medido dentro dela — era justamente o não-estar-medido o defeito: 60 px cravados sobre um painel
+   * que podia ter 202, com "RESERVADO" pedindo 334 e, por ser palavra única, vazando da peça.
+   */
+  statusBand: { frame: Frame; text: Placed } | null;
+  /** O mesmo tratamento para a marca d'água de rascunho/arquivado, hoje desenhada em largura cheia
+   * ignorando a área segura. */
+  watermark: { frame: Frame; text: Placed } | null;
   /**
    * O que o teto de altura obrigou a deixar de fora, na ordem em que foi deixado. Vazio é o caso
    * normal — e é o que todo conteúdo do estoque de hoje produz.
@@ -228,6 +246,21 @@ const TITLE_SIZES = [76, 68, 60, 54, 48] as const;
  */
 const TITLE_SIZES_TIGHT = [...TITLE_SIZES, 44, 40, 36, 32] as const;
 const TITLE_LINES_TIGHT = 3;
+
+/** O texto da tarja por situação do cadastro. Fora destas duas, não há tarja. */
+const STATUS_BAND_TEXT: Record<string, string> = { sold: 'VENDIDO', reserved: 'RESERVADO' };
+const STATUS_BAND_SIZES = [96, 84, 72, 64, 56, 48] as const;
+
+/** As situações que não geram peça comercial (§7 do spec) e por isso saem marcadas. */
+const WATERMARK_STATUSES = ['draft', 'archived'];
+/** Exatamente este texto: é o que diz a quem recebe a imagem que ela não é anúncio. */
+const WATERMARK_TEXT = 'PRÉVIA · NÃO PUBLICAR';
+const WATERMARK_SIZES = [64, 56, 48, 42, 36] as const;
+
+/** Respiro interno da faixa, dos dois lados do texto. */
+const BAND_PAD = { x: 24, y: 16 } as const;
+/** Folga entre a base da logo e o topo da faixa, para a marca não ficar encostada na tarja. */
+const BAND_GAP = 24;
 
 /** O que o estoque real tem quando o banco não registrou dimensão: 1600×1200. */
 const FALLBACK_PHOTO_ASPECT = 4 / 3;
@@ -427,8 +460,37 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
       : [{ offset: 0, alpha: SCRIM_FLOOR }, { offset: 1, alpha: 1 }],
   };
 
+  /**
+   * Uma faixa atravessando a coluna de conteúdo, **sobre a foto**: centralizada na região livre
+   * entre a base da logo e o topo do véu.
+   *
+   * Ancorada na região livre e não num número fixo de propósito: o véu sobe junto com o bloco de
+   * texto, e uma faixa cravada em pixel acabaria dentro do véu no aperto — a tarja de vendido
+   * viraria mais uma linha de rodapé, que é precisamente a garantia mais fraca que o §3.3.11
+   * recusou. O texto é medido com `fitLines`, como qualquer outro bloco.
+   */
+  const faixa = (texto: string, sizes: readonly number[]) => {
+    const fit = fitLines({ text: texto, maxWidth: width - BAND_PAD.x * 2, maxLines: 1, sizes,
+      weight: WEIGHT.black, measure });
+    const textHeight = lineBox(fit);
+    const height = textHeight + BAND_PAD.y * 2;
+    const livre = { top: logo.y + logo.height + BAND_GAP, bottom: scrim.y };
+    // O piso vence o teto quando a região livre é menor que a faixa: encostar na logo e na área
+    // segura é pior que encostar no véu, e o que importa é a tarja estar sobre a foto.
+    const y = Math.max(livre.top, Math.min((livre.top + livre.bottom) / 2 - height / 2, livre.bottom - height));
+    const frame: Frame = { x, y, width, height };
+    return { frame, text: { x: x + BAND_PAD.x, y: y + BAND_PAD.y, width: width - BAND_PAD.x * 2,
+      height: textHeight, size: fit.size, lines: fit.lines } };
+  };
+
+  const bandText = STATUS_BAND_TEXT[content.status];
+  const statusBand = bandText ? faixa(bandText, STATUS_BAND_SIZES) : null;
+  const watermark = WATERMARK_STATUSES.includes(content.status)
+    ? faixa(WATERMARK_TEXT, WATERMARK_SIZES)
+    : null;
+
   return { spec, column: { x, width }, logo, fit: fitPhoto(spec, content.photoAspect, logo, scrim),
-    scrim, ...blocos };
+    scrim, ...blocos, statusBand, watermark };
 }
 
 /**
