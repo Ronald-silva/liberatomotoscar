@@ -63,6 +63,31 @@ describe('os quatro destinos', () => {
     expect(new Set(sufixos).size).toBe(4);
   });
 
+  it('cada destino tem o nome da ficha e o rótulo do botão que o spec fixa', () => {
+    // O Step 3 do brief da Tarefa 2 fixa estas oito strings, e elas são texto de interface: a
+    // fileira de fichas e o botão primário da Tarefa 11 leem daqui. Sem teste, um erro aqui só
+    // aparece na tela do operador.
+    expect(DESTINATION_ORDER.map((id) => ART_DESTINATIONS[id].label))
+      .toEqual(['Feed', 'Stories', 'Status', 'TikTok']);
+    expect(DESTINATION_ORDER.map((id) => ART_DESTINATIONS[id].actionLabel))
+      .toEqual(['Publicar no Feed', 'Publicar no Stories', 'Publicar no Status', 'Publicar no TikTok']);
+  });
+
+  it('o rótulo do botão é o nome da ficha, para os dois nunca divergirem', () => {
+    // É a relação, não as strings: trocar o nome da ficha sem trocar o do botão põe a prévia a
+    // dizer "Stories" e o botão a prometer outro destino.
+    for (const id of DESTINATION_ORDER) {
+      const { label, actionLabel } = ART_DESTINATIONS[id];
+      expect(actionLabel).toBe(`Publicar no ${label}`);
+    }
+  });
+
+  it('nenhum nome de destino se repete nem vem vazio', () => {
+    const nomes = DESTINATION_ORDER.map((id) => ART_DESTINATIONS[id].label);
+    expect(new Set(nomes).size).toBe(4);
+    for (const nome of nomes) expect(nome.trim()).not.toBe('');
+  });
+
   it('destinationSpec devolve a ficha do destino pedido', () => {
     for (const id of DESTINATION_ORDER) expect(destinationSpec(id)).toBe(ART_DESTINATIONS[id]);
   });
