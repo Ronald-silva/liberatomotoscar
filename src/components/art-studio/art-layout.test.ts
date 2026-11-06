@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DESTINATION_ORDER, destinationSpec } from './destinations';
 import { createArchivoMeasure } from './measure-archivo';
-import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt,
+import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt, KICKER_TRACKING, PRICE_LABEL_TRACKING,
   type ArtContent, type ArtLayout, type Measure } from './art-layout';
+import { artBadges } from './templates';
 
 /**
  * Mede com a métrica real da Archivo, igual à produção (Tarefa 1). O modelo anterior era
@@ -42,6 +43,31 @@ function conteudo(overrides: Partial<ArtContent> = {}): ArtContent {
 function blocos(l: ArtLayout) {
   // A observação é o primeiro bloco a cair sob aperto, e aí ela vem `null`.
   return [l.badge, l.title, l.meta, l.priceLabel, l.price, l.phone, l.note].filter((b) => b !== null);
+}
+
+/**
+ * Cada bloco com o peso e o espaçamento com que ele é de fato desenhado.
+ *
+ * Existe porque `Placed.width` é a largura **declarada** do bloco (a da coluna, ou a da placa), não
+ * a do texto medido — então toda asserção de área segura feita sobre `x + width` é uma identidade
+ * aritmética e não prova nada. O que prova é comparar o texto desenhado contra a caixa que ele diz
+ * ocupar, e é isso que esta lista permite.
+ */
+function blocosMedidos(l: ArtLayout) {
+  return [
+    { nome: 'selo', bloco: l.badge, weight: 900, tracking: KICKER_TRACKING },
+    { nome: 'titulo', bloco: l.title, weight: 900, tracking: 0 },
+    { nome: 'dados', bloco: l.meta, weight: 400, tracking: 0 },
+    { nome: 'rotulo do preco', bloco: l.priceLabel, weight: 900, tracking: PRICE_LABEL_TRACKING },
+    { nome: 'preco', bloco: l.price, weight: 900, tracking: 0 },
+    { nome: 'telefone', bloco: l.phone, weight: 900, tracking: 0 },
+    ...(l.note ? [{ nome: 'observacao', bloco: l.note, weight: 400, tracking: 0 }] : []),
+  ];
+}
+
+/** A largura que o Konva vai de fato desenhar para este bloco, tracking incluído. */
+function larguraDesenhada({ bloco, weight, tracking }: ReturnType<typeof blocosMedidos>[number]) {
+  return Math.max(...bloco.lines.map((linha) => measure(linha, bloco.size, weight) + tracking * linha.length));
 }
 
 /** Os blocos sólidos desenhados atrás do texto: pílula do selo e placa do preço. */
@@ -115,6 +141,49 @@ describe('a foto aparece inteira e o fundo sangra', () => {
     expect(layoutArt('story', conteudo({ photoAspect: 1080 / 1920 }), measure).fit.mode).toBe('cover');
   });
 
+  it('foto de celular em retrato nunca é recortada: é o caso difícil do spec', () => {
+    // §4.2 e §11: "aparece sempre inteira, nunca cortada". Uma 3:4 num 9:16 perde 25% da largura
+    // se cair em `cover`, e é exatamente o risco que o §11 chama de caso difícil. Sem esta linha,
+    // afrouxar `COVER_TOLERANCE` não quebra nada.
+    for (const id of ['story', 'whatsapp', 'tiktok'] as const) {
+      expect(layoutArt(id, conteudo({ photoAspect: 3 / 4 }), measure).fit.mode).toBe('contain');
+    }
+  });
+
+  it('a maior parte da foto fica acima do véu, não enterrada sob ele', () => {
+    // A versão da invariante de herói que mede **foto visível**, não pixels de foto. A conta por
+    // área bruta é satisfeita por uma foto inteira debaixo do degradê: 42% da peça "é foto" e o
+    // veículo não aparece.
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ photoAspect: 4 / 3 }), measure);
+      const visivel = l.fit.photo.width * Math.max(0, l.scrim.y - l.fit.photo.y);
+      expect(visivel / (spec.width * spec.height), `${id}: fração da peça`).toBeGreaterThan(0.30);
+      expect(visivel / (l.fit.photo.width * l.fit.photo.height), `${id}: fração da foto`)
+        .toBeGreaterThan(0.6);
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: a foto é enquadrada na região livre e o clamp só empurra para dentro', (id) => {
+    // O que o ruling negociou: a região entre a base da logo e o topo do véu não limita o tamanho
+    // da foto, ela decide a altura em que a foto é centralizada. Sem isto, nada distingue a decisão
+    // de "colar no topo" ou "colar na base".
+    const spec = destinationSpec(id);
+    const l = layoutArt(id, conteudo({ photoAspect: 4 / 3 }), measure);
+    const { photo } = l.fit;
+    const livre = { top: l.logo.y + l.logo.height, bottom: l.scrim.y };
+    const ideal = (livre.top + livre.bottom) / 2 - photo.height / 2;
+    if (ideal >= 0 && ideal + photo.height <= spec.height) {
+      // Cabe inteira no lugar ideal: o enquadramento na região livre é simétrico.
+      expect(photo.y - livre.top).toBeCloseTo(livre.bottom - (photo.y + photo.height), 0);
+    } else {
+      // Não cabe: encosta na borda que a prendeu, e nunca atravessa nenhuma das duas.
+      expect(photo.y === 0 || photo.y + photo.height === spec.height).toBe(true);
+    }
+    expect(photo.y).toBeGreaterThanOrEqual(0);
+    expect(photo.y + photo.height).toBeLessThanOrEqual(spec.height);
+  });
+
   it('sem proporção de foto conhecida a peça ainda se compõe', () => {
     const l = layoutArt('story', conteudo({ photoAspect: null }), measure);
     expect(l.fit.photo.width).toBeGreaterThan(0);
@@ -139,6 +208,29 @@ describe('a foto aparece inteira e o fundo sangra', () => {
     expect(longo.fit.photo.width).toBe(curto.fit.photo.width);
     expect(longo.fit.photo.height).toBe(curto.fit.photo.height);
     expect(longo.title.lines.join(' ')).toBe('Volkswagen Saveiro Robust Cabine Dupla');
+  });
+
+  it('proporção de foto degenerada não entrega peça sem veículo', () => {
+    // `photoAspect` vem de `image.width / image.height` (ArtCanvas.tsx). Uma imagem que decodifica
+    // com dimensão zero dá `0/0 = NaN`, e um `NaN` atravessa toda a geometria sem falhar em lugar
+    // nenhum: o Konva não desenha a foto e a peça sai sem o veículo, em silêncio. Nove das dezesseis
+    // fotos do estoque são importações antigas, que é justamente onde isso apareceria.
+    for (const degenerado of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const l = layoutArt('story', conteudo({ photoAspect: degenerado }), measure);
+      expect(Number.isFinite(l.fit.photo.width), `aspecto ${degenerado}`).toBe(true);
+      expect(l.fit.photo.width).toBeGreaterThan(0);
+      expect(l.fit.photo.height).toBeGreaterThan(0);
+      expect(l.fit.photo.x).toBeGreaterThanOrEqual(0);
+      expect(l.fit.photo.y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('proporção de logo degenerada não entrega logo invertida nem invisível', () => {
+    for (const degenerado of [0, -2, Number.NaN]) {
+      const l = layoutArt('story', conteudo({ logoAspect: degenerado }), measure);
+      expect(Number.isFinite(l.logo.width), `aspecto ${degenerado}`).toBe(true);
+      expect(l.logo.width).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -174,7 +266,9 @@ describe('o conteúdo respeita a área segura de cada destino', () => {
     for (const id of DESTINATION_ORDER) {
       const spec = destinationSpec(id);
       const l = layoutArt(id, conteudo({ logoAspect: 4.2 }), measure);
-      expect(l.logo.width).toBeGreaterThan(0);
+      // Derivada da proporção, não um número qualquer maior que zero: o defeito que esta tarefa
+      // veio corrigir era `width: 0`, e prender só o zero deixa passar uma logo de 1 px.
+      expect(l.logo.width).toBeCloseTo(l.logo.height * 4.2, 0);
       expect(l.logo.x + l.logo.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
       expect(l.logo.y).toBeGreaterThanOrEqual(spec.safe.top);
     }
@@ -184,7 +278,8 @@ describe('o conteúdo respeita a área segura de cada destino', () => {
     for (const id of DESTINATION_ORDER) {
       const spec = destinationSpec(id);
       const l = layoutArt(id, conteudo({ logoAspect: null }), measure);
-      expect(l.logo.width).toBeGreaterThan(0);
+      // O recuo é a proporção dos arquivos em `public/`: 800×376.
+      expect(l.logo.width).toBeCloseTo(l.logo.height * (800 / 376), 0);
       expect(l.logo.x + l.logo.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
     }
   });
@@ -199,10 +294,37 @@ describe('o conteúdo respeita a área segura de cada destino', () => {
     }
   });
 
+  it.each(DESTINATION_ORDER)('%s: o texto desenhado cabe na caixa que ele diz ocupar', (id) => {
+    // A asserção que as outras não fazem. `x + width` com `width` da coluna é identidade: passa com
+    // o texto vazando por cima da borda. Esta compara o desenhado contra o declarado, e é a única
+    // que pega tracking esquecido na conta da pílula ou largura errada alimentando o preço.
+    for (const caso of CORPUS) {
+      for (const selo of artBadges) {
+        const l = layoutArt(id, conteudo({ ...caso, kicker: selo.heading }), measure);
+        for (const alvo of blocosMedidos(l)) {
+          expect(larguraDesenhada(alvo), `${id} / ${selo.id} / ${alvo.nome}`)
+            .toBeLessThanOrEqual(alvo.bloco.width);
+        }
+      }
+    }
+  });
+
   it('o preço de carro mais alto cabe na placa do TikTok', () => {
     const l = layoutArt('tiktok', conteudo({ price: 'R$ 460.000,00' }), measure);
     expect(l.price.lines).toHaveLength(1);
     expect(l.price.x + l.price.width).toBeLessThanOrEqual(l.pricePlate.x + l.pricePlate.width);
+  });
+
+  it('o preço cabe na placa **medido**, não só declarado, mesmo acima do estoque de hoje', () => {
+    // 'R$ 1.460.000,00' está de propósito acima de qualquer preço do estoque atual: a placa é a
+    // caixa mais estreita da peça, e é a largura que alimenta `fitLines` que está sendo presa aqui.
+    // Com a largura errada, o preço escolhe um corpo que cabe na coluna e vaza da placa vermelha.
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo({ price: 'R$ 1.460.000,00' }), measure);
+      const alvo = blocosMedidos(l).find((b) => b.nome === 'preco')!;
+      expect(larguraDesenhada(alvo), id).toBeLessThanOrEqual(l.price.width);
+      expect(l.price.width).toBeLessThanOrEqual(l.pricePlate.width);
+    }
   });
 
   it('o TikTok reserva a coluna de ícones à direita e o rodapé da legenda', () => {

@@ -211,6 +211,18 @@ const tracked = (lines: readonly string[], size: number, weight: number, trackin
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 /**
+ * A proporção utilizável, ou o recuo.
+ *
+ * Tanto `photoAspect` quanto `logoAspect` nascem de `image.width / image.height`, e uma imagem que
+ * decodifica com dimensão zero entrega `0 / 0`, ou seja `NaN`. Sem este filtro o `NaN` atravessa
+ * toda a geometria sem falhar em lugar nenhum e a peça sai **sem o veículo**, em silêncio — e
+ * silêncio é o pior resultado possível para quem só vai descobrir depois de publicar. Negativo e
+ * infinito entram pela mesma porta.
+ */
+const usableAspect = (value: number | null, fallback: number) =>
+  value !== null && Number.isFinite(value) && value > 0 ? value : fallback;
+
+/**
  * A opacidade composta do véu na altura `y` da peça, interpolando a rampa.
  *
  * É o que torna o piso de contraste verificável: `scrimAlphaAt(l.scrim, bloco.y) >= 0.82` é uma
@@ -311,7 +323,7 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
 
   // A logo é ancorada no topo da área segura e agora tem largura de verdade, derivada da proporção
   // da imagem. Presa à largura da coluna para que uma logo muito deitada não vaze de lado.
-  const logoWidth = Math.min(width, LOGO_HEIGHT * (content.logoAspect ?? LOGO_ASPECT_FALLBACK));
+  const logoWidth = Math.min(width, LOGO_HEIGHT * usableAspect(content.logoAspect, LOGO_ASPECT_FALLBACK));
   const logo: Frame = { x, y: spec.safe.top, width: logoWidth, height: LOGO_HEIGHT };
 
   // O véu começa acima do topo do texto e vai até a borda de baixo da peça. O piso de 0,82 é o que
@@ -340,7 +352,7 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
  * subiu.
  */
 function fitPhoto(spec: DestinationSpec, photoAspect: number | null, logo: Frame, scrim: Scrim): PhotoFit {
-  const aspect = photoAspect ?? FALLBACK_PHOTO_ASPECT;
+  const aspect = usableAspect(photoAspect, FALLBACK_PHOTO_ASPECT);
   const canvasAspect = spec.width / spec.height;
 
   if (Math.abs(aspect / canvasAspect - 1) <= COVER_TOLERANCE) {
