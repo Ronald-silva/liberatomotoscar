@@ -1,18 +1,23 @@
 /**
  * Onde cada coisa fica na arte — calculado, nunca cravado.
  *
- * A versão anterior era uma lista de coordenadas absolutas por formato, e o conteúdo é variável:
- * título de tamanho imprevisível, preço de cinco ou seis dígitos, foto em pé ou deitada. Quando o
- * texto não cabia na caixa fixa, as únicas saídas eram encolher a fonte até o ilegível ou cortar a
- * frase. Pior: o mesmo conjunto de números servia Stories e TikTok, que têm interfaces diferentes
- * por cima da imagem.
+ * **A foto deixou de ser o bloco elástico.** A versão anterior declarava que "quem cede é a
+ * imagem, nunca o texto": o texto era empilhado do topo para baixo e a foto ficava com a sobra.
+ * A regra protegia o texto, e isso era um ganho real contra as coordenadas fixas, mas a conta
+ * medida na auditoria de 05/11 foi de 3,5% a 27,6% de foto numa arte de veículo — uma parede de
+ * texto com um selo no meio.
  *
- * Aqui os blocos são empilhados em fluxo e medidos de verdade. **A foto é o bloco elástico**: ela
- * absorve o que sobra. Um título de duas linhas não corta nada — ele toma 60 px da foto. É a
- * inversão que importa: o texto nunca perde, porque quem cede é a imagem.
+ * Aqui a prioridade se inverte uma segunda vez, e agora quem absorve a sobra **é o véu**: a foto
+ * aparece inteira e do tamanho que a peça permite, sobre uma ampliação desfocada de si mesma que
+ * sangra até as quatro bordas, e o bloco de texto é ancorado na base da área segura e cresce para
+ * cima. Um título de duas linhas não tira nada da foto — ele escurece algumas dezenas de pixels a
+ * mais de uma foto que já estava ali. Gradiente não custa nada; produto, sim.
+ *
+ * O que não mudou é a garantia de sempre: nenhuma palavra é descartada e nada vira reticências.
  */
 
-import { artFormats, type ArtFormat } from './templates';
+import type { ArtDestination, DestinationSpec, SafeArea } from './destinations';
+import { destinationSpec } from './destinations';
 
 /**
  * A Archivo variável mais a "Archivo Fallback" com métrica compensada que o next/font gera. O
@@ -24,38 +29,20 @@ export const ART_FONT_FAMILY = '"Archivo", "Archivo Fallback"';
 /** Mede o texto como o Konva vai desenhá-lo. O peso importa: medir tudo como negrito superestima. */
 export type Measure = (text: string, size: number, weight: number) => number;
 
-export type SafeArea = { top: number; right: number; bottom: number; left: number };
-export type FormatSpec = { width: number; height: number; safe: SafeArea };
-
-/** As medidas do arquivo continuam em `templates.ts`; aqui mora só o que a interface da rede ocupa. */
-export const ART_SAFE: Record<ArtFormat, SafeArea> = {
-  story: { top: 250, right: 72, bottom: 300, left: 72 },
-  tiktok: { top: 150, right: 180, bottom: 500, left: 72 },
-  feed: { top: 56, right: 72, bottom: 56, left: 72 },
-  // Mesmo post, mesma interface do feed: a margem larga que havia aqui era gosto, não segurança,
-  // e só espremia o título numa tela que já é a mais baixa das quatro.
-  square: { top: 56, right: 72, bottom: 56, left: 72 },
-};
-
-export function formatSpec(format: ArtFormat): FormatSpec {
-  return { width: artFormats[format].width, height: artFormats[format].height, safe: ART_SAFE[format] };
-}
+/**
+ * A área segura agora é propriedade do destino e mora em `destinations.ts`, junto do fantasma
+ * que a desenha — uma fonte só, para que as duas não divirjam na primeira correção. Fica aqui o
+ * reexport, porque quem já importava o tipo daqui não tem motivo para mudar.
+ */
+export type { SafeArea };
 
 /**
- * Área livre da interface de cada rede, para **publicação orgânica**.
- *
- * Nenhuma das plataformas publica mapa oficial em pixels: o que existe são guias de terceiros que
- * divergem entre si. Estes valores ficam na faixa em que as fontes concordam, com folga. São dados
- * de propósito — corrigir depois é trocar número, não reescrever layout.
- *
- * - Stories e status: topo com a foto do perfil, base com a caixa de resposta.
- * - TikTok: a coluna de curtir/comentar/compartilhar fica à direita, e o rodapé cresce com a
- *   legenda — por isso é a margem inferior mais generosa das três.
- * - Feed: não há interface sobreposta; a margem é estética, não de segurança.
- *
- * Anúncio pago pede bem mais espaço embaixo (o botão de CTA). Se a loja passar a impulsionar,
- * é aqui que se acrescenta a variante, sem tocar no resto.
+ * Os dois únicos pesos que a arte usa, porque são as duas únicas instâncias da Archivo em disco
+ * (`Archivo-Regular.ttf` e `Archivo-Black.ttf`). O layout anterior pedia 700 e 800, que o Konva
+ * resolvia como `bold` — ou seja, desenhava num peso que a medição não conhecia. Medir o que não
+ * se desenha foi a causa de 674 testes verdes conviverem com texto estourando a área segura.
  */
+const WEIGHT = { regular: 400, black: 900 } as const;
 
 export type FitInput = {
   text: string;
@@ -88,8 +75,8 @@ function wrapByWidth(text: string, size: number, maxWidth: number, weight: numbe
 
 /**
  * Maior corpo em que o texto cabe em `maxLines`. Se nem o menor couber, devolve o menor **com
- * todas as linhas** — o texto sai inteiro e quem paga a conta é a foto, que é elástica. Em nenhuma
- * hipótese esta função descarta palavra.
+ * todas as linhas** — o texto sai inteiro e o véu cresce com ele. Em nenhuma hipótese esta função
+ * descarta palavra.
  */
 export function fitLines({ text, maxWidth, maxLines, sizes, weight, measure }: FitInput):
   { size: number; lines: readonly string[] } {
@@ -106,156 +93,474 @@ export type ArtContent = {
   title: string;
   /** Ano, quilometragem e cor numa linha só. */
   meta: string;
-  kicker: string;
+  /**
+   * O rótulo da pílula — "RECÉM-CHEGADO", "VENDIDO". Chamava-se `kicker` enquanto o layout falava
+   * de `kickerPill`; o vocabulário da saída virou `badge`/`badgePill` na Tarefa 4 e a entrada
+   * acompanha aqui, para o campo e o bloco que ele produz terem o mesmo nome.
+   */
+  badge: string;
   priceLabel: string;
   price: string;
   phone: string;
   note: string;
+  /**
+   * A situação do cadastro (`published`, `reserved`, `sold`, `draft`, `archived`). Decide a tarja
+   * de situação e a marca d'água de prévia — e nada mais da composição. É `string` e não uma união
+   * fechada porque o valor vem do banco: um estado novo no cadastro não deve derrubar a arte.
+   */
+  status: string;
   /** Largura dividida pela altura da foto escolhida; `null` quando ainda não carregou. */
   photoAspect: number | null;
+  /**
+   * O mesmo para a logo da loja. Entrou no conteúdo porque sem ela a logo era medida com
+   * `width: 0` e nenhum teste conferia se a marca cabia na área segura.
+   */
+  logoAspect: number | null;
 };
 
 export type Placed = { x: number; y: number; width: number; height: number; size: number; lines: readonly string[] };
 export type Frame = { x: number; y: number; width: number; height: number };
 
+/**
+ * Como a foto ocupa a peça.
+ *
+ * `cover` é o caminho curto: a proporção da foto já é parecida com a da tela, então ela preenche
+ * tudo sem fundo nenhum e sem perder quase nada nas beiradas. `contain` é o caminho **principal**,
+ * não o de exceção: todas as 7 fotos com dimensão no banco são 1600×1200, e três dos quatro
+ * destinos são 9:16 — um `cover` de 4:3 num 9:16 descartaria uns 58% da largura e entregaria o
+ * meio do veículo e nada mais. Então a foto aparece inteira e o `backdrop` é ela mesma, ampliada
+ * e desfocada, sangrando até as bordas.
+ */
+export type PhotoFit = { mode: 'cover' | 'contain'; backdrop: Frame | null; photo: Frame };
+
+/**
+ * Uma parada da rampa de opacidade do véu. `offset` é a fração da altura do véu, de 0 no topo a 1
+ * na borda de baixo da peça.
+ *
+ * As paradas saíram do componente de desenho e viraram dado porque é a única forma de o piso de
+ * contraste do §4.4 do spec — 0,82 de opacidade composta sob qualquer linha de texto — ser provado
+ * por teste em vez de por olho. Com a rampa escondida no `<Rect>`, "texto branco sobre foto" é
+ * aposta; aqui é conta conferida.
+ */
+export type ScrimStop = { offset: number; alpha: number };
+
+export type Scrim = { y: number; height: number; stops: readonly ScrimStop[] };
+
 export type ArtLayout = {
-  spec: FormatSpec;
+  spec: DestinationSpec;
   column: { x: number; width: number };
   logo: Frame;
+  fit: PhotoFit;
+  scrim: Scrim;
+  /**
+   * O véu curto do topo, que dá leito à logo (§4.2). Separado do véu de baixo de propósito: este é
+   * **suave e curto** e existe para a marca não desaparecer sobre foto clara; aquele é o que torna
+   * o bloco de texto legível. Juntá-los num só faria a peça virar túnel.
+   */
+  logoScrim: Scrim;
   /** Fundo sólido do selo. O selo sem pílula vira legenda da logo em vez de etiqueta do anúncio. */
-  kickerPill: Frame;
-  kicker: Placed;
+  badgePill: Frame;
+  badge: Placed;
   title: Placed;
-  meta: Placed;
-  /** Painel atrás da foto, na largura da coluna. A foto é centralizada dentro dele. */
-  photoPanel: Frame;
-  photo: Frame;
+  /** A linha de dados é o segundo bloco a cair sob aperto (§4.3): sem ela, `null`. */
+  meta: Placed | null;
   /** Placa do preço. É o que faz o preço vencer o telefone sem precisar de corpo maior. */
   pricePlate: Frame;
   priceLabel: Placed;
   price: Placed;
   phone: Placed;
-  note: Placed;
+  /** A observação é a linha mais dispensável da peça: sem texto, o bloco não existe. */
+  note: Placed | null;
+  /**
+   * A tarja de VENDIDO/RESERVADO, **sobre a foto** e não no rodapé — §3.3.11 e §4.5 do spec. É
+   * trava comercial: uma pílula discreta no rodapé é garantia bem mais fraca que uma tarja
+   * atravessando o veículo, e "veículo vendido parecendo oferta disponível" é o anti-objetivo que o
+   * estúdio inteiro existe para não cometer. `frame` é a faixa com véu próprio; `text` é o bloco
+   * medido dentro dela — era justamente o não-estar-medido o defeito: 60 px cravados sobre um painel
+   * que podia ter 202, com "RESERVADO" pedindo 334 e, por ser palavra única, vazando da peça.
+   */
+  statusBand: { frame: Frame; text: Placed } | null;
+  /** O mesmo tratamento para a marca d'água de rascunho/arquivado, hoje desenhada em largura cheia
+   * ignorando a área segura. */
+  watermark: { frame: Frame; text: Placed } | null;
+  /**
+   * O que o teto de altura obrigou a deixar de fora, na ordem em que foi deixado. Vazio é o caso
+   * normal — e é o que todo conteúdo do estoque de hoje produz.
+   *
+   * Existe como dado, e não como silêncio, porque descartar a observação de uma peça é decisão
+   * visível: quem monta precisa poder saber que a linha que digitou não entrou, e a tela da
+   * Tarefa 11 só pode dizer isso se o layout contar. Título, preço e telefone nunca entram aqui.
+   */
+  dropped: readonly ('note' | 'meta')[];
 };
 
 /**
- * Respiro entre blocos, por hierarquia e não por régua única. O que separa assuntos respira mais;
- * o que pertence ao mesmo assunto cola. Telefone e observação são um rodapé só, por isso o 6.
+ * Respiro acima de cada bloco, por hierarquia e não por régua única. O que separa assuntos respira
+ * mais; o que pertence ao mesmo assunto cola. Telefone e observação são um rodapé só, por isso o 6.
  * Espaçamento uniforme é o que faz uma peça parecer montada em vez de desenhada.
+ *
+ * `price` é o único que não separa blocos: ele mora dentro da placa, entre o rótulo e o valor.
  */
-const GAP = { kicker: 20, title: 14, meta: 14, photo: 34, plate: 34, price: 4, phone: 28, note: 6 } as const;
-/** `price` mora dentro da placa; os demais separam blocos e são eles que cedem no aperto. */
-const OUTER_GAPS = (['kicker', 'title', 'meta', 'photo', 'plate', 'phone', 'note'] as const);
+const GAP = { title: 16, meta: 14, plate: 30, phone: 28, note: 6, price: 4 } as const;
+
 const LOGO_HEIGHT = 108;
-/** Abaixo disto a foto deixa de comunicar o veículo; antes de encolher mais, os respiros cedem. */
-const MIN_PHOTO_HEIGHT = 260;
-const KICKER_PAD = { x: 20, y: 11 } as const;
+/**
+ * A proporção dos arquivos em `public/` (800×376), para quando a imagem ainda não carregou. Sem
+ * isto a logo seria medida com largura zero, que é como ela passava por qualquer área segura.
+ */
+const LOGO_ASPECT_FALLBACK = 800 / 376;
+
+const BADGE_PAD = { x: 20, y: 11 } as const;
 const PLATE_PAD = { x: 26, y: 22 } as const;
-/** Margem do painel ao redor da foto, como o passe-partout de um quadro. */
-const PHOTO_MAT = 14;
+
 /** O Konva soma o espaçamento depois de cada caractere; o cálculo da pílula tem de somar também. */
-export const KICKER_TRACKING = 2.2;
+export const BADGE_TRACKING = 2.2;
 export const PRICE_LABEL_TRACKING = 1.6;
+
+/**
+ * Recuo da coluna de conteúdo dentro da caixa segura. Hoje é zero: a caixa segura já é a margem,
+ * e no TikTok cada pixel de largura conta — é lá que "R$ 460.000,00" a 900 disputa a coluna mais
+ * estreita das quatro. A fórmula de centralização fica explícita de propósito, porque é ela que
+ * mantém as duas margens iguais se um dia a coluna encolher, e é ela que, no TikTok, desloca o
+ * conteúdo para a esquerda junto com a caixa segura assimétrica (l120 r180) — contra a trilha de
+ * ícones da direita.
+ */
+const COLUMN_INSET = 0;
+
+/**
+ * Quando a proporção da foto está a menos disto da proporção da peça, `cover` sem fundo. Fora
+ * disso, a foto inteira sobre o fundo desfocado. 15% é onde uma foto de celular em retrato num
+ * 9:16 cai de um lado e uma 4:3 de câmera cai do outro.
+ */
+export const COVER_TOLERANCE = 0.15;
+
+/**
+ * O teto do bloco de texto, em fração da altura da área segura (§4.3 do spec e Global Constraint
+ * do plano). Passar disto é a peça deixar de ser uma foto com legenda e voltar a ser a parede de
+ * texto que esta reescrita existe para desfazer.
+ *
+ * O teto morde onde a área segura é mais baixa: o Feed tem 1050 px de altura segura, contra 1270
+ * do TikTok, 1330 do Stories e 1440 do Status. Com conteúdo plausível só o Feed chega a passar —
+ * é por isso que os testes de aperto são escritos nele.
+ */
+export const TEXT_BLOCK_MAX = 0.55;
+
+/** Os corpos do título no caminho normal: até duas linhas, do maior que couber para baixo. */
+const TITLE_SIZES = [76, 68, 60, 54, 48] as const;
+/**
+ * O terceiro degrau do §4.3 — "o título desce de corpo e aceita até 3 linhas".
+ *
+ * A lista **se estende para baixo** porque é o corpo que derruba a altura: aceitar mais linhas num
+ * corpo maior produz um bloco mais alto, não mais baixo (texto largura escala com o corpo, então
+ * corpo menor dá menos linhas *e* linhas menores). As 3 linhas são o limite que impede o título de
+ * virar parágrafo num corpo minúsculo; a escolha do corpo é guiada pelo teto de altura.
+ */
+const TITLE_SIZES_TIGHT = [...TITLE_SIZES, 44, 40, 36, 32] as const;
+const TITLE_LINES_TIGHT = 3;
+
+/** O texto da tarja por situação do cadastro. Fora destas duas, não há tarja. */
+const STATUS_BAND_TEXT: Record<string, string> = { sold: 'VENDIDO', reserved: 'RESERVADO' };
+const STATUS_BAND_SIZES = [96, 84, 72, 64, 56, 48] as const;
+
+/** As situações que não geram peça comercial (§7 do spec) e por isso saem marcadas. */
+const WATERMARK_STATUSES = ['draft', 'archived'];
+/** Exatamente este texto: é o que diz a quem recebe a imagem que ela não é anúncio. */
+const WATERMARK_TEXT = 'PRÉVIA · NÃO PUBLICAR';
+const WATERMARK_SIZES = [64, 56, 48, 42, 36] as const;
+
+/** Respiro interno da faixa, dos dois lados do texto. */
+const BAND_PAD = { x: 24, y: 16 } as const;
+/** Folga entre a base da logo e o topo da faixa, para a marca não ficar encostada na tarja. */
+const BAND_GAP = 24;
+
+/** O que o estoque real tem quando o banco não registrou dimensão: 1600×1200. */
+const FALLBACK_PHOTO_ASPECT = 4 / 3;
+
+/** Quanto o véu sobe acima do bloco de texto, em frações da altura dele (§4.2 do spec: ~1,35×). */
+const SCRIM_RISE = 0.35;
+/** §4.4 do spec: o piso que mantém 4,5:1 de texto branco sobre a foto mais clara do estoque. */
+const SCRIM_FLOOR = 0.82;
+/** O piso é alcançado estes pixels **antes** da primeira linha, não em cima dela. */
+const SCRIM_LEAD = 12;
+/**
+ * O véu curto do topo, que dá leito à logo (§4.2 do spec, em letra).
+ *
+ * `LOGO_SCRIM_SOFT` é leito, não tarja: a logo negativa é branca e, sobre céu claro ou lataria
+ * branca — a cor mais comum do corpus do §13 —, sem véu ela desaparece. Quando a imagem da logo não
+ * carrega, o desenho escreve a marca ali, e aí não é mais um gráfico: é **linha de texto**, então
+ * vale a Global Constraint do véu composto ≥ 0,82. Por isso são dois valores, escolhidos pelo mesmo
+ * dado que diz se há imagem (`logoAspect`).
+ */
+const LOGO_SCRIM_SOFT = 0.55;
+/** O quanto o véu do topo continua desbotando abaixo da logo, para não terminar numa linha reta. */
+const LOGO_SCRIM_TAIL = 0.8;
 
 const tracked = (lines: readonly string[], size: number, weight: number, tracking: number, measure: Measure) =>
   Math.max(...lines.map((line) => measure(line, size, weight) + tracking * line.length));
 
-export function layoutArt(format: ArtFormat, content: ArtContent, measure: Measure): ArtLayout {
-  const spec = formatSpec(format);
-  const x = spec.safe.left;
-  const width = spec.width - spec.safe.left - spec.safe.right;
-  const top = spec.safe.top;
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+/**
+ * A proporção utilizável, ou o recuo.
+ *
+ * Tanto `photoAspect` quanto `logoAspect` nascem de `image.width / image.height`, e uma imagem que
+ * decodifica com dimensão zero entrega `0 / 0`, ou seja `NaN`. Sem este filtro o `NaN` atravessa
+ * toda a geometria sem falhar em lugar nenhum e a peça sai **sem o veículo**, em silêncio — e
+ * silêncio é o pior resultado possível para quem só vai descobrir depois de publicar. Negativo e
+ * infinito entram pela mesma porta.
+ */
+const usableAspect = (value: number | null, fallback: number) =>
+  value !== null && Number.isFinite(value) && value > 0 ? value : fallback;
+
+/**
+ * A opacidade composta do véu na altura `y` da peça, interpolando a rampa.
+ *
+ * É o que torna o piso de contraste verificável: `scrimAlphaAt(l.scrim, bloco.y) >= 0.82` é uma
+ * afirmação sobre o que a pessoa vê, não sobre o que o código pretendia.
+ */
+export function scrimAlphaAt(scrim: Scrim, y: number): number {
+  const { stops } = scrim;
+  if (!stops.length || scrim.height <= 0) return 0;
+  const offset = clamp((y - scrim.y) / scrim.height, 0, 1);
+  if (offset <= stops[0].offset) return stops[0].alpha;
+  for (let i = 1; i < stops.length; i += 1) {
+    const anterior = stops[i - 1];
+    const atual = stops[i];
+    if (offset > atual.offset) continue;
+    const vao = atual.offset - anterior.offset;
+    const t = vao <= 0 ? 1 : (offset - anterior.offset) / vao;
+    return anterior.alpha + (atual.alpha - anterior.alpha) * t;
+  }
+  return stops[stops.length - 1].alpha;
+}
+
+export function layoutArt(destination: ArtDestination, content: ArtContent, measure: Measure): ArtLayout {
+  const spec = destinationSpec(destination);
+  const safeWidth = spec.width - spec.safe.left - spec.safe.right;
+  const width = safeWidth - COLUMN_INSET * 2;
+  const x = spec.safe.left + (safeWidth - width) / 2;
   const bottom = spec.height - spec.safe.bottom;
   const plateWidth = width - PLATE_PAD.x * 2;
 
-  const kicker = fitLines({ text: content.kicker, maxWidth: width - KICKER_PAD.x * 2 - KICKER_TRACKING * content.kicker.length, maxLines: 1, sizes: [26, 24, 22], weight: 700, measure });
-  const title = fitLines({ text: content.title, maxWidth: width, maxLines: 2, sizes: [76, 68, 60, 54, 48], weight: 800, measure });
-  const meta = fitLines({ text: content.meta, maxWidth: width, maxLines: 1, sizes: [27, 25, 23], weight: 400, measure });
-  const priceLabel = fitLines({ text: content.priceLabel, maxWidth: plateWidth - PRICE_LABEL_TRACKING * content.priceLabel.length, maxLines: 1, sizes: [23, 21], weight: 700, measure });
-  const price = fitLines({ text: content.price, maxWidth: plateWidth, maxLines: 1, sizes: [92, 84, 76, 68, 60], weight: 800, measure });
+  const badge = fitLines({ text: content.badge, maxLines: 1, sizes: [26, 24, 22], weight: WEIGHT.black, measure,
+    maxWidth: width - BADGE_PAD.x * 2 - BADGE_TRACKING * content.badge.length });
+  const meta = fitLines({ text: content.meta, maxWidth: width, maxLines: 1, sizes: [27, 25, 23], weight: WEIGHT.regular, measure });
+  const priceLabel = fitLines({ text: content.priceLabel, maxLines: 1, sizes: [23, 21], weight: WEIGHT.black, measure,
+    maxWidth: plateWidth - PRICE_LABEL_TRACKING * content.priceLabel.length });
+  const price = fitLines({ text: content.price, maxWidth: plateWidth, maxLines: 1, sizes: [92, 84, 76, 68, 60], weight: WEIGHT.black, measure });
   // O telefone recuou de 46 para 38: na placa o preço já domina, e dois blocos no mesmo corpo
   // competiam em vez de se completarem.
-  const phone = fitLines({ text: content.phone, maxWidth: width, maxLines: 1, sizes: [38, 34, 30], weight: 800, measure });
-  const note = fitLines({ text: content.note, maxWidth: width, maxLines: 2, sizes: [27, 25, 23, 21], weight: 400, measure });
+  const phone = fitLines({ text: content.phone, maxWidth: width, maxLines: 1, sizes: [38, 34, 30], weight: WEIGHT.black, measure });
+  const note = content.note.trim()
+    ? fitLines({ text: content.note, maxWidth: width, maxLines: 2, sizes: [27, 25, 23, 21], weight: WEIGHT.regular, measure })
+    : null;
 
   const lineBox = (fit: { size: number; lines: readonly string[] }, leading = 1.06) =>
     Math.ceil(fit.lines.length * fit.size * leading);
 
-  const textHeights = {
-    kicker: lineBox(kicker),
-    title: lineBox(title, 1.04),
+  const h = {
+    badge: lineBox(badge),
     meta: lineBox(meta),
     priceLabel: lineBox(priceLabel),
     price: lineBox(price, 1.02),
     phone: lineBox(phone),
-    note: lineBox(note, 1.3),
+    note: note ? lineBox(note, 1.3) : 0,
   };
-  const pillHeight = textHeights.kicker + KICKER_PAD.y * 2;
-  const plateHeight = textHeights.priceLabel + GAP.price + textHeights.price + PLATE_PAD.y * 2;
+  const pillHeight = h.badge + BADGE_PAD.y * 2;
+  const plateHeight = h.priceLabel + GAP.price + h.price + PLATE_PAD.y * 2;
 
-  const fixed = LOGO_HEIGHT + pillHeight + textHeights.title + textHeights.meta
-    + plateHeight + textHeights.phone + textHeights.note;
-  const gaps = OUTER_GAPS.reduce((sum, key) => sum + GAP[key], 0);
-  const available = bottom - top;
+  type Fit = { size: number; lines: readonly string[] };
+  type Pilha = Omit<ArtLayout, 'spec' | 'column' | 'logo' | 'fit' | 'scrim' | 'logoScrim'
+    | 'statusBand' | 'watermark'> & { textTop: number };
 
-  // A foto fica com a sobra. Se a sobra ficar menor que o mínimo, os respiros encolhem juntos
-  // antes de a foto apertar mais — e o texto segue inteiro de qualquer forma.
-  //
-  // `MIN_PHOTO_HEIGHT` é preferência, não piso: forçá-lo com um `Math.max` empurrava a pilha para
-  // fora da área segura no quadrado, que é o formato mais baixo. Preferir uma foto pequena a um
-  // texto por cima da interface da rede é a mesma escolha de sempre — quem cede é a imagem.
-  let photoHeight = available - fixed - gaps;
-  let squeeze = 1;
-  if (photoHeight < MIN_PHOTO_HEIGHT) {
-    const deficit = MIN_PHOTO_HEIGHT - photoHeight;
-    squeeze = Math.max(0.35, 1 - deficit / gaps);
-    photoHeight = Math.max(0, available - fixed - gaps * squeeze);
+  /**
+   * A pilha montada **de baixo para cima**, a partir da base da área segura: observação, telefone,
+   * placa de preço, linha de dados, título, pílula do selo. É esta direção que faz o texto crescer
+   * para dentro do véu em vez de para dentro da foto — e é ela que mantém o último bloco encostado
+   * na base mesmo quando um bloco do meio é descartado.
+   */
+  const montar = (title: Fit, { comMeta, comNote }: { comMeta: boolean; comNote: boolean }): Pilha => {
+    const dropped: ('note' | 'meta')[] = [];
+    let y = bottom;
+
+    let noteAt: Placed | null = null;
+    if (note && comNote) {
+      y -= h.note;
+      noteAt = { x, y, width, height: h.note, size: note.size, lines: note.lines };
+      y -= GAP.note;
+    } else if (note) {
+      dropped.push('note');
+    }
+
+    y -= h.phone;
+    const phoneAt: Placed = { x, y, width, height: h.phone, size: phone.size, lines: phone.lines };
+    y -= GAP.phone;
+
+    y -= plateHeight;
+    const pricePlate: Frame = { x, y, width, height: plateHeight };
+    const priceLabelAt: Placed = { x: x + PLATE_PAD.x, y: y + PLATE_PAD.y, width: plateWidth,
+      height: h.priceLabel, size: priceLabel.size, lines: priceLabel.lines };
+    const priceAt: Placed = { x: x + PLATE_PAD.x, y: priceLabelAt.y + h.priceLabel + GAP.price,
+      width: plateWidth, height: h.price, size: price.size, lines: price.lines };
+    y -= GAP.plate;
+
+    let metaAt: Placed | null = null;
+    if (comMeta) {
+      y -= h.meta;
+      metaAt = { x, y, width, height: h.meta, size: meta.size, lines: meta.lines };
+      y -= GAP.meta;
+    } else {
+      dropped.push('meta');
+    }
+
+    const titleHeight = lineBox(title, 1.04);
+    y -= titleHeight;
+    const titleAt: Placed = { x, y, width, height: titleHeight, size: title.size, lines: title.lines };
+    y -= GAP.title;
+
+    y -= pillHeight;
+    const badgePill: Frame = { x, y, height: pillHeight,
+      width: Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, BADGE_TRACKING, measure)) + BADGE_PAD.x * 2 };
+    const badgeAt: Placed = { x: x + BADGE_PAD.x, y: y + BADGE_PAD.y,
+      width: badgePill.width - BADGE_PAD.x * 2, height: h.badge, size: badge.size, lines: badge.lines };
+
+    return { badgePill, badge: badgeAt, title: titleAt, meta: metaAt, pricePlate,
+      priceLabel: priceLabelAt, price: priceAt, phone: phoneAt, note: noteAt, dropped,
+      textTop: badgePill.y };
+  };
+
+  // O teto, e o que cede ao bater nele. A ordem é a do §4.3: primeiro a observação, depois a linha
+  // de dados, e só então o título desce de corpo. Título, preço e telefone não cedem nunca.
+  const limite = TEXT_BLOCK_MAX * (spec.height - spec.safe.top - spec.safe.bottom);
+  const cabe = (p: Pilha) => bottom - p.textTop <= limite;
+
+  const tituloNormal = fitLines({ text: content.title, maxWidth: width, maxLines: 2,
+    sizes: TITLE_SIZES, weight: WEIGHT.black, measure });
+
+  let pilha = montar(tituloNormal, { comMeta: true, comNote: true });
+  if (!cabe(pilha)) pilha = montar(tituloNormal, { comMeta: true, comNote: false });
+  if (!cabe(pilha)) pilha = montar(tituloNormal, { comMeta: false, comNote: false });
+  if (!cabe(pilha)) pilha = montar(tituloApertado(), { comMeta: false, comNote: false });
+
+  /**
+   * O terceiro degrau. Desce a lista de corpos e devolve o primeiro em que o título ocupa no
+   * máximo 3 linhas **e** a pilha inteira cabe no teto; se nenhum cabe, o menor que ainda respeita
+   * as 3 linhas; se nem isso, o texto inteiro no menor corpo — porque palavra nenhuma é descartada
+   * em hipótese alguma, nem aqui.
+   */
+  function tituloApertado(): Fit {
+    let ultimo: Fit | null = null;
+    for (const size of TITLE_SIZES_TIGHT) {
+      const lines = wrapByWidth(content.title, size, width, WEIGHT.black, measure);
+      if (lines.length > TITLE_LINES_TIGHT) continue;
+      ultimo = { size, lines };
+      if (cabe(montar(ultimo, { comMeta: false, comNote: false }))) return ultimo;
+    }
+    if (ultimo) return ultimo;
+    const size = TITLE_SIZES_TIGHT[TITLE_SIZES_TIGHT.length - 1];
+    return { size, lines: wrapByWidth(content.title, size, width, WEIGHT.black, measure) };
   }
-  const gap = (key: (typeof OUTER_GAPS)[number]) => Math.round(GAP[key] * squeeze);
 
-  let y = top;
-  const logo: Frame = { x, y, width: 0, height: LOGO_HEIGHT };
-  y += LOGO_HEIGHT + gap('kicker');
+  const { textTop, ...blocos } = pilha;
 
-  const kickerPill: Frame = { x, y, height: pillHeight,
-    width: Math.ceil(tracked(kicker.lines, kicker.size, 700, KICKER_TRACKING, measure)) + KICKER_PAD.x * 2 };
-  const kickerAt: Placed = { x: x + KICKER_PAD.x, y: y + KICKER_PAD.y,
-    width: kickerPill.width - KICKER_PAD.x * 2, height: textHeights.kicker, size: kicker.size, lines: kicker.lines };
-  y += pillHeight + gap('title');
+  // A logo é ancorada no topo da área segura e agora tem largura de verdade, derivada da proporção
+  // da imagem. Presa à largura da coluna para que uma logo muito deitada não vaze de lado.
+  const logoWidth = Math.min(width, LOGO_HEIGHT * usableAspect(content.logoAspect, LOGO_ASPECT_FALLBACK));
+  const logo: Frame = { x, y: spec.safe.top, width: logoWidth, height: LOGO_HEIGHT };
 
-  const titleAt: Placed = { x, y, width, height: textHeights.title, size: title.size, lines: title.lines };
-  y += textHeights.title + gap('meta');
-  const metaAt: Placed = { x, y, width, height: textHeights.meta, size: meta.size, lines: meta.lines };
-  y += textHeights.meta + gap('photo');
+  // O véu do topo: da borda de cima até a base da logo em opacidade cheia, desbotando depois. A
+  // opacidade é escolhida pelo que será desenhado ali — imagem da logo ou a marca escrita.
+  const logoScrimHeight = logo.y + logo.height + Math.round(LOGO_SCRIM_TAIL * LOGO_HEIGHT);
+  const logoScrimAlpha = usableAspect(content.logoAspect, 0) > 0 ? LOGO_SCRIM_SOFT : SCRIM_FLOOR;
+  const logoScrim: Scrim = {
+    y: 0,
+    height: logoScrimHeight,
+    stops: [
+      { offset: 0, alpha: logoScrimAlpha },
+      { offset: (logo.y + logo.height) / logoScrimHeight, alpha: logoScrimAlpha },
+      { offset: 1, alpha: 0 },
+    ],
+  };
 
-  // O quadro assume a proporção da foto: sem tarja preta e sem caixa decorativa anunciando o vazio.
-  // O painel **abraça** a foto em vez de ocupar a coluna inteira. Painel de largura fixa com foto
-  // em pé dentro vira caixa dentro de caixa, que lê como erro de montagem; abraçando, ele é moldura
-  // e cumpre o que tem de cumprir — dar borda a veículo escuro sobre fundo escuro.
-  const aspect = content.photoAspect ?? 4 / 3;
-  const inner = { width: width - PHOTO_MAT * 2, height: photoHeight - PHOTO_MAT * 2 };
-  let photoWidth = Math.min(inner.width, inner.height * aspect);
-  let drawnHeight = photoWidth / aspect;
-  if (drawnHeight > inner.height) { drawnHeight = inner.height; photoWidth = drawnHeight * aspect; }
-  const photo: Frame = { x: x + (width - photoWidth) / 2, y: y + (photoHeight - drawnHeight) / 2,
-    width: photoWidth, height: drawnHeight };
-  const photoPanel: Frame = { x: photo.x - PHOTO_MAT, y: photo.y - PHOTO_MAT,
-    width: photo.width + PHOTO_MAT * 2, height: photo.height + PHOTO_MAT * 2 };
-  y += photoHeight + gap('plate');
+  // O véu começa acima do topo do texto e vai até a borda de baixo da peça. O piso de 0,82 é o que
+  // fixa quão cedo a rampa precisa começar; a forma dela entre o piso e a borda é escolha daqui.
+  const blockHeight = bottom - textTop;
+  const scrimY = Math.max(0, textTop - Math.round(SCRIM_RISE * blockHeight));
+  const scrimHeight = spec.height - scrimY;
+  const floorOffset = clamp((textTop - SCRIM_LEAD - scrimY) / scrimHeight, 0, 1);
+  const scrim: Scrim = {
+    y: scrimY,
+    height: scrimHeight,
+    stops: floorOffset > 0
+      ? [{ offset: 0, alpha: 0 }, { offset: floorOffset, alpha: SCRIM_FLOOR }, { offset: 1, alpha: 1 }]
+      // Bloco de texto tão baixo que não sobra rampa: o véu já nasce no piso.
+      : [{ offset: 0, alpha: SCRIM_FLOOR }, { offset: 1, alpha: 1 }],
+  };
 
-  const pricePlate: Frame = { x, y, width, height: plateHeight };
-  const priceLabelAt: Placed = { x: x + PLATE_PAD.x, y: y + PLATE_PAD.y, width: plateWidth,
-    height: textHeights.priceLabel, size: priceLabel.size, lines: priceLabel.lines };
-  const priceAt: Placed = { x: x + PLATE_PAD.x, y: priceLabelAt.y + textHeights.priceLabel + GAP.price,
-    width: plateWidth, height: textHeights.price, size: price.size, lines: price.lines };
-  y += plateHeight + gap('phone');
+  /**
+   * Uma faixa atravessando a coluna de conteúdo, **sobre a foto**: centralizada na região livre
+   * entre a base da logo e o topo do véu.
+   *
+   * Ancorada na região livre e não num número fixo de propósito: o véu sobe junto com o bloco de
+   * texto, e uma faixa cravada em pixel acabaria dentro do véu no aperto — a tarja de vendido
+   * viraria mais uma linha de rodapé, que é precisamente a garantia mais fraca que o §3.3.11
+   * recusou. O texto é medido com `fitLines`, como qualquer outro bloco.
+   */
+  const faixa = (texto: string, sizes: readonly number[]) => {
+    const fit = fitLines({ text: texto, maxWidth: width - BAND_PAD.x * 2, maxLines: 1, sizes,
+      weight: WEIGHT.black, measure });
+    const textHeight = lineBox(fit);
+    const height = textHeight + BAND_PAD.y * 2;
+    const livre = { top: logo.y + logo.height + BAND_GAP, bottom: scrim.y };
+    // O piso vence o teto quando a região livre é menor que a faixa: encostar na logo e na área
+    // segura é pior que encostar no véu, e o que importa é a tarja estar sobre a foto.
+    const y = Math.max(livre.top, Math.min((livre.top + livre.bottom) / 2 - height / 2, livre.bottom - height));
+    const frame: Frame = { x, y, width, height };
+    return { frame, text: { x: x + BAND_PAD.x, y: y + BAND_PAD.y, width: width - BAND_PAD.x * 2,
+      height: textHeight, size: fit.size, lines: fit.lines } };
+  };
 
-  const phoneAt: Placed = { x, y, width, height: textHeights.phone, size: phone.size, lines: phone.lines };
-  y += textHeights.phone + gap('note');
-  const noteAt: Placed = { x, y, width, height: textHeights.note, size: note.size, lines: note.lines };
+  const bandText = STATUS_BAND_TEXT[content.status];
+  const statusBand = bandText ? faixa(bandText, STATUS_BAND_SIZES) : null;
+  const watermark = WATERMARK_STATUSES.includes(content.status)
+    ? faixa(WATERMARK_TEXT, WATERMARK_SIZES)
+    : null;
 
-  return { spec, column: { x, width }, logo, kickerPill, kicker: kickerAt, title: titleAt, meta: metaAt,
-    photoPanel, photo, pricePlate, priceLabel: priceLabelAt, price: priceAt, phone: phoneAt, note: noteAt };
+  return { spec, column: { x, width }, logo, fit: fitPhoto(spec, content.photoAspect, logo, scrim),
+    scrim, logoScrim, ...blocos, statusBand, watermark };
+}
+
+/**
+ * A geometria da foto. O tamanho dela **não depende do texto** — é a inversão que esta reescrita
+ * existe para fazer. O que o texto move é só a altura em que a foto é centralizada, porque o véu
+ * subiu.
+ */
+function fitPhoto(spec: DestinationSpec, photoAspect: number | null, logo: Frame, scrim: Scrim): PhotoFit {
+  const aspect = usableAspect(photoAspect, FALLBACK_PHOTO_ASPECT);
+  const canvasAspect = spec.width / spec.height;
+
+  if (Math.abs(aspect / canvasAspect - 1) <= COVER_TOLERANCE) {
+    // Proporção parecida com a da peça: preenche tudo, sem fundo e sem perder quase nada.
+    const width = Math.max(spec.width, spec.height * aspect);
+    const height = width / aspect;
+    return { mode: 'cover', backdrop: null,
+      photo: { x: (spec.width - width) / 2, y: (spec.height - height) / 2, width, height } };
+  }
+
+  // A foto inteira, na maior escala que caiba na peça — para a 4:3 do estoque isso é a largura
+  // cheia, que é o que dá os ~42% de área num 9:16 e ~60% num 4:5 do §4.1 do spec.
+  const width = Math.min(spec.width, spec.height * aspect);
+  const height = width / aspect;
+  // Centralizada na região livre entre a base da logo e o topo do véu, e **presa dentro da peça**:
+  // a foto é o herói e nunca sai cortada, nem quando a região livre é menor que ela. O que fica
+  // sob o véu segue sendo foto, não tarja.
+  const livre = { top: logo.y + logo.height, bottom: scrim.y };
+  const y = clamp((livre.top + livre.bottom) / 2 - height / 2, 0, spec.height - height);
+  return {
+    mode: 'contain',
+    backdrop: { x: 0, y: 0, width: spec.width, height: spec.height },
+    photo: { x: (spec.width - width) / 2, y, width, height },
+  };
 }
 
 /** Linha única com o que o cadastro tem. Campo vazio não vira separador solto. */

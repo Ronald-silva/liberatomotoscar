@@ -1,34 +1,84 @@
 import { describe, expect, it } from 'vitest';
-import { ART_SAFE, buildMetaLine, fitLines, formatSpec, layoutArt, type ArtContent, type Measure } from './art-layout';
-import { artFormats, type ArtFormat } from './templates';
+import { DESTINATION_ORDER, destinationSpec } from './destinations';
+import { createArchivoMeasure } from './measure-archivo';
+import { buildMetaLine, fitLines, layoutArt, scrimAlphaAt, BADGE_TRACKING, PRICE_LABEL_TRACKING,
+  TEXT_BLOCK_MAX,
+  type ArtContent, type ArtLayout, type Measure, type Placed } from './art-layout';
+import { artBadges } from './templates';
 
-/** Medida determinística: largura proporcional ao texto, sem depender de fonte nem de DOM. */
-const measure: Measure = (text, size, weight) => text.length * size * (weight >= 600 ? 0.62 : 0.55);
+/**
+ * Mede com a métrica real da Archivo, igual à produção (Tarefa 1). O modelo anterior era
+ * `length × size × 0,62` — outro modelo, e foi por isso que 674 testes verdes conviveram com um
+ * rodapé estourando a área segura.
+ */
+const measure = createArchivoMeasure();
 
-const FORMATOS = Object.keys(artFormats) as ArtFormat[];
+/** O corpus é o estoque real (§13 do spec), não invenção. */
+const CORPUS = [
+  { title: 'Volkswagen Saveiro', meta: '2024 · 56.000 km · Branca', price: 'R$ 69.999,00' },
+  { title: 'Yamaha Lander 250', meta: '2023 · 23.218 km · Vermelho', price: 'R$ 25.300,00' },
+  { title: 'Honda Pop', meta: '660 km · Branca com banco vermelho', price: 'R$ 13.700,00' },
+  { title: 'Yamaha Crosser', meta: 'Vermelha e preta', price: 'R$ 17.500,00' },
+  { title: 'Fiat Strada', meta: '2016 · 89.000 km · Cinza-escuro', price: 'R$ 460.000,00' },
+];
+
+/** Retrato, quadrada, paisagem, panorâmica — e `null`, que é o que 9 das 16 fotos do estoque dão. */
+const PROPORCOES = [4 / 3, 3 / 4, 1, 16 / 9, 2, null];
 
 function conteudo(overrides: Partial<ArtContent> = {}): ArtContent {
   return {
     title: 'Honda CG 160 Titan',
     meta: '2019 · 42.380 km · Preta',
-    kicker: 'RECÉM-CHEGADO',
+    badge: 'RECÉM-CHEGADO',
     priceLabel: 'PREÇO DO ANÚNCIO',
     price: 'R$ 18.900,00',
     phone: '(85) 99636-5664',
     note: 'Consulte disponibilidade e condições',
+    // A situação do cadastro, que decide a tarja e a marca d'água. O caso comum é o publicado:
+    // nem tarja nem marca d'água.
+    status: 'published',
     photoAspect: 3 / 4,
+    logoAspect: null,
     ...overrides,
   };
 }
 
 /** Todos os blocos de texto da arte, para varrer invariantes de uma vez. */
-function blocos(l: ReturnType<typeof layoutArt>) {
-  return [l.kicker, l.title, l.meta, l.priceLabel, l.price, l.phone, l.note];
+function blocos(l: ArtLayout) {
+  // A observação é o primeiro bloco a cair sob aperto, e aí ela vem `null`.
+  return [l.badge, l.title, l.meta, l.priceLabel, l.price, l.phone, l.note].filter((b) => b !== null);
 }
 
-/** Os blocos sólidos desenhados atrás do texto: pílula do selo, painel da foto, placa do preço. */
-function fundos(l: ReturnType<typeof layoutArt>) {
-  return [l.kickerPill, l.photoPanel, l.pricePlate];
+/**
+ * Cada bloco com o peso e o espaçamento com que ele é de fato desenhado.
+ *
+ * Existe porque `Placed.width` é a largura **declarada** do bloco (a da coluna, ou a da placa), não
+ * a do texto medido — então toda asserção de área segura feita sobre `x + width` é uma identidade
+ * aritmética e não prova nada. O que prova é comparar o texto desenhado contra a caixa que ele diz
+ * ocupar, e é isso que esta lista permite.
+ */
+function blocosMedidos(l: ArtLayout) {
+  return [
+    { nome: 'selo', bloco: l.badge, weight: 900, tracking: BADGE_TRACKING },
+    { nome: 'titulo', bloco: l.title, weight: 900, tracking: 0 },
+    // A linha de dados é anulável desde que o teto de altura pode descartá-la (§4.3): listá-la
+    // sem checar fazia este helper explodir com `null` em vez de medir o que existe.
+    ...(l.meta ? [{ nome: 'dados', bloco: l.meta, weight: 400, tracking: 0 }] : []),
+    { nome: 'rotulo do preco', bloco: l.priceLabel, weight: 900, tracking: PRICE_LABEL_TRACKING },
+    { nome: 'preco', bloco: l.price, weight: 900, tracking: 0 },
+    { nome: 'telefone', bloco: l.phone, weight: 900, tracking: 0 },
+    ...(l.note ? [{ nome: 'observacao', bloco: l.note, weight: 400, tracking: 0 }] : []),
+  ];
+}
+
+/** A largura que o Konva vai de fato desenhar para este bloco, tracking incluído. */
+function larguraDesenhada({ bloco, weight, tracking }: ReturnType<typeof blocosMedidos>[number]) {
+  return Math.max(...bloco.lines.map((linha) => measure(linha, bloco.size, weight) + tracking * linha.length));
+}
+
+/** Os blocos sólidos desenhados atrás do texto: pílula do selo e placa do preço. */
+function fundos(l: ArtLayout) {
+  return [l.badgePill, l.pricePlate];
 }
 
 /** `a` cabe inteiro dentro de `b`. */
@@ -40,131 +90,588 @@ function dentro(a: { x: number; y: number; width: number; height: number },
 describe('fitLines nunca descarta palavra', () => {
   it('devolve o texto inteiro mesmo quando nem o menor corpo cabe nas linhas pedidas', () => {
     const texto = 'Chevrolet S10 High Country 2.8 Turbo Diesel 4x4 Automatica Couro Multimidia';
-    const { lines } = fitLines({ text: texto, maxWidth: 300, maxLines: 2, sizes: [60, 40], weight: 700, measure });
+    const { lines } = fitLines({ text: texto, maxWidth: 300, maxLines: 2, sizes: [60, 40], weight: 900, measure });
     expect(lines.join(' ')).toBe(texto);
     expect(lines.length).toBeGreaterThan(2);
   });
 
   it('não acrescenta reticências em hipótese nenhuma', () => {
-    const { lines } = fitLines({ text: 'Palavra '.repeat(40).trim(), maxWidth: 200, maxLines: 1, sizes: [40, 20], weight: 700, measure });
+    const { lines } = fitLines({ text: 'Palavra '.repeat(40).trim(), maxWidth: 200, maxLines: 1, sizes: [40, 20], weight: 900, measure });
     expect(lines.join(' ')).not.toContain('…');
   });
 
   it('usa o maior corpo que couber nas linhas pedidas', () => {
-    const curto = fitLines({ text: 'Honda CG', maxWidth: 900, maxLines: 2, sizes: [76, 68, 60], weight: 700, measure });
+    const curto = fitLines({ text: 'Honda CG', maxWidth: 900, maxLines: 2, sizes: [76, 68, 60], weight: 900, measure });
     expect(curto.size).toBe(76);
-    const longo = fitLines({ text: 'Volkswagen Saveiro Robust', maxWidth: 400, maxLines: 2, sizes: [76, 68, 60], weight: 700, measure });
+    const longo = fitLines({ text: 'Volkswagen Saveiro Robust', maxWidth: 400, maxLines: 2, sizes: [76, 68, 60], weight: 900, measure });
     expect(longo.size).toBeLessThan(76);
   });
 
   it('parte palavra que sozinha não cabe, em vez de estourar a largura', () => {
-    const { lines } = fitLines({ text: 'Supercalifragilisticoexpialidoso', maxWidth: 120, maxLines: 9, sizes: [40], weight: 700, measure });
+    const { lines } = fitLines({ text: 'Supercalifragilisticoexpialidoso', maxWidth: 120, maxLines: 9, sizes: [40], weight: 900, measure });
     expect(lines.length).toBeGreaterThan(1);
-    for (const line of lines) expect(measure(line, 40, 700)).toBeLessThanOrEqual(120);
+    for (const line of lines) expect(measure(line, 40, 900)).toBeLessThanOrEqual(120);
   });
 });
 
-describe('o conteúdo respeita a área segura de cada plataforma', () => {
-  for (const format of FORMATOS) {
-    it(`${format}: nenhum bloco de texto sai da área livre da interface`, () => {
-      const spec = formatSpec(format);
-      const l = layoutArt(format, conteudo(), measure);
-      const direita = spec.width - spec.safe.right;
-      const base = spec.height - spec.safe.bottom;
-      for (const bloco of blocos(l)) {
-        expect(bloco.x).toBeGreaterThanOrEqual(spec.safe.left);
-        expect(bloco.x + bloco.width).toBeLessThanOrEqual(direita);
-        expect(bloco.y).toBeGreaterThanOrEqual(spec.safe.top);
-        expect(bloco.y + bloco.height).toBeLessThanOrEqual(base);
+describe('a foto aparece inteira e o fundo sangra', () => {
+  it.each(DESTINATION_ORDER)('%s: a foto aparece inteira e o fundo sangra', (id) => {
+    for (const aspect of PROPORCOES) {
+      const l = layoutArt(id, conteudo({ photoAspect: aspect }), measure);
+      const spec = destinationSpec(id);
+      if (l.fit.mode === 'contain') {
+        expect(l.fit.backdrop).toEqual({ x: 0, y: 0, width: spec.width, height: spec.height });
+        // "Inteira" é o ponto: a foto desenhada mantém a proporção da original.
+        expect(l.fit.photo.width / l.fit.photo.height).toBeCloseTo(aspect ?? 4 / 3, 2);
+        // E inteira também quer dizer dentro da peça: nada de veículo decapitado pela borda.
+        expect(l.fit.photo.x).toBeGreaterThanOrEqual(0);
+        expect(l.fit.photo.y).toBeGreaterThanOrEqual(0);
+        expect(l.fit.photo.x + l.fit.photo.width).toBeLessThanOrEqual(spec.width);
+        expect(l.fit.photo.y + l.fit.photo.height).toBeLessThanOrEqual(spec.height);
+      } else {
+        expect(l.fit.backdrop).toBeNull();
+        expect(l.fit.photo.width).toBeGreaterThanOrEqual(spec.width);
+        expect(l.fit.photo.height).toBeGreaterThanOrEqual(spec.height);
       }
-      for (const fundo of fundos(l)) {
-        expect(fundo.x).toBeGreaterThanOrEqual(spec.safe.left);
-        expect(fundo.x + fundo.width).toBeLessThanOrEqual(direita);
-        expect(fundo.y).toBeGreaterThanOrEqual(spec.safe.top);
-        expect(fundo.y + fundo.height).toBeLessThanOrEqual(base);
-      }
-      expect(l.photo.x).toBeGreaterThanOrEqual(spec.safe.left);
-      expect(l.photo.x + l.photo.width).toBeLessThanOrEqual(direita);
-      expect(l.photo.y + l.photo.height).toBeLessThanOrEqual(base);
-    });
-
-    it(`${format}: o texto segue dentro da área segura com título e observação longos`, () => {
-      const spec = formatSpec(format);
-      const l = layoutArt(format, conteudo({
-        title: 'Chevrolet S10 High Country Turbo Diesel',
-        note: 'Entrada a partir de 20% e parcelas que cabem no seu bolso, consulte',
-      }), measure);
-      const base = spec.height - spec.safe.bottom;
-      for (const bloco of blocos(l)) {
-        expect(bloco.x + bloco.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
-        expect(bloco.y + bloco.height).toBeLessThanOrEqual(base);
-      }
-    });
-  }
-
-  it('o TikTok reserva a coluna de ícones à direita e o rodapé da legenda', () => {
-    // É o que impede a arte de competir com curtir, comentar e compartilhar.
-    expect(ART_SAFE.tiktok.right).toBeGreaterThan(ART_SAFE.story.right);
-    expect(ART_SAFE.tiktok.bottom).toBeGreaterThan(ART_SAFE.story.bottom);
-    const tiktok = layoutArt('tiktok', conteudo(), measure);
-    const story = layoutArt('story', conteudo(), measure);
-    expect(tiktok.column.width).toBeLessThan(story.column.width);
-    expect(tiktok.note.y + tiktok.note.height).toBeLessThan(story.note.y + story.note.height);
+    }
   });
-});
 
-describe('a foto é o bloco elástico: quem cede é a imagem, nunca o texto', () => {
-  it('título mais longo encolhe a foto e mantém todas as palavras', () => {
+  it('a foto 4:3 do estoque usa fundo desfocado em todo destino vertical', () => {
+    // É o caso dominante: 7 de 7 fotos com dimensão no banco são 1600x1200.
+    for (const id of ['story', 'whatsapp', 'tiktok'] as const) {
+      expect(layoutArt(id, conteudo({ photoAspect: 4 / 3 }), measure).fit.mode).toBe('contain');
+    }
+  });
+
+  it('foto de proporção próxima à da tela dispensa o desfoque', () => {
+    expect(layoutArt('story', conteudo({ photoAspect: 1080 / 1920 }), measure).fit.mode).toBe('cover');
+  });
+
+  it('foto de celular em retrato nunca é recortada: é o caso difícil do spec', () => {
+    // §4.2 e §11: "aparece sempre inteira, nunca cortada". Uma 3:4 num 9:16 perde 25% da largura
+    // se cair em `cover`, e é exatamente o risco que o §11 chama de caso difícil. Sem esta linha,
+    // afrouxar `COVER_TOLERANCE` não quebra nada.
+    for (const id of ['story', 'whatsapp', 'tiktok'] as const) {
+      expect(layoutArt(id, conteudo({ photoAspect: 3 / 4 }), measure).fit.mode).toBe('contain');
+    }
+  });
+
+  it('a maior parte da foto fica acima do véu, não enterrada sob ele', () => {
+    // A versão da invariante de herói que mede **foto visível**, não pixels de foto. A conta por
+    // área bruta é satisfeita por uma foto inteira debaixo do degradê: 42% da peça "é foto" e o
+    // veículo não aparece.
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ photoAspect: 4 / 3 }), measure);
+      const visivel = l.fit.photo.width * Math.max(0, l.scrim.y - l.fit.photo.y);
+      expect(visivel / (spec.width * spec.height), `${id}: fração da peça`).toBeGreaterThan(0.30);
+      expect(visivel / (l.fit.photo.width * l.fit.photo.height), `${id}: fração da foto`)
+        .toBeGreaterThan(0.6);
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: a foto é enquadrada na região livre e o clamp só empurra para dentro', (id) => {
+    // O que o ruling negociou: a região entre a base da logo e o topo do véu não limita o tamanho
+    // da foto, ela decide a altura em que a foto é centralizada. Sem isto, nada distingue a decisão
+    // de "colar no topo" ou "colar na base".
+    const spec = destinationSpec(id);
+    const l = layoutArt(id, conteudo({ photoAspect: 4 / 3 }), measure);
+    const { photo } = l.fit;
+    const livre = { top: l.logo.y + l.logo.height, bottom: l.scrim.y };
+    const ideal = (livre.top + livre.bottom) / 2 - photo.height / 2;
+    if (ideal >= 0 && ideal + photo.height <= spec.height) {
+      // Cabe inteira no lugar ideal: o enquadramento na região livre é simétrico.
+      expect(photo.y - livre.top).toBeCloseTo(livre.bottom - (photo.y + photo.height), 0);
+    } else {
+      // Não cabe: encosta na borda que a prendeu, e nunca atravessa nenhuma das duas.
+      expect(photo.y === 0 || photo.y + photo.height === spec.height).toBe(true);
+    }
+    expect(photo.y).toBeGreaterThanOrEqual(0);
+    expect(photo.y + photo.height).toBeLessThanOrEqual(spec.height);
+  });
+
+  it('sem proporção de foto conhecida a peça ainda se compõe', () => {
+    const l = layoutArt('story', conteudo({ photoAspect: null }), measure);
+    expect(l.fit.photo.width).toBeGreaterThan(0);
+    expect(l.fit.photo.height).toBeGreaterThan(0);
+  });
+
+  it('a foto ocupa muito mais da peça do que ocupava antes', () => {
+    // O defeito que motivou a reescrita: 9,7% a 27,6% medidos no layout antigo.
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ photoAspect: 4 / 3 }), measure);
+      const fracao = (l.fit.photo.width * l.fit.photo.height) / (spec.width * spec.height);
+      expect(fracao).toBeGreaterThan(0.38);
+    }
+  });
+
+  it('o texto não empurra mais a foto: ela é a mesma com título curto e com título longo', () => {
+    // A inversão de prioridade desta tarefa. Antes, duas linhas de título tomavam 60 px da foto;
+    // agora quem absorve a sobra é o véu, que não custa nada.
     const curto = layoutArt('story', conteudo({ title: 'Honda Biz' }), measure);
     const longo = layoutArt('story', conteudo({ title: 'Volkswagen Saveiro Robust Cabine Dupla' }), measure);
-    expect(longo.photo.height).toBeLessThan(curto.photo.height);
+    expect(longo.fit.photo.width).toBe(curto.fit.photo.width);
+    expect(longo.fit.photo.height).toBe(curto.fit.photo.height);
     expect(longo.title.lines.join(' ')).toBe('Volkswagen Saveiro Robust Cabine Dupla');
   });
 
-  it('o quadro assume a proporção da foto, em retrato e em paisagem', () => {
-    const retrato = layoutArt('story', conteudo({ photoAspect: 3 / 4 }), measure);
-    expect(retrato.photo.width / retrato.photo.height).toBeCloseTo(3 / 4, 2);
-    const paisagem = layoutArt('story', conteudo({ photoAspect: 16 / 9 }), measure);
-    expect(paisagem.photo.width / paisagem.photo.height).toBeCloseTo(16 / 9, 2);
+  it('proporção de foto degenerada não entrega peça sem veículo', () => {
+    // `photoAspect` vem de `image.width / image.height` (ArtCanvas.tsx). Uma imagem que decodifica
+    // com dimensão zero dá `0/0 = NaN`, e um `NaN` atravessa toda a geometria sem falhar em lugar
+    // nenhum: o Konva não desenha a foto e a peça sai sem o veículo, em silêncio. Nove das dezesseis
+    // fotos do estoque são importações antigas, que é justamente onde isso apareceria.
+    for (const degenerado of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const l = layoutArt('story', conteudo({ photoAspect: degenerado }), measure);
+      expect(Number.isFinite(l.fit.photo.width), `aspecto ${degenerado}`).toBe(true);
+      expect(l.fit.photo.width).toBeGreaterThan(0);
+      expect(l.fit.photo.height).toBeGreaterThan(0);
+      expect(l.fit.photo.x).toBeGreaterThanOrEqual(0);
+      expect(l.fit.photo.y).toBeGreaterThanOrEqual(0);
+    }
   });
 
-  it('sem foto carregada assume 4:3 e ainda assim posiciona tudo', () => {
-    const l = layoutArt('feed', conteudo({ photoAspect: null }), measure);
-    expect(l.photo.width).toBeGreaterThan(0);
-    expect(l.photo.height).toBeGreaterThan(0);
+  it('proporção de logo degenerada não entrega logo invertida nem invisível', () => {
+    for (const degenerado of [0, -2, Number.NaN]) {
+      const l = layoutArt('story', conteudo({ logoAspect: degenerado }), measure);
+      expect(Number.isFinite(l.logo.width), `aspecto ${degenerado}`).toBe(true);
+      expect(l.logo.width).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('o conteúdo respeita a área segura de cada destino', () => {
+  it.each(DESTINATION_ORDER)('%s: o corpus real cabe na área segura', (id) => {
+    const spec = destinationSpec(id);
+    for (const caso of CORPUS) {
+      const l = layoutArt(id, conteudo(caso), measure);
+      for (const bloco of blocos(l)) {
+        expect(bloco.x).toBeGreaterThanOrEqual(spec.safe.left);
+        expect(bloco.x + bloco.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
+        expect(bloco.y).toBeGreaterThanOrEqual(spec.safe.top);
+        expect(bloco.y + bloco.height).toBeLessThanOrEqual(spec.height - spec.safe.bottom);
+      }
+    }
   });
 
-  it('a foto nunca some, mesmo com todo o texto no tamanho máximo', () => {
-    const l = layoutArt('tiktok', conteudo({
-      title: 'Volkswagen Saveiro Robust Cabine Dupla Completa',
-      note: 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora',
-    }), measure);
-    expect(l.photo.height).toBeGreaterThanOrEqual(200);
+  it.each(DESTINATION_ORDER)('%s: a pílula e a placa também ficam na área segura', (id) => {
+    const spec = destinationSpec(id);
+    for (const caso of CORPUS) {
+      const l = layoutArt(id, conteudo(caso), measure);
+      for (const fundo of fundos(l)) {
+        expect(fundo.x).toBeGreaterThanOrEqual(spec.safe.left);
+        expect(fundo.x + fundo.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
+        expect(fundo.y).toBeGreaterThanOrEqual(spec.safe.top);
+        expect(fundo.y + fundo.height).toBeLessThanOrEqual(spec.height - spec.safe.bottom);
+      }
+    }
+  });
+
+  it('a logo entra na medição e cabe na área segura', () => {
+    // Hoje `logo.width` é 0 e nenhum teste confere se a marca cabe.
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ logoAspect: 4.2 }), measure);
+      // Derivada da proporção, não um número qualquer maior que zero: o defeito que esta tarefa
+      // veio corrigir era `width: 0`, e prender só o zero deixa passar uma logo de 1 px.
+      expect(l.logo.width).toBeCloseTo(l.logo.height * 4.2, 0);
+      expect(l.logo.x + l.logo.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
+      expect(l.logo.y).toBeGreaterThanOrEqual(spec.safe.top);
+    }
+  });
+
+  it('sem a proporção da logo carregada ela ainda é medida e ainda cabe', () => {
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ logoAspect: null }), measure);
+      // O recuo é a proporção dos arquivos em `public/`: 800×376.
+      expect(l.logo.width).toBeCloseTo(l.logo.height * (800 / 376), 0);
+      expect(l.logo.x + l.logo.width).toBeLessThanOrEqual(spec.width - spec.safe.right);
+    }
+  });
+
+  it('as margens laterais da coluna são iguais entre si', () => {
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const { column } = layoutArt(id, conteudo(), measure);
+      const esquerda = column.x - spec.safe.left;
+      const direita = (spec.width - spec.safe.right) - (column.x + column.width);
+      expect(esquerda).toBeCloseTo(direita, 0);
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: o texto desenhado cabe na caixa que ele diz ocupar', (id) => {
+    // A asserção que as outras não fazem. `x + width` com `width` da coluna é identidade: passa com
+    // o texto vazando por cima da borda. Esta compara o desenhado contra o declarado, e é a única
+    // que pega tracking esquecido na conta da pílula ou largura errada alimentando o preço.
+    for (const caso of CORPUS) {
+      for (const selo of artBadges) {
+        const l = layoutArt(id, conteudo({ ...caso, badge: selo.heading }), measure);
+        for (const alvo of blocosMedidos(l)) {
+          expect(larguraDesenhada(alvo), `${id} / ${selo.id} / ${alvo.nome}`)
+            .toBeLessThanOrEqual(alvo.bloco.width);
+        }
+      }
+    }
+  });
+
+  it('o preço de carro mais alto cabe na placa do TikTok', () => {
+    const l = layoutArt('tiktok', conteudo({ price: 'R$ 460.000,00' }), measure);
+    expect(l.price.lines).toHaveLength(1);
+    expect(l.price.x + l.price.width).toBeLessThanOrEqual(l.pricePlate.x + l.pricePlate.width);
+  });
+
+  it('o preço cabe na placa **medido**, não só declarado, mesmo acima do estoque de hoje', () => {
+    // 'R$ 1.460.000,00' está de propósito acima de qualquer preço do estoque atual: a placa é a
+    // caixa mais estreita da peça, e é a largura que alimenta `fitLines` que está sendo presa aqui.
+    // Com a largura errada, o preço escolhe um corpo que cabe na coluna e vaza da placa vermelha.
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo({ price: 'R$ 1.460.000,00' }), measure);
+      const alvo = blocosMedidos(l).find((b) => b.nome === 'preco')!;
+      expect(larguraDesenhada(alvo), id).toBeLessThanOrEqual(l.price.width);
+      expect(l.price.width).toBeLessThanOrEqual(l.pricePlate.width);
+    }
+  });
+
+  it('o TikTok reserva a coluna de ícones à direita e o rodapé da legenda', () => {
+    // É o que impede a arte de competir com curtir, comentar e compartilhar.
+    expect(destinationSpec('tiktok').safe.right).toBeGreaterThan(destinationSpec('story').safe.right);
+    expect(destinationSpec('tiktok').safe.bottom).toBeGreaterThan(destinationSpec('story').safe.bottom);
+    const tiktok = layoutArt('tiktok', conteudo(), measure);
+    const story = layoutArt('story', conteudo(), measure);
+    expect(tiktok.column.width).toBeLessThan(story.column.width);
+    expect(tiktok.note!.y + tiktok.note!.height).toBeLessThan(story.note!.y + story.note!.height);
+  });
+});
+
+describe('o véu é que absorve a sobra', () => {
+  it('o véu cobre toda a extensão vertical do texto', () => {
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo(), measure);
+      const topoDoTexto = Math.min(...blocos(l).map((b) => b.y), l.badgePill.y);
+      expect(l.scrim.y).toBeLessThanOrEqual(topoDoTexto);
+      expect(l.scrim.y + l.scrim.height).toBeGreaterThanOrEqual(destinationSpec(id).height);
+    }
+  });
+
+  it('sob qualquer linha de texto o véu chega a 0,82 de opacidade', () => {
+    // §4.4 do spec: é o que mantém 4,5:1 mesmo sobre a foto mais clara do estoque.
+    // Sem isto, "texto branco sobre foto" é aposta, não decisão.
+    for (const id of DESTINATION_ORDER) {
+      for (const caso of CORPUS) {
+        const l = layoutArt(id, conteudo(caso), measure);
+        for (const bloco of [...blocos(l), { y: l.badgePill.y }]) {
+          expect(scrimAlphaAt(l.scrim, bloco.y)).toBeGreaterThanOrEqual(0.82);
+        }
+      }
+    }
+  });
+
+  it('o véu cresce com o texto em vez de encolher a foto', () => {
+    const curto = layoutArt('story', conteudo({ title: 'Honda Biz' }), measure);
+    const longo = layoutArt('story', conteudo({ title: 'Volkswagen Saveiro Robust Cabine Dupla' }), measure);
+    expect(longo.scrim.height).toBeGreaterThan(curto.scrim.height);
+  });
+
+  it('acima do véu não há escurecimento nenhum', () => {
+    // O outro lado do piso de 0,82: se o véu já começasse opaco, a foto nasceria apagada.
+    const l = layoutArt('story', conteudo(), measure);
+    expect(scrimAlphaAt(l.scrim, l.scrim.y)).toBe(0);
+    expect(scrimAlphaAt(l.scrim, l.scrim.y - 200)).toBe(0);
+  });
+
+  it('o véu termina opaco na borda de baixo', () => {
+    const l = layoutArt('story', conteudo(), measure);
+    expect(scrimAlphaAt(l.scrim, destinationSpec('story').height)).toBe(1);
   });
 });
 
 describe('os blocos sólidos contêm o texto que anunciam', () => {
-  for (const format of FORMATOS) {
-    it(`${format}: pílula, placa e painel envolvem o próprio conteúdo`, () => {
-      const l = layoutArt(format, conteudo(), measure);
-      // Texto estourando a pílula é pior que selo sem pílula: lê como erro, não como etiqueta.
-      expect(dentro(l.kicker, l.kickerPill)).toBe(true);
-      expect(dentro(l.priceLabel, l.pricePlate)).toBe(true);
-      expect(dentro(l.price, l.pricePlate)).toBe(true);
-      expect(dentro(l.photo, l.photoPanel)).toBe(true);
-    });
-  }
+  it.each(DESTINATION_ORDER)('%s: pílula e placa envolvem o próprio conteúdo', (id) => {
+    const l = layoutArt(id, conteudo(), measure);
+    // Texto estourando a pílula é pior que selo sem pílula: lê como erro, não como etiqueta.
+    expect(dentro(l.badge, l.badgePill)).toBe(true);
+    expect(dentro(l.priceLabel, l.pricePlate)).toBe(true);
+    expect(dentro(l.price, l.pricePlate)).toBe(true);
+  });
 
   it('a pílula acompanha o texto do selo em vez de ocupar a coluna inteira', () => {
-    const curto = layoutArt('story', conteudo({ kicker: 'NOVO' }), measure);
-    const longo = layoutArt('story', conteudo({ kicker: 'DESTAQUE DA SEMANA' }), measure);
-    expect(curto.kickerPill.width).toBeLessThan(longo.kickerPill.width);
-    expect(longo.kickerPill.width).toBeLessThan(longo.column.width);
+    const curto = layoutArt('story', conteudo({ badge: 'NOVO' }), measure);
+    const longo = layoutArt('story', conteudo({ badge: 'DESTAQUE DA SEMANA' }), measure);
+    expect(curto.badgePill.width).toBeLessThan(longo.badgePill.width);
+    expect(longo.badgePill.width).toBeLessThan(longo.column.width);
   });
 
   it('o preço domina o telefone com folga', () => {
     const l = layoutArt('story', conteudo(), measure);
     expect(l.price.size).toBeGreaterThanOrEqual(l.phone.size * 2);
+  });
+});
+
+describe('a pilha de texto cresce para cima a partir da base da área segura', () => {
+  it.each(DESTINATION_ORDER)('%s: a ordem de baixo para cima é a do spec', (id) => {
+    const l = layoutArt(id, conteudo(), measure);
+    // §4.2: observação, telefone, placa de preço, linha de dados, título, pílula do selo.
+    const deBaixoParaCima = [l.note!.y, l.phone.y, l.pricePlate.y, l.meta!.y, l.title.y, l.badgePill.y];
+    for (let i = 1; i < deBaixoParaCima.length; i += 1) {
+      expect(deBaixoParaCima[i]).toBeLessThan(deBaixoParaCima[i - 1]);
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: o último bloco encosta na base da área segura', (id) => {
+    const spec = destinationSpec(id);
+    const l = layoutArt(id, conteudo(), measure);
+    expect(l.note!.y + l.note!.height).toBe(spec.height - spec.safe.bottom);
+  });
+});
+
+describe('somente os pesos 400 e 900', () => {
+  it('nenhum bloco é medido em 700 nem em 800', () => {
+    // Global Constraint do plano e §3.3.12 do spec: 400 e 900 são as duas únicas instâncias em
+    // disco, e medir num peso que não é o desenhado é o defeito que a Tarefa 1 existe para matar.
+    const pesos = new Set<number>();
+    const espia: Measure = (text, size, weight) => { pesos.add(weight); return measure(text, size, weight); };
+    // Varre as situações também: a tarja e a marca d'água da Tarefa 6 são blocos medidos, e sem
+    // passar por aqui elas poderiam nascer medidas num peso que não existe em disco.
+    for (const id of DESTINATION_ORDER) {
+      for (const status of ['published', 'sold', 'reserved', 'draft', 'archived']) {
+        layoutArt(id, conteudo({ status }), espia);
+      }
+    }
+    expect([...pesos].sort((a, b) => a - b)).toEqual([400, 900]);
+  });
+});
+
+describe('degradação sob aperto', () => {
+  /**
+   * O destino em que o teto de fato morde é o **Feed**: a altura segura dele é 1050 px, contra
+   * 1270 do TikTok, 1330 do Stories e 1440 do Status. Medido antes de escrever estes testes, o
+   * conteúdo mais apertado que se consegue montar com dado plausível chega a 57,3% no Feed e só a
+   * 51,3% no TikTok — ou seja, um teste de aperto escrito no TikTok passa sem nunca exercitar a
+   * degradação, e foi assim que ele chegou ao plano. Por isso o aperto é medido no Feed.
+   */
+  const TITULO_LONGO = 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica';
+  const TITULO_MAX = `${TITULO_LONGO} Couro Multimidia Teto Solar`;
+  const META_LONGA = '2016 · 189.000 km · Branca com banco vermelho e teto preto';
+  const NOTA_LONGA = 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora';
+  /** Acima de qualquer título real (o maior do estoque tem 50 caracteres). Existe só para alcançar
+   * o terceiro degrau do §4.3, que com dado plausível nunca é alcançado em nenhum destino. */
+  const TITULO_ABSURDO = `${TITULO_MAX} Unico Dono Revisado Garantia de Fabrica Pneus Novos`;
+  /** Longo até além do terceiro degrau: nem o menor corpo da lista o põe em 3 linhas. */
+  const TITULO_IMPOSSIVEL = `${TITULO_ABSURDO} Ipva Pago Aceita Troca Financiamento Proprio`;
+
+  /** 57,3% da altura segura no Feed antes da degradação: o teto dispara de verdade. */
+  const APERTO = { title: TITULO_MAX, meta: META_LONGA, note: NOTA_LONGA };
+
+  const fracaoDoBloco = (l: ArtLayout, id: Parameters<typeof destinationSpec>[0]) => {
+    const spec = destinationSpec(id);
+    const topo = Math.min(l.badgePill.y, ...blocos(l).map((b) => b.y));
+    return (spec.height - spec.safe.bottom - topo) / (spec.height - spec.safe.top - spec.safe.bottom);
+  };
+
+  it('o bloco de texto nunca passa de 55% da altura segura', () => {
+    for (const id of DESTINATION_ORDER) {
+      expect(fracaoDoBloco(layoutArt(id, conteudo(APERTO), measure), id), id).toBeLessThanOrEqual(0.55);
+    }
+  });
+
+  it('descarta a observação antes da linha de dados', () => {
+    const l = layoutArt('feed', conteudo(APERTO), measure);
+    expect(l.dropped[0]).toBe('note');
+    expect(l.note).toBeNull();
+    // A ordem só é ordem se o segundo da fila ainda estiver em pé. Sem estas duas linhas, uma
+    // implementação que descarta observação e dados de uma vez passa pelas asserções acima.
+    expect(l.dropped).not.toContain('meta');
+    expect(l.meta).not.toBeNull();
+  });
+
+  it('nunca descarta palavra do título, mesmo no aperto máximo', () => {
+    for (const titulo of [TITULO_MAX, TITULO_ABSURDO, TITULO_IMPOSSIVEL]) {
+      for (const id of DESTINATION_ORDER) {
+        const l = layoutArt(id, conteudo({ title: titulo, meta: META_LONGA, note: NOTA_LONGA }), measure);
+        expect(l.title.lines.join(' '), `${id} / ${titulo.length} caracteres`).toBe(titulo);
+        expect(l.title.lines.join('')).not.toContain('…');
+      }
+    }
+  });
+
+  it('título, preço e telefone nunca são descartados', () => {
+    const l = layoutArt('feed', conteudo({ title: TITULO_ABSURDO, note: 'x'.repeat(200) }), measure);
+    expect(l.dropped).not.toContain('title');
+    expect(l.title.lines.join(' ')).toBeTruthy();
+    expect(l.price.lines.join(' ')).toBeTruthy();
+    expect(l.phone.lines.join(' ')).toBeTruthy();
+  });
+
+  it('a cor longa real do estoque não estoura o aperto', () => {
+    // "Branca com banco vermelho" é dado real, e a linha de dados é onde o estouro nasce.
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo({ meta: '660 km · Branca com banco vermelho' }), measure);
+      expect(l.meta?.lines.join(' '), id).toContain('Branca com banco vermelho');
+    }
+  });
+
+  it('com o conteúdo do estoque de hoje nada é descartado', () => {
+    // O outro lado do teto. Sem esta linha, um teto baixo demais — ou um descarte incondicional —
+    // satisfaz todas as asserções de aperto e entrega peças mutiladas no caso comum, que é o de
+    // todo dia. O corpus é o estoque real, inclusive a cor livre de 25 caracteres.
+    for (const id of DESTINATION_ORDER) {
+      for (const caso of CORPUS) {
+        const l = layoutArt(id, conteudo(caso), measure);
+        expect(l.dropped, `${id} / ${caso.title}`).toEqual([]);
+        expect(l.note, `${id} / ${caso.title}`).not.toBeNull();
+        expect(l.meta, `${id} / ${caso.title}`).not.toBeNull();
+      }
+    }
+  });
+
+  it('esgotado o descarte, o título cede corpo em vez de a peça estourar', () => {
+    // O terceiro degrau do §4.3: com observação e dados fora, quem cede é o corpo do título.
+    // Sem isto, o degrau pode simplesmente não existir e o teto só valer por sorte do conteúdo.
+    const normal = layoutArt('feed', conteudo(), measure);
+    const extremo = layoutArt('feed', conteudo({ title: TITULO_ABSURDO, meta: META_LONGA, note: NOTA_LONGA }), measure);
+    expect(extremo.dropped).toEqual(['note', 'meta']);
+    // Abaixo do piso da lista normal (48), não só abaixo do corpo do caso comum: é a lista
+    // estendida do terceiro degrau que está sendo presa aqui.
+    expect(extremo.title.size).toBeLessThan(48);
+    expect(extremo.title.size).toBeLessThan(normal.title.size);
+    expect(extremo.title.lines.length).toBeLessThanOrEqual(3);
+    expect(extremo.title.lines.join(' ')).toBe(TITULO_ABSURDO);
+    expect(fracaoDoBloco(extremo, 'feed')).toBeLessThanOrEqual(0.55);
+  });
+
+  it('não cabendo em 3 linhas nem no menor corpo, o título fica inteiro e não em 3 linhas', () => {
+    // A hierarquia das garantias, explícita: "até 3 linhas" é a preferência do §4.3, e "em nenhuma
+    // hipótese uma palavra é descartada" é a garantia. Quando as duas se cruzam, quem cede é a
+    // preferência — e é melhor ter isto preso num teste do que descobrir na peça.
+    const l = layoutArt('feed', conteudo({ title: TITULO_IMPOSSIVEL, meta: META_LONGA, note: NOTA_LONGA }), measure);
+    expect(l.title.lines.join(' ')).toBe(TITULO_IMPOSSIVEL);
+    expect(l.title.lines.length).toBeGreaterThan(3);
+    expect(l.title.size).toBeLessThan(48);
+  });
+
+  it('o bloco descartado não deixa vão: o último bloco segue encostado na base', () => {
+    // Descartar a observação sem reancorar a pilha deixaria o telefone flutuando acima da base.
+    const spec = destinationSpec('feed');
+    const l = layoutArt('feed', conteudo(APERTO), measure);
+    expect(l.note).toBeNull();
+    expect(l.phone.y + l.phone.height).toBe(spec.height - spec.safe.bottom);
+  });
+
+  it('o teto é 55% e está declarado, não espalhado pelo cálculo', () => {
+    expect(TEXT_BLOCK_MAX).toBe(0.55);
+  });
+});
+
+describe('a tarja de situação e a marca d\'água entram na medição', () => {
+  /** A largura que o Konva desenha para um bloco sem espaçamento extra. */
+  const desenhada = (bloco: Placed, weight: number) =>
+    Math.max(...bloco.lines.map((linha) => measure(linha, bloco.size, weight)));
+
+  it.each(DESTINATION_ORDER)('%s: a tarja de situação cabe na própria faixa, em toda proporção de foto', (id) => {
+    for (const aspect of PROPORCOES) {
+      for (const status of ['sold', 'reserved'] as const) {
+        const l = layoutArt(id, conteudo({ photoAspect: aspect, status }), measure);
+        expect(l.statusBand).not.toBeNull();
+        expect(dentro(l.statusBand!.text, l.statusBand!.frame)).toBe(true);
+        expect(l.statusBand!.text.lines).toHaveLength(1);
+      }
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: o texto desenhado da tarja cabe na faixa, não só o declarado', (id) => {
+    // `Placed.width` é largura declarada: `dentro()` sozinho é identidade aritmética e passa com a
+    // palavra vazando da faixa — que é exatamente o defeito desta tarefa ("RESERVADO" pedia 334 px
+    // num painel de 202 e, sendo palavra única, o Konva não quebra).
+    for (const status of ['sold', 'reserved'] as const) {
+      const l = layoutArt(id, conteudo({ status }), measure);
+      expect(desenhada(l.statusBand!.text, 900), `${id} / ${status}`)
+        .toBeLessThanOrEqual(l.statusBand!.text.width);
+      expect(l.statusBand!.text.width).toBeLessThanOrEqual(l.statusBand!.frame.width);
+    }
+  });
+
+  it('a tarja diz qual é a situação, e não a outra', () => {
+    // Sem isto, uma tarja com qualquer texto — ou com o texto trocado — passa por todo o resto.
+    expect(layoutArt('story', conteudo({ status: 'sold' }), measure).statusBand!.text.lines.join(' '))
+      .toBe('VENDIDO');
+    expect(layoutArt('story', conteudo({ status: 'reserved' }), measure).statusBand!.text.lines.join(' '))
+      .toBe('RESERVADO');
+  });
+
+  it('a tarja fica sobre a foto, não no rodapé do texto', () => {
+    // Trava comercial: pílula discreta no rodapé é garantia mais fraca que tarja sobre o veículo.
+    const l = layoutArt('story', conteudo({ status: 'sold' }), measure);
+    expect(l.statusBand!.frame.y).toBeLessThan(l.scrim.y);
+  });
+
+  it.each(DESTINATION_ORDER)('%s: a tarja fica sobre a foto mesmo no aperto máximo e não encobre a logo', (id) => {
+    // O véu sobe com o texto; se a faixa fosse ancorada por número fixo, no aperto ela cairia
+    // dentro do véu e a trava comercial viraria mais uma linha de rodapé.
+    for (const status of ['sold', 'reserved'] as const) {
+      const l = layoutArt(id, conteudo({
+        status,
+        title: 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica Couro Multimidia',
+        meta: '2016 · 189.000 km · Branca com banco vermelho e teto preto',
+        note: 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora',
+      }), measure);
+      expect(l.statusBand!.frame.y, `${id} / ${status}`).toBeLessThan(l.scrim.y);
+      expect(l.statusBand!.frame.y).toBeGreaterThanOrEqual(l.logo.y + l.logo.height);
+    }
+  });
+
+  it.each(DESTINATION_ORDER)('%s: a faixa e a marca d\'água cabem na área segura', (id) => {
+    // §6 do spec: "todo bloco de texto, incluindo logo, selo de situação e marca d'água, cabe na
+    // área segura". O brief só confere a marca d'água; a faixa é maior e é a que corre risco.
+    const spec = destinationSpec(id);
+    for (const status of ['sold', 'reserved', 'draft', 'archived']) {
+      const l = layoutArt(id, conteudo({ status }), measure);
+      for (const caixa of [l.statusBand?.frame, l.statusBand?.text, l.watermark?.frame, l.watermark?.text]) {
+        if (!caixa) continue;
+        expect(caixa.x, `${id} / ${status}`).toBeGreaterThanOrEqual(spec.safe.left);
+        expect(caixa.x + caixa.width, `${id} / ${status}`).toBeLessThanOrEqual(spec.width - spec.safe.right);
+        expect(caixa.y, `${id} / ${status}`).toBeGreaterThanOrEqual(spec.safe.top);
+        expect(caixa.y + caixa.height, `${id} / ${status}`).toBeLessThanOrEqual(spec.height - spec.safe.bottom);
+      }
+    }
+  });
+
+  it('publicado não tem tarja nem marca d\'água', () => {
+    const l = layoutArt('feed', conteudo({ status: 'published' }), measure);
+    expect(l.statusBand).toBeNull();
+    expect(l.watermark).toBeNull();
+  });
+
+  it.each(['draft', 'archived'])('%s: a marca d\'água cabe na área segura', (status) => {
+    for (const id of DESTINATION_ORDER) {
+      const spec = destinationSpec(id);
+      const l = layoutArt(id, conteudo({ status }), measure);
+      expect(l.watermark!.text.x).toBeGreaterThanOrEqual(spec.safe.left);
+      expect(l.watermark!.text.x + l.watermark!.text.width)
+        .toBeLessThanOrEqual(spec.width - spec.safe.right);
+      expect(l.watermark!.text.lines.join(' ')).toBe('PRÉVIA · NÃO PUBLICAR');
+    }
+  });
+
+  it.each(['draft', 'archived'])('%s: a marca d\'água é desenhada dentro da própria faixa e sem tarja de situação', (status) => {
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo({ status }), measure);
+      expect(l.statusBand, `${id} / ${status}`).toBeNull();
+      expect(dentro(l.watermark!.text, l.watermark!.frame)).toBe(true);
+      expect(desenhada(l.watermark!.text, 900), id).toBeLessThanOrEqual(l.watermark!.text.width);
+      expect(l.watermark!.text.lines).toHaveLength(1);
+    }
+  });
+
+  it('a tarja não rouba espaço do bloco de texto nem muda o que é descartado', () => {
+    // A faixa mora sobre a foto; se ela entrasse na pilha, "VENDIDO" passaria a descartar a
+    // observação de peças que hoje a mantêm — degradação por situação do cadastro, não por aperto.
+    const publicado = layoutArt('feed', conteudo({ status: 'published' }), measure);
+    const vendido = layoutArt('feed', conteudo({ status: 'sold' }), measure);
+    expect(vendido.dropped).toEqual(publicado.dropped);
+    expect(vendido.title.y).toBe(publicado.title.y);
+    expect(vendido.title.size).toBe(publicado.title.size);
+    expect(vendido.scrim.y).toBe(publicado.scrim.y);
   });
 });
 
@@ -176,5 +683,50 @@ describe('buildMetaLine', () => {
     expect(buildMetaLine(2019, null, null)).toBe('2019');
     expect(buildMetaLine(null, 0, '  ')).toBe('Consulte os detalhes');
     expect(buildMetaLine(null, 1200, null)).toBe('1.200 km');
+  });
+});
+
+describe('o véu do topo, que dá leito à logo', () => {
+  // O §4.2 pede, em letra, "um véu suave e curto no topo dá leito à logo", e isso não existia: a
+  // logo **negativa** (branca) era desenhada direto sobre a foto crua. "Branca" é a cor mais comum
+  // do corpus do §13, e céu claro é o fundo mais comum de foto de pátio: sobre os dois, a marca
+  // desaparecia. É o §14.2 ("a marca é pequena, discreta e sempre no mesmo lugar") falhando por
+  // contraste, em silêncio, nos quatro destinos.
+  it('cobre a faixa da logo nos quatro destinos e acaba antes do bloco de texto', () => {
+    for (const id of DESTINATION_ORDER) {
+      const l = layoutArt(id, conteudo(), measure);
+      expect(l.logoScrim.y, id).toBe(0);
+      // Pega a logo inteira, da borda de cima até a base dela.
+      expect(scrimAlphaAt(l.logoScrim, l.logo.y), `${id}: topo da logo`).toBeGreaterThan(0.4);
+      expect(scrimAlphaAt(l.logoScrim, l.logo.y + l.logo.height), `${id}: base da logo`).toBeGreaterThan(0.4);
+      // E é **curto**: acaba acima do bloco de texto, senão é um segundo véu e a peça vira túnel.
+      expect(l.logoScrim.y + l.logoScrim.height, `${id}: curto`).toBeLessThan(l.title.y);
+      expect(scrimAlphaAt(l.logoScrim, l.logoScrim.y + l.logoScrim.height), `${id}: ponta`).toBe(0);
+    }
+  });
+
+  it('é suave com a logo carregada, e opaco o bastante quando a marca sai escrita', () => {
+    for (const id of DESTINATION_ORDER) {
+      const comLogo = layoutArt(id, conteudo({ logoAspect: 800 / 376 }), measure);
+      const semLogo = layoutArt(id, conteudo({ logoAspect: null }), measure);
+      // Com a imagem, o véu é leito, não tarja: fica longe do piso de texto.
+      expect(scrimAlphaAt(comLogo.logoScrim, comLogo.logo.y + 40), `${id}: suave`).toBeLessThan(0.82);
+      // Sem a imagem, o ArtCanvas escreve "LIBERATO" ali — e aí é **linha de texto**, então vale a
+      // Global Constraint do véu composto ≥ 0,82. A faixa inteira do texto de reserva, não um ponto.
+      for (const dy of [30, 50, 68]) {
+        expect(scrimAlphaAt(semLogo.logoScrim, semLogo.logo.y + dy), `${id}: reserva +${dy}`)
+          .toBeGreaterThanOrEqual(0.82);
+      }
+    }
+  });
+
+  it('não rouba espaço da pilha nem muda o que é descartado', () => {
+    for (const id of DESTINATION_ORDER) {
+      const comLogo = layoutArt(id, conteudo({ logoAspect: 800 / 376 }), measure);
+      const semLogo = layoutArt(id, conteudo({ logoAspect: null }), measure);
+      expect(semLogo.title.y, id).toBe(comLogo.title.y);
+      expect(semLogo.dropped, id).toEqual(comLogo.dropped);
+      expect(semLogo.scrim.y, id).toBe(comLogo.scrim.y);
+    }
   });
 });

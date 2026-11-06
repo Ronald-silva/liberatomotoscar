@@ -1,13 +1,9 @@
 .editor { width: min(100%, 1240px); min-width: 0; }
 .backLink { margin-bottom: var(--admin-space-3); }
-.layout { display: grid; grid-template-columns: minmax(0, 370px) minmax(0, 1fr); gap: var(--admin-space-4); align-items: start; margin-top: var(--admin-space-4); }
-.controls { display: grid; min-width: 0; gap: var(--admin-space-3); }
-.group { min-width: 0; margin: 0; padding: var(--admin-space-3); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
-.group legend { padding: 0 var(--admin-space-1); font-weight: 700; font-size: 1.125rem; }
+.stack { display: grid; min-width: 0; gap: var(--admin-space-3); margin-top: var(--admin-space-3); }
 .options { display: grid; gap: var(--admin-space-1); }
-.platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: var(--admin-space-2); }
+.badges { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--admin-space-2); }
 .option, .photoOption { min-width: 0; min-height: 48px; padding: var(--admin-space-1) var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-bg); color: var(--admin-ink); font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
-.option small { display: block; color: var(--admin-muted); }
 .option[aria-pressed="true"], .photoOption[aria-pressed="true"] { border-color: var(--admin-accent); box-shadow: inset 0 0 0 2px var(--admin-accent); }
 .option:hover, .photoOption:hover { border-color: var(--admin-ink); }
 .option:active, .photoOption:active { transform: scale(0.99); }
@@ -34,15 +30,21 @@
 .preview { min-width: 0; padding: var(--admin-space-3); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
 .preview h2 { margin: 0; font-size: 1.25rem; }
 .preview .hint { margin: var(--admin-space-1) 0 var(--admin-space-2); }
-.downloads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--admin-space-2); margin-top: var(--admin-space-3); }
-.downloads > * { min-width: 0; max-width: 100%; }
-.mobileJump { display: none; }
-@media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.destinations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--admin-space-1); }
+.destinationChip { min-width: 0; min-height: 56px; padding: var(--admin-space-1); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-bg); color: var(--admin-ink); font: inherit; font-weight: 700; text-align: center; overflow-wrap: anywhere; cursor: pointer; }
+.destinationChip[aria-pressed="true"] { border-color: var(--admin-accent); box-shadow: inset 0 0 0 2px var(--admin-accent); }
+.destinationChip:hover { border-color: var(--admin-ink); }
+.destinationChip:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
+.actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--admin-space-2); }
+.actions > * { min-width: 0; max-width: 100%; }
+.chromeToggle { display: flex; align-items: center; gap: var(--admin-space-1); margin-top: var(--admin-space-2); line-height: 1.4; cursor: pointer; }
+.chromeToggle input { width: 24px; height: 24px; flex: 0 0 24px; accent-color: var(--admin-accent); }
+/* O palco oculto desenha os quatro arquivos fora da vista. `display: none` não serve: o canvas
+   precisa de caixa para o navegador pintar, e sem pintura o JPEG sai em branco. */
+.offstage { position: absolute; left: -10000px; top: 0; width: 1080px; height: 1920px; overflow: hidden; pointer-events: none; }
 @media (max-width: 480px) {
-  .preview, .group { padding: var(--admin-space-2); }
-  .downloads { grid-template-columns: 1fr; }
-  .templates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .formats .option, .templates .option { min-height: 64px; font-size: 0.875rem; }
-  .formats .option small { font-size: 0.75rem; }
-  .mobileJump { display: inline-flex; }
+  .preview { padding: var(--admin-space-2); }
+  .actions { grid-template-columns: 1fr; }
+  .destinations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .destinationChip { font-size: 0.9375rem; }
 }
