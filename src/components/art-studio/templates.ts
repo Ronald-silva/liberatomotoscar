@@ -26,12 +26,18 @@ export const artTemplates: { id: ArtTemplate; label: string; heading: string; ac
 export type ArtTheme = {
   background: string;
   ink: string;
-  /** Texto de apoio: linha de dados, rótulo do preço, observação. */
+  /** Texto de apoio: linha de dados, observação. */
   dim: string;
+  /** Filete do topo. Pode ser claro, porque nada é escrito em cima dele. */
   accent: string;
-  /** Fundo atrás do preço, quando o modelo quer o preço em destaque. */
-  pricePlate: string | null;
-  /** Contorno da foto, quando o modelo pede moldura. */
+  /**
+   * Cor dos dois blocos sólidos — a pílula do selo e a placa do preço. É sempre escrita em branco,
+   * então precisa de contraste suficiente para texto, o que nem todo `accent` tem.
+   */
+  chip: string;
+  /** Painel atrás da foto. Sem ele, veículo escuro sobre fundo escuro desaparece. */
+  photoPanel: string;
+  /** Contorno do painel da foto, quando o modelo pede moldura. */
   photoStroke: string | null;
   /**
    * A marca tem duas versões e usar a errada a faz sumir: a negativa é branca e desaparece no
@@ -40,13 +46,16 @@ export type ArtTheme = {
   logo: '/logo-liberato-negativo.png' | '/logo-liberato.png';
 };
 
+/** Branco sobre cada `chip`, conferido contra o mínimo de 4,5:1 da WCAG para texto. */
+export const CHIP_INK = '#ffffff';
+
 export const ART_THEMES: Record<ArtTemplate, ArtTheme> = {
-  new: { logo: '/logo-liberato-negativo.png', background: '#0a0e13', ink: '#ffffff', dim: '#9fabb7', accent: '#d8202f', pricePlate: null, photoStroke: null },
-  highlight: { logo: '/logo-liberato-negativo.png', background: '#0a0e13', ink: '#ffffff', dim: '#9fabb7', accent: '#d8202f', pricePlate: null, photoStroke: '#d8202f' },
-  offer: { logo: '/logo-liberato-negativo.png', background: '#0a0e13', ink: '#ffffff', dim: '#9fabb7', accent: '#d8202f', pricePlate: '#d8202f', photoStroke: null },
-  reserved: { logo: '/logo-liberato-negativo.png', background: '#100f0c', ink: '#ffffff', dim: '#c4beb3', accent: '#b9893d', pricePlate: null, photoStroke: null },
-  sold: { logo: '/logo-liberato-negativo.png', background: '#0e1115', ink: '#ffffff', dim: '#bac1c8', accent: '#8e9bac', pricePlate: null, photoStroke: null },
-  classic: { logo: '/logo-liberato.png', background: '#ece8de', ink: '#121820', dim: '#4d555f', accent: '#c91d2e', pricePlate: null, photoStroke: '#121820' },
+  new: { logo: '/logo-liberato-negativo.png', background: '#0a0e13', ink: '#ffffff', dim: '#9fabb7', accent: '#d8202f', chip: '#d8202f', photoPanel: '#151c25', photoStroke: null },
+  highlight: { logo: '/logo-liberato-negativo.png', background: '#0a0e13', ink: '#ffffff', dim: '#9fabb7', accent: '#d8202f', chip: '#d8202f', photoPanel: '#151c25', photoStroke: '#d8202f' },
+  offer: { logo: '/logo-liberato-negativo.png', background: '#0a0e13', ink: '#ffffff', dim: '#9fabb7', accent: '#d8202f', chip: '#d8202f', photoPanel: '#151c25', photoStroke: null },
+  reserved: { logo: '/logo-liberato-negativo.png', background: '#100f0c', ink: '#ffffff', dim: '#c4beb3', accent: '#b9893d', chip: '#7a5417', photoPanel: '#1d1b16', photoStroke: null },
+  sold: { logo: '/logo-liberato-negativo.png', background: '#0e1115', ink: '#ffffff', dim: '#bac1c8', accent: '#8e9bac', chip: '#39424f', photoPanel: '#181d23', photoStroke: null },
+  classic: { logo: '/logo-liberato.png', background: '#ece8de', ink: '#121820', dim: '#4d555f', accent: '#c91d2e', chip: '#c91d2e', photoPanel: '#ffffff', photoStroke: '#121820' },
 };
 
 export function templatesForStatus(status: string) {

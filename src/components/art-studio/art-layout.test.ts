@@ -26,6 +26,17 @@ function blocos(l: ReturnType<typeof layoutArt>) {
   return [l.kicker, l.title, l.meta, l.priceLabel, l.price, l.phone, l.note];
 }
 
+/** Os blocos sólidos desenhados atrás do texto: pílula do selo, painel da foto, placa do preço. */
+function fundos(l: ReturnType<typeof layoutArt>) {
+  return [l.kickerPill, l.photoPanel, l.pricePlate];
+}
+
+/** `a` cabe inteiro dentro de `b`. */
+function dentro(a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }) {
+  return a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height;
+}
+
 describe('fitLines nunca descarta palavra', () => {
   it('devolve o texto inteiro mesmo quando nem o menor corpo cabe nas linhas pedidas', () => {
     const texto = 'Chevrolet S10 High Country 2.8 Turbo Diesel 4x4 Automatica Couro Multimidia';
@@ -65,6 +76,12 @@ describe('o conteúdo respeita a área segura de cada plataforma', () => {
         expect(bloco.x + bloco.width).toBeLessThanOrEqual(direita);
         expect(bloco.y).toBeGreaterThanOrEqual(spec.safe.top);
         expect(bloco.y + bloco.height).toBeLessThanOrEqual(base);
+      }
+      for (const fundo of fundos(l)) {
+        expect(fundo.x).toBeGreaterThanOrEqual(spec.safe.left);
+        expect(fundo.x + fundo.width).toBeLessThanOrEqual(direita);
+        expect(fundo.y).toBeGreaterThanOrEqual(spec.safe.top);
+        expect(fundo.y + fundo.height).toBeLessThanOrEqual(base);
       }
       expect(l.photo.x).toBeGreaterThanOrEqual(spec.safe.left);
       expect(l.photo.x + l.photo.width).toBeLessThanOrEqual(direita);
@@ -123,6 +140,31 @@ describe('a foto é o bloco elástico: quem cede é a imagem, nunca o texto', ()
       note: 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora',
     }), measure);
     expect(l.photo.height).toBeGreaterThanOrEqual(200);
+  });
+});
+
+describe('os blocos sólidos contêm o texto que anunciam', () => {
+  for (const format of FORMATOS) {
+    it(`${format}: pílula, placa e painel envolvem o próprio conteúdo`, () => {
+      const l = layoutArt(format, conteudo(), measure);
+      // Texto estourando a pílula é pior que selo sem pílula: lê como erro, não como etiqueta.
+      expect(dentro(l.kicker, l.kickerPill)).toBe(true);
+      expect(dentro(l.priceLabel, l.pricePlate)).toBe(true);
+      expect(dentro(l.price, l.pricePlate)).toBe(true);
+      expect(dentro(l.photo, l.photoPanel)).toBe(true);
+    });
+  }
+
+  it('a pílula acompanha o texto do selo em vez de ocupar a coluna inteira', () => {
+    const curto = layoutArt('story', conteudo({ kicker: 'NOVO' }), measure);
+    const longo = layoutArt('story', conteudo({ kicker: 'DESTAQUE DA SEMANA' }), measure);
+    expect(curto.kickerPill.width).toBeLessThan(longo.kickerPill.width);
+    expect(longo.kickerPill.width).toBeLessThan(longo.column.width);
+  });
+
+  it('o preço domina o telefone com folga', () => {
+    const l = layoutArt('story', conteudo(), measure);
+    expect(l.price.size).toBeGreaterThanOrEqual(l.phone.size * 2);
   });
 });
 

@@ -3,8 +3,9 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { Stage, Layer, Rect, Text, Image as KonvaImage } from 'react-konva';
 import Konva from 'konva';
-import { artFormats, artTemplates, ART_THEMES, type ArtFormat, type ArtTemplate } from './templates';
-import { ART_FONT_FAMILY, layoutArt, type ArtContent, type Measure, type Placed } from './art-layout';
+import { artFormats, artTemplates, ART_THEMES, CHIP_INK, type ArtFormat, type ArtTemplate } from './templates';
+import { ART_FONT_FAMILY, KICKER_TRACKING, PRICE_LABEL_TRACKING, layoutArt,
+  type ArtContent, type Measure, type Placed } from './art-layout';
 
 // O palco já tem 1080 px de largura. Em celulares HiDPI, duplicar a resolução
 // interna dos dois canvas do Konva gastaria memória sem melhorar o arquivo final.
@@ -161,7 +162,6 @@ export default function ArtCanvas({ format, template, photoUrl, photoRetry, titl
   };
   const L = layoutArt(format, content, measureText);
   const logoWidth = logo ? Math.round(L.logo.height * (logo.width / logo.height)) : 0;
-  const priceInk = theme.pricePlate ? '#ffffff' : theme.ink;
 
   return <div ref={setContainer} style={{ width: '100%' }}>
     <div style={{ width: width * scale, height: height * scale, marginInline: 'auto', overflow: 'hidden' }}>
@@ -176,39 +176,40 @@ export default function ArtCanvas({ format, template, photoUrl, photoRetry, titl
               : <Text x={L.logo.x} y={L.logo.y + 30} text="LIBERATO MOTOS CAR" fill={theme.ink}
                 fontFamily={ART_FONT_FAMILY} fontSize={38} fontStyle="bold" />}
 
-            <Block at={L.kicker} fill={theme.accent} weight={700} letterSpacing={2.2} />
+            <Rect x={L.kickerPill.x} y={L.kickerPill.y} width={L.kickerPill.width}
+              height={L.kickerPill.height} fill={theme.chip} cornerRadius={L.kickerPill.height / 2} />
+            <Block at={L.kicker} fill={CHIP_INK} weight={700} letterSpacing={KICKER_TRACKING} />
             <Block at={L.title} fill={theme.ink} weight={700} leading={1.04} />
             <Block at={L.meta} fill={theme.dim} />
 
+            {/* O painel dá chão ao veículo: sem ele, carro escuro sobre fundo escuro some. */}
+            <Rect x={L.photoPanel.x} y={L.photoPanel.y} width={L.photoPanel.width}
+              height={L.photoPanel.height} fill={theme.photoPanel} cornerRadius={16} />
             {photo ? <KonvaImage image={photo} x={L.photo.x} y={L.photo.y}
-              width={L.photo.width} height={L.photo.height} cornerRadius={10} />
-              : <>
-                <Rect x={L.photo.x} y={L.photo.y} width={L.photo.width} height={L.photo.height}
-                  fill={theme.pricePlate ? '#161d25' : '#161d25'} cornerRadius={10} />
-                <Text x={L.photo.x} y={L.photo.y + L.photo.height / 2 - 20} width={L.photo.width}
-                  align="center" text="A foto aparecerá aqui" fill={theme.dim}
-                  fontFamily={ART_FONT_FAMILY} fontSize={32} />
-              </>}
-            {theme.photoStroke ? <Rect x={L.photo.x} y={L.photo.y} width={L.photo.width} height={L.photo.height}
-              stroke={theme.photoStroke} strokeWidth={4} cornerRadius={10} listening={false} /> : null}
+              width={L.photo.width} height={L.photo.height} />
+              : <Text x={L.photoPanel.x} y={L.photoPanel.y + L.photoPanel.height / 2 - 20}
+                width={L.photoPanel.width} align="center" text="A foto aparecerá aqui" fill={theme.dim}
+                fontFamily={ART_FONT_FAMILY} fontSize={32} />}
+            {theme.photoStroke ? <Rect x={L.photoPanel.x} y={L.photoPanel.y} width={L.photoPanel.width}
+              height={L.photoPanel.height} stroke={theme.photoStroke} strokeWidth={4} cornerRadius={16}
+              listening={false} /> : null}
             {unavailable ? <>
-              <Rect x={L.photo.x} y={L.photo.y + L.photo.height / 2 - 56} width={L.photo.width} height={112}
+              <Rect x={L.photoPanel.x} y={L.photoPanel.y + L.photoPanel.height / 2 - 56}
+                width={L.photoPanel.width} height={112}
                 fill={status === 'sold' ? 'rgba(9,12,17,0.86)' : 'rgba(84,58,18,0.88)'} />
-              <Text x={L.photo.x} y={L.photo.y + L.photo.height / 2 - 30} width={L.photo.width} align="center"
+              <Text x={L.photoPanel.x} y={L.photoPanel.y + L.photoPanel.height / 2 - 30}
+                width={L.photoPanel.width} align="center"
                 text={status === 'sold' ? 'VENDIDO' : 'RESERVADO'} fill="#ffffff"
                 fontFamily={ART_FONT_FAMILY} fontSize={60} fontStyle="bold" />
             </> : null}
 
-            {theme.pricePlate ? <Rect x={L.priceRule.x} y={L.priceLabel.y - 20}
-              width={L.column.width} height={L.priceLabel.lines.length * L.priceLabel.size + L.price.size * 1.02 + 38}
-              fill={theme.pricePlate} cornerRadius={10} />
-              : <Rect x={L.priceRule.x} y={L.priceRule.y} width={L.priceRule.width}
-                height={L.priceRule.height} fill={theme.accent} />}
-            <Block at={theme.pricePlate ? { ...L.priceLabel, x: L.priceLabel.x + 20 } : L.priceLabel}
-              fill={theme.pricePlate ? 'rgba(255,255,255,0.82)' : theme.dim} weight={700} letterSpacing={1.6} />
-            <Block at={theme.pricePlate ? { ...L.price, x: L.price.x + 20 } : L.price}
-              fill={priceInk} weight={700} leading={1.02} />
+            <Rect x={L.pricePlate.x} y={L.pricePlate.y} width={L.pricePlate.width}
+              height={L.pricePlate.height} fill={theme.chip} cornerRadius={14} />
+            <Block at={L.priceLabel} fill="rgba(255,255,255,0.84)" weight={700}
+              letterSpacing={PRICE_LABEL_TRACKING} />
+            <Block at={L.price} fill={CHIP_INK} weight={700} leading={1.02} />
 
+            {/* Telefone e observação são um rodapé só: o preço já ganhou na placa. */}
             <Block at={L.phone} fill={theme.ink} weight={700} />
             <Block at={L.note} fill={theme.dim} leading={1.3} />
 
