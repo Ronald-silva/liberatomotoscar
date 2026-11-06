@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import advances from './__fixtures__/archivo-advances.json';
 import { createArchivoMeasure } from './measure-archivo';
 
 describe('createArchivoMeasure', () => {
@@ -38,6 +39,48 @@ describe('createArchivoMeasure', () => {
     expect(regular).not.toBe(negrito);
     expect(measure('Saveiro', 76, 599)).toBe(regular);
     expect(measure('Saveiro', 76, 600)).toBe(negrito);
+  });
+
+  it('caractere fora da tabela não vira NaN nem zero', () => {
+    // A observação é texto livre digitado pelo operador: emoji e pontuação exótica chegam ali.
+    // Uma medição `NaN` propaga por toda a composição e não falha em lugar nenhum — ela só entrega
+    // uma peça vazia.
+    const measure = createArchivoMeasure();
+    for (const peso of [400, 900]) {
+      const largura = measure('\u{1F525}', 76, peso);
+      expect(Number.isFinite(largura)).toBe(true);
+      expect(largura).toBeGreaterThan(0);
+    }
+  });
+
+  it('caractere ausente é aproximado para cima, nunca para baixo', () => {
+    // Sub-medir é o único erro perigoso desta tabela: o teste abençoa um layout que estoura na
+    // produção, que é precisamente o defeito que a medição fiel existe para matar. Super-medir só
+    // encolhe o corpo um degrau.
+    const measure = createArchivoMeasure();
+    for (const peso of [400, 900]) {
+      const maisLargo = Math.max(...[...'WM%ÃÇ@'].map((char) => measure(char, 76, peso)));
+      expect(measure('\u{1F525}', 76, peso)).toBeGreaterThanOrEqual(maisLargo);
+    }
+  });
+
+  it('a fixture cobre cada caractere que o estoque real usa', () => {
+    const corpus = [
+      'Volkswagen Saveiro', 'Yamaha Lander 250', 'Honda Pop', 'Yamaha Crosser', 'Fiat Strada',
+      '2024 · 56.000 km · Branca', '660 km · Branca com banco vermelho', 'Vermelha e preta',
+      '2016 · 89.000 km · Cinza-escuro', 'R$ 460.000,00', '(85) 99636-5664',
+      'PREÇO DO ANÚNCIO', 'RECÉM-CHEGADO', 'DESTAQUE DA SEMANA', 'PREÇO EM DESTAQUE',
+      'VENDIDO', 'RESERVADO', 'ESTOQUE LIBERATO', 'PRÉVIA · NÃO PUBLICAR',
+      'Consulte disponibilidade e condições', 'Entrada a partir de 20% e parcelas',
+      // Observação é texto livre: a pontuação que um vendedor digita de verdade entra aqui.
+      'Aceito troca! Tem interesse? Chame no zap: 24h', 'Único dono; IPVA 2026 pago',
+    ].join(' ');
+    const tabelas: Record<string, number>[] = [advances.weights['400'], advances.weights['900']];
+    const faltando = new Set<string>();
+    for (const char of corpus) {
+      for (const tabela of tabelas) if (tabela[char] === undefined) faltando.add(char);
+    }
+    expect([...faltando].sort()).toEqual([]);
   });
 
   it('fica a menos de 8% da medição do navegador para o título real mais longo', () => {

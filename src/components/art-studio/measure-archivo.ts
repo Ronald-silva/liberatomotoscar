@@ -21,16 +21,29 @@ const RASTER_SLACK = 1.03;
 /** Peso a partir do qual o Konva desenha com a instância negrito. */
 const BOLD_THRESHOLD = 600;
 
-/** Avanço usado para caractere fora da tabela. */
-const FALLBACK_CHAR = 'x';
+/**
+ * Avanço para caractere fora da tabela: o **maior** avanço da própria instância.
+ *
+ * A reserva anterior era o avanço do `x`. Ela super-mede `!` e `?`, o que é inofensivo, mas
+ * sub-mede `@`, `—` e emoji — e sub-medir é o único erro perigoso desta tabela, porque faz o teste
+ * abençoar um layout que estoura na produção, exatamente o defeito que a medição fiel existe para
+ * matar. Com o maior avanço da instância, o erro de um caractere desconhecido só pode ser para
+ * cima: o corpo cai um degrau e nada vaza.
+ *
+ * Derivado da tabela, e não um caractere cravado, também para que não exista o caso em que a
+ * reserva não está na tabela e **toda** medição vira `NaN` em silêncio.
+ */
+const widest = (table: Record<string, number>) => Math.max(...Object.values(table));
 
 export function createArchivoMeasure(): Measure {
   const { unitsPerEm, weights } = advances;
   const tables = { regular: weights['400'], bold: weights['900'] } as const;
+  const fallbacks = { regular: widest(tables.regular), bold: widest(tables.bold) };
 
   return (text, size, weight) => {
-    const table: Record<string, number> = weight >= BOLD_THRESHOLD ? tables.bold : tables.regular;
-    const fallback = table[FALLBACK_CHAR];
+    const negrito = weight >= BOLD_THRESHOLD;
+    const table: Record<string, number> = negrito ? tables.bold : tables.regular;
+    const fallback = negrito ? fallbacks.bold : fallbacks.regular;
     let units = 0;
     for (const char of text) units += table[char] ?? fallback;
     return Math.ceil((units * size / unitsPerEm) * RASTER_SLACK);

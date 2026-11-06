@@ -20,7 +20,11 @@ let measureContext: CanvasRenderingContext2D | null = null;
 const measureText: Measure = (text, size, weight) => {
   measureContext ??= document.createElement('canvas').getContext('2d');
   if (!measureContext) return text.length * size * 0.62;
-  measureContext.font = `${weight >= 600 ? 'bold' : 'normal'} ${size}px ${ART_FONT_FAMILY}`;
+  // Peso **numérico**, nunca o atalho `bold`. A Archivo entra como fonte variável 400-900, e
+  // `bold` instancia wght 700 — não o 900 que a arte desenha e que a fixture dos testes mede.
+  // Medir numa instância que não é a desenhada é exatamente o defeito que a medição fiel existe
+  // para matar, e ele vale 6% de largura: num título de 936 px, 59 px fora da área segura.
+  measureContext.font = `${weight} ${size}px ${ART_FONT_FAMILY}`;
   return Math.ceil(measureContext.measureText(text).width * 1.03);
 };
 
@@ -29,7 +33,14 @@ function useFontsReady() {
   useEffect(() => {
     let alive = true;
     // O Konva quebra o texto uma única vez e não refaz quando a fonte chega (font-display: swap).
-    void Promise.all([document.fonts.load(`bold 48px ${ART_FONT_FAMILY}`), document.fonts.ready])
+    // Os dois pesos que a arte usa, os dois carregados. Só `bold` era pedido antes, e a linha de
+    // dados e a observação são desenhadas no peso normal: sem ele, o Konva quebra esses dois blocos
+    // com a métrica da fonte de reserva e não refaz (§7 do spec).
+    void Promise.all([
+      document.fonts.load(`400 48px ${ART_FONT_FAMILY}`),
+      document.fonts.load(`900 48px ${ART_FONT_FAMILY}`),
+      document.fonts.ready,
+    ])
       .catch(() => undefined).then(() => { if (alive) setReady(true); });
     return () => { alive = false; };
   }, []);

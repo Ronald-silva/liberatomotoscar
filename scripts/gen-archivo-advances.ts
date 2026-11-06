@@ -32,7 +32,11 @@ function characterSet(): string[] {
       chars.add(String.fromCodePoint(code));
     }
   }
-  for (const char of ' ·.,/()%$-+:') chars.add(char);
+  // A observação da peça é texto livre digitado pelo operador, e é por ali que a pontuação
+  // inesperada entra ("Aceito troca!", "Tem interesse?", "Único dono; IPVA pago"). Caractere fora
+  // desta lista cai na reserva do consumidor, que mede para cima — seguro, mas mais apertado do
+  // que o necessário.
+  for (const char of ' ·.,/()%$-+:!?;&@*#°"\'…–—') chars.add(char);
   const accented = 'áàâãéêíóôõúüç';
   for (const char of accented) {
     chars.add(char);
