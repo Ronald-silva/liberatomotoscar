@@ -42,6 +42,22 @@ describe('os quatro destinos', () => {
     }
   });
 
+  it('o fantasma cobre as faixas de cima e de baixo que a área segura reserva', () => {
+    // Sem isto, o teste de não-invasão acima é satisfeito por um fantasma vazio — e um fantasma
+    // vazio é justamente a prévia mentindo, porque ele é o instrumento de conferir a área segura.
+    for (const id of DESTINATION_ORDER) {
+      const { safe, height, chrome } = ART_DESTINATIONS[id];
+      expect(chrome.some((forma) => forma.y < safe.top), `${id}: topo`).toBe(true);
+      expect(chrome.some((forma) => forma.y + forma.height > height - safe.bottom), `${id}: base`)
+        .toBe(true);
+    }
+  });
+
+  it('o fantasma do TikTok ocupa a coluna de ícones que a área segura reserva à direita', () => {
+    const { chrome, width, safe } = ART_DESTINATIONS.tiktok;
+    expect(chrome.some((forma) => forma.kind === 'rail' && forma.x >= width - safe.right)).toBe(true);
+  });
+
   it('cada destino tem sufixo de arquivo próprio', () => {
     const sufixos = DESTINATION_ORDER.map((id) => ART_DESTINATIONS[id].fileSuffix);
     expect(new Set(sufixos).size).toBe(4);

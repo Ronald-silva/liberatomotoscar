@@ -28,6 +28,18 @@ describe('createArchivoMeasure', () => {
     expect(measure('ç'.repeat(10), 76, 400)).not.toBe(measure('\u0000'.repeat(10), 76, 400));
   });
 
+  it('troca de instância no mesmo limiar que o Konva, em 600', () => {
+    // O Konva manda qualquer peso >= 600 para o desenho em negrito. Se este limiar sair de 600,
+    // teste e produção voltam a medir instâncias diferentes — exatamente o defeito que esta
+    // medição existe para matar, e que nenhuma outra asserção aqui pegaria.
+    const measure = createArchivoMeasure();
+    const regular = measure('Saveiro', 76, 400);
+    const negrito = measure('Saveiro', 76, 900);
+    expect(regular).not.toBe(negrito);
+    expect(measure('Saveiro', 76, 599)).toBe(regular);
+    expect(measure('Saveiro', 76, 600)).toBe(negrito);
+  });
+
   it('fica a menos de 8% da medição do navegador para o título real mais longo', () => {
     // Valor de referência conferido no Chromium com a Archivo carregada, anotado aqui
     // porque happy-dom não implementa measureText de verdade.
