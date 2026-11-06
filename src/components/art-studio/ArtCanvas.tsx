@@ -1,34 +1,27 @@
 'use client';
 
 import { useEffect, useState, type RefObject } from 'react';
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Group } from 'react-konva';
+import { Stage, Layer, Rect, Text, Image as KonvaImage } from 'react-konva';
 import Konva from 'konva';
-import { artFormats, artTemplates, type ArtFormat, type ArtTemplate } from './templates';
-import { ART_FONT_FAMILY, fitTitle } from './title-fit';
-import { VerticalArt } from './VerticalArt';
+import { artFormats, artTemplates, ART_THEMES, type ArtFormat, type ArtTemplate } from './templates';
+import { ART_FONT_FAMILY, layoutArt, type ArtContent, type Measure, type Placed } from './art-layout';
 
 // O palco já tem 1080 px de largura. Em celulares HiDPI, duplicar a resolução
 // interna dos dois canvas do Konva gastaria memória sem melhorar o arquivo final.
 Konva.pixelRatio = 1;
 
-// Altura da caixa do título e corpos tentados (do maior para o menor) em cada formato.
-const titleBox: Record<ArtFormat, { height: number; candidates: readonly number[] }> = {
-  feed: { height: 118, candidates: [62, 54, 48, 42] },
-  square: { height: 102, candidates: [52, 46, 40, 36] },
-  story: { height: 108, candidates: [52, 46, 40] },
-  tiktok: { height: 108, candidates: [52, 46, 40] },
-};
-const TITLE_LINE_HEIGHT = 1.02;
-
+/**
+ * Mede com a mesma família e o mesmo peso que o Konva vai usar ao desenhar, mais 3% de folga para
+ * diferenças de rasterização. Medir tudo como negrito, como a versão anterior fazia, superestimava
+ * a linha de dados e a observação e as encolhia à toa.
+ */
 let measureContext: CanvasRenderingContext2D | null = null;
-// Mesma fonte e mesmo peso que o Konva usa no Text do título, com margem de segurança de 4%
-// para impedir que diferenças sutis de rasterização cortem ou quebrem palavras no Konva.
-function measureTitle(text: string, size: number) {
+const measureText: Measure = (text, size, weight) => {
   measureContext ??= document.createElement('canvas').getContext('2d');
   if (!measureContext) return text.length * size * 0.62;
-  measureContext.font = `bold ${size}px ${ART_FONT_FAMILY}`;
-  return Math.ceil(measureContext.measureText(text).width * 1.04);
-}
+  measureContext.font = `${weight >= 600 ? 'bold' : 'normal'} ${size}px ${ART_FONT_FAMILY}`;
+  return Math.ceil(measureContext.measureText(text).width * 1.03);
+};
 
 function useFontsReady() {
   const [ready, setReady] = useState(false);
@@ -107,10 +100,19 @@ function useVehiclePhoto(src: string | null, retry: number) {
   return state?.src === src && state.retry === retry ? state : null;
 }
 
-export default function ArtCanvas({ format, template, photoUrl, photoRetry, title, year, price, phone, status, note,
-  focalX, focalY, stageRef, onPhotoLoad }: {
-  format: ArtFormat; template: ArtTemplate; photoUrl: string | null; title: string; year: number | null;
-  price: string; phone: string; status: string; note: string; focalX: number; focalY: number;
+/** Um bloco de texto já medido pelo layout: posição, corpo e linhas prontas. */
+function Block({ at, fill, weight = 400, leading = 1.06, letterSpacing = 0 }: {
+  at: Placed; fill: string; weight?: number; leading?: number; letterSpacing?: number;
+}) {
+  return <Text x={at.x} y={at.y} width={at.width} text={at.lines.join('\n')} fill={fill}
+    fontFamily={ART_FONT_FAMILY} fontSize={at.size} lineHeight={leading} letterSpacing={letterSpacing}
+    fontStyle={weight >= 600 ? 'bold' : 'normal'} />;
+}
+
+export default function ArtCanvas({ format, template, photoUrl, photoRetry, title, meta, price, phone, status, note,
+  stageRef, onPhotoLoad }: {
+  format: ArtFormat; template: ArtTemplate; photoUrl: string | null; title: string; meta: string;
+  price: string; phone: string; status: string; note: string;
   photoRetry: number; stageRef: RefObject<Konva.Stage | null>;
   onPhotoLoad: (state: 'loading' | 'ready' | 'error', error?: string) => void;
 }) {
@@ -120,9 +122,10 @@ export default function ArtCanvas({ format, template, photoUrl, photoRetry, titl
   const fontsReady = useFontsReady();
   const photoState = useVehiclePhoto(photoUrl, photoRetry);
   const photo = photoState?.image ?? null;
-  const logo = useLoadedImage('/logo-liberato-negativo.png');
   const { width, height } = artFormats[format];
   const choice = artTemplates.find((item) => item.id === template)!;
+  const theme = ART_THEMES[template];
+  const logo = useLoadedImage(theme.logo);
   useEffect(() => { onPhotoLoad(photo && fontsReady ? 'ready' : photoState?.error ? 'error' : 'loading', photoState?.error); },
     [photo, fontsReady, photoState?.error, onPhotoLoad]);
   useEffect(() => {
@@ -137,143 +140,81 @@ export default function ArtCanvas({ format, template, photoUrl, photoRetry, titl
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
-  // No vertical, reservamos o topo e a base para a interface das plataformas;
-  // a faixa direita também fica livre para os controles do TikTok.
-  // No quadrado (1:1), a grade 3:4 do perfil do Instagram corta 135 px de cada lado (x < 135 e x > 945),
-  // por isso usamos inset = 148 (x: 148..932) para que nenhum texto ou logo seja cortado na grade.
+
   const vertical = format === 'story' || format === 'tiktok';
-  const isSquare = format === 'square';
-  // A prévia cabe inteira na janela, enquanto o Stage exportado mantém 1080 × 1920.
+  // A prévia cabe inteira na janela, enquanto o Stage exportado mantém a medida do formato.
   const previewHeight = Math.min(1080, Math.max(600, viewportHeight - 200));
   const scale = Math.min(1, (availableWidth || 360) / width, vertical ? previewHeight / height : 1);
-  const inset = vertical ? 80 : isSquare ? 148 : 80;
-  const contentWidth = vertical ? 800 : width - inset * 2;
-  const footerTop = vertical ? 892 : height - (isSquare ? 414 : 494);
-  const classic = template === 'classic';
-  const highlighted = template === 'highlight';
-  const priceFeature = template === 'offer';
+
   const unavailable = status === 'sold' || status === 'reserved';
-  const photoTop = vertical ? 420 : isSquare ? 146 : 196;
-  const photoHeight = vertical ? 470 : classic ? footerTop - photoTop - (isSquare ? 68 : 76)
-    : highlighted ? footerTop - photoTop - 52 : footerTop - photoTop + 20;
-  const framedInset = isSquare ? inset : 64;
-  const photoBox = { x: vertical ? inset : classic || highlighted ? framedInset : 0, y: photoTop,
-    width: vertical ? contentWidth : classic || highlighted ? width - framedInset * 2 : width, height: photoHeight };
-  const containPhoto = classic || vertical || isSquare;
-  const containRatio = photo ? Math.min(photoBox.width / photo.width, photoBox.height / photo.height) : 1;
-  const containedPhoto = photo ? {
-    x: photoBox.x + (photoBox.width - photo.width * containRatio) / 2,
-    y: photoBox.y + (photoBox.height - photo.height * containRatio) / 2,
-    width: photo.width * containRatio,
-    height: photo.height * containRatio,
-  } : photoBox;
-  const cropRatio = photo ? Math.min(photo.width / photoBox.width, photo.height / photoBox.height) : 1;
-  const cropWidth = photoBox.width * cropRatio;
-  const cropHeight = photoBox.height * cropRatio;
-  const crop = photo ? { x: (photo.width - cropWidth) * focalX / 100,
-    y: (photo.height - cropHeight) * focalY / 100, width: cropWidth, height: cropHeight } : undefined;
-  const badge = status === 'sold' ? 'VENDIDO' : status === 'reserved' ? 'RESERVADO' : choice.heading;
-  const ink = classic ? '#111820' : '#ffffff';
-  const muted = classic ? '#49505a' : '#d0d4dc';
-  const { height: titleHeight, candidates } = titleBox[format];
-  // Mede com a fonte já carregada; antes disso a quebra seria a da fonte de reserva.
-  const fittedTitle = fitTitle({ text: title.toLocaleUpperCase('pt-BR'), maxWidth: contentWidth,
-    maxHeight: titleHeight, lineHeight: TITLE_LINE_HEIGHT, candidates, measure: measureTitle });
-  const titleY = footerTop + 14;
-  const yearY = vertical ? 1024 : Math.min(
-    footerTop + (isSquare ? 128 : 144),
-    Math.round(titleY + fittedTitle.lines.length * fittedTitle.size * TITLE_LINE_HEIGHT + (isSquare ? 10 : 14)),
-  );
-  const priceY = vertical ? 1070 : yearY + (isSquare ? 42 : 48);
-  const priceText = status === 'sold' ? 'VEJA OUTRAS OPÇÕES' : price;
-  const fittedPrice = fitTitle({
-    text: priceText,
-    maxWidth: priceFeature ? contentWidth - 40 : contentWidth,
-    maxHeight: isSquare ? 72 : 84,
-    lineHeight: 1,
-    candidates: status === 'sold' ? [48, 42, 36] : isSquare ? [62, 56, 50, 44] : [76, 68, 60, 52],
-    measure: measureTitle,
-  });
-  const footerNote = note || (status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
-    status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições');
-  const fittedNote = fitTitle({ text: footerNote, maxWidth: contentWidth, maxHeight: 36,
-    lineHeight: 1, candidates: isSquare ? [26, 24, 22, 20, 18] : [30, 28, 26, 24, 22, 20], measure: measureTitle });
-  const badgeFontSize = isSquare ? 26 : 29;
-  const badgeWidth = Math.min(contentWidth, Math.ceil(measureTitle(badge, badgeFontSize)) + 52);
-  const badgeHeight = isSquare ? 52 : 58;
+  const content: ArtContent = {
+    title,
+    meta,
+    kicker: status === 'sold' ? 'VENDIDO' : status === 'reserved' ? 'RESERVADO' : choice.heading,
+    priceLabel: status === 'sold' ? 'ESTOQUE LIBERATO' : 'PREÇO DO ANÚNCIO',
+    price: status === 'sold' ? 'VEJA OUTRAS OPÇÕES' : price,
+    phone,
+    note: note || (status === 'sold' ? 'Peça opções semelhantes no WhatsApp'
+      : status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp'
+        : 'Consulte disponibilidade e condições'),
+    photoAspect: photo ? photo.width / photo.height : null,
+  };
+  const L = layoutArt(format, content, measureText);
+  const logoWidth = logo ? Math.round(L.logo.height * (logo.width / logo.height)) : 0;
+  const priceInk = theme.pricePlate ? '#ffffff' : theme.ink;
 
   return <div ref={setContainer} style={{ width: '100%' }}>
     <div style={{ width: width * scale, height: height * scale, marginInline: 'auto', overflow: 'hidden' }}>
       <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
         <Stage width={width} height={height} ref={stageRef}>
+          {/* A chave força o Konva a remedir quando a fonte termina de carregar. */}
           <Layer key={String(fontsReady)}>
-            {vertical ? <VerticalArt format={format as 'story' | 'tiktok'} template={template}
-              photo={photo} logo={logo} title={title} year={year} price={price} phone={phone}
-              status={status} note={note} measure={measureTitle} /> : <>
-            <Rect width={width} height={height} fill={classic ? '#eee9df' : '#090c11'} />
-            {classic ? <Rect width={width} height={photoTop - 14} fill="#090c11" /> : null}
-            {photo && crop ? <KonvaImage image={photo} {...(containPhoto ? containedPhoto : photoBox)}
-              {...(containPhoto ? {} : { crop })} /> :
-              <Text x={inset} y={photoTop + photoHeight / 2 - 20} width={width - inset * 2}
-                text="A foto aparecerá aqui" fill="#b8bec8" align="center" fontSize={36} />}
-            {!classic ? <Rect x={0} y={photoTop + photoHeight * 0.65} width={width} height={photoHeight * 0.35 + 4}
-              fillLinearGradientStartPoint={{ x: 0, y: 0 }} fillLinearGradientEndPoint={{ x: 0, y: photoHeight * 0.35 + 4 }}
-              fillLinearGradientColorStops={[0, 'rgba(9,12,17,0)', 1, '#090c11']} /> : null}
-            {highlighted ? <>
-              <Rect x={photoBox.x} y={photoBox.y} width={photoBox.width} height={photoBox.height}
-                stroke="#eee9df" strokeWidth={4} cornerRadius={6} listening={false} />
-              <Rect x={photoBox.x + photoBox.width - 28}
-                y={photoTop + 24} width={28} height={140} fill={choice.accent} />
-              {!vertical ? <Text x={width - inset - 420} y={isSquare ? 56 : 68} width={420} align="right" text="DESTAQUE DA SEMANA"
-                fontFamily={ART_FONT_FAMILY} fontSize={isSquare ? 21 : 24} fontStyle="bold" fill="#d0d4dc" />
-                : null}
+            <Rect width={width} height={height} fill={theme.background} />
+            <Rect width={width} height={10} fill={theme.accent} />
+
+            {logo ? <KonvaImage image={logo} x={L.logo.x} y={L.logo.y} width={logoWidth} height={L.logo.height} />
+              : <Text x={L.logo.x} y={L.logo.y + 30} text="LIBERATO MOTOS CAR" fill={theme.ink}
+                fontFamily={ART_FONT_FAMILY} fontSize={38} fontStyle="bold" />}
+
+            <Block at={L.kicker} fill={theme.accent} weight={700} letterSpacing={2.2} />
+            <Block at={L.title} fill={theme.ink} weight={700} leading={1.04} />
+            <Block at={L.meta} fill={theme.dim} />
+
+            {photo ? <KonvaImage image={photo} x={L.photo.x} y={L.photo.y}
+              width={L.photo.width} height={L.photo.height} cornerRadius={10} />
+              : <>
+                <Rect x={L.photo.x} y={L.photo.y} width={L.photo.width} height={L.photo.height}
+                  fill={theme.pricePlate ? '#161d25' : '#161d25'} cornerRadius={10} />
+                <Text x={L.photo.x} y={L.photo.y + L.photo.height / 2 - 20} width={L.photo.width}
+                  align="center" text="A foto aparecerá aqui" fill={theme.dim}
+                  fontFamily={ART_FONT_FAMILY} fontSize={32} />
+              </>}
+            {theme.photoStroke ? <Rect x={L.photo.x} y={L.photo.y} width={L.photo.width} height={L.photo.height}
+              stroke={theme.photoStroke} strokeWidth={4} cornerRadius={10} listening={false} /> : null}
+            {unavailable ? <>
+              <Rect x={L.photo.x} y={L.photo.y + L.photo.height / 2 - 56} width={L.photo.width} height={112}
+                fill={status === 'sold' ? 'rgba(9,12,17,0.86)' : 'rgba(84,58,18,0.88)'} />
+              <Text x={L.photo.x} y={L.photo.y + L.photo.height / 2 - 30} width={L.photo.width} align="center"
+                text={status === 'sold' ? 'VENDIDO' : 'RESERVADO'} fill="#ffffff"
+                fontFamily={ART_FONT_FAMILY} fontSize={60} fontStyle="bold" />
             </> : null}
-            {classic ? <>
-              <Rect x={photoBox.x} y={photoBox.y} width={photoBox.width} height={photoBox.height}
-                stroke="#090c11" strokeWidth={4} cornerRadius={4} listening={false} />
-              <Rect x={0} y={footerTop - (isSquare ? 68 : 76)}
-                width={width} height={8} fill={choice.accent} />
-            </> : null}
-            {unavailable && !classic ? <>
-              <Rect {...photoBox} fill={status === 'sold' ? 'rgba(9,12,17,0.2)' : 'rgba(32,25,10,0.26)'} />
-              <Rect x={inset} y={photoTop + photoHeight * 0.38}
-                width={contentWidth} height={isSquare ? 112 : 128} cornerRadius={8}
-                fill={status === 'sold' ? 'rgba(9,12,17,0.88)' : 'rgba(98,67,20,0.9)'} />
-              <Text x={inset} y={photoTop + photoHeight * 0.38 + (isSquare ? 22 : 24)} width={contentWidth}
-                align="center" text={badge} fill="#ffffff" fontFamily={ART_FONT_FAMILY}
-                fontSize={isSquare ? 62 : 72} fontStyle="bold" />
-            </> : null}
-            <Rect x={0} y={0} width={width} height={14} fill={choice.accent} />
-            {logo ? <KonvaImage image={logo} x={inset} y={isSquare ? 26 : 36}
-              width={isSquare ? 210 : 260} height={isSquare ? 99 : 122} /> :
-              <Text x={inset} y={isSquare ? 48 : 56} text="LIBERATO MOTOS CAR" fill="#ffffff" fontSize={isSquare ? 32 : 36} fontStyle="bold" />}
-            {(!unavailable || classic) ? <Group x={inset} y={footerTop - (isSquare ? 56 : 62)}>
-              <Rect width={badgeWidth} height={badgeHeight}
-                fill={classic ? '#090c11' : choice.accent} cornerRadius={classic ? 4 : 8} />
-              <Text x={24} y={isSquare ? 13 : 14} text={badge} fill="#ffffff" fontFamily={ART_FONT_FAMILY} fontSize={badgeFontSize} fontStyle="bold" wrap="none" />
-            </Group> : null}
-            <Text x={inset} y={titleY} width={contentWidth + 24}
-              text={fittedTitle.lines.join('\n')} fill={ink} fontFamily={ART_FONT_FAMILY}
-              fontSize={fittedTitle.size} fontStyle="bold" lineHeight={TITLE_LINE_HEIGHT} wrap="none" />
-            <Text x={inset} y={yearY} width={contentWidth}
-              text={year ? `ANO ${year}` : 'ANO NÃO INFORMADO'} fill={muted} fontFamily={ART_FONT_FAMILY} fontSize={isSquare ? 27 : 30} wrap="none" />
-            {priceFeature ? <Rect x={inset} y={priceY - 10} width={contentWidth}
-              height={isSquare ? 80 : 94} fill={choice.accent} cornerRadius={8} /> : null}
-            <Text x={priceFeature ? inset + 20 : inset} y={priceY} width={contentWidth + 20}
-              text={fittedPrice.lines.join('\n')} fill={priceFeature ? '#ffffff' : ink}
-              fontFamily={ART_FONT_FAMILY} fontSize={fittedPrice.size}
-              fontStyle="bold" wrap="none" />
-            <Rect x={inset} y={height - (isSquare ? 142 : 162)} width={contentWidth} height={2}
-              fill={classic ? '#8b918f' : '#57606c'} />
-            <Text x={inset} y={height - (isSquare ? 126 : 144)} text={fittedNote.lines.join('\n')}
-              width={contentWidth + 24} fill={muted} wrap="none"
-              fontFamily={ART_FONT_FAMILY} fontSize={fittedNote.size} />
-            <Text x={inset} y={height - (isSquare ? 82 : 94)} width={contentWidth + 24} text={phone} fill={ink}
-              fontFamily={ART_FONT_FAMILY} fontSize={isSquare ? 38 : 42} fontStyle="bold" wrap="none" />
+
+            {theme.pricePlate ? <Rect x={L.priceRule.x} y={L.priceLabel.y - 20}
+              width={L.column.width} height={L.priceLabel.lines.length * L.priceLabel.size + L.price.size * 1.02 + 38}
+              fill={theme.pricePlate} cornerRadius={10} />
+              : <Rect x={L.priceRule.x} y={L.priceRule.y} width={L.priceRule.width}
+                height={L.priceRule.height} fill={theme.accent} />}
+            <Block at={theme.pricePlate ? { ...L.priceLabel, x: L.priceLabel.x + 20 } : L.priceLabel}
+              fill={theme.pricePlate ? 'rgba(255,255,255,0.82)' : theme.dim} weight={700} letterSpacing={1.6} />
+            <Block at={theme.pricePlate ? { ...L.price, x: L.price.x + 20 } : L.price}
+              fill={priceInk} weight={700} leading={1.02} />
+
+            <Block at={L.phone} fill={theme.ink} weight={700} />
+            <Block at={L.note} fill={theme.dim} leading={1.3} />
+
             {status === 'draft' || status === 'archived' ? <Text x={0} y={height / 2 - 70} width={width}
               text="PRÉVIA · NÃO PUBLICAR" align="center" fill="#ffffff" shadowColor="#000000"
-              shadowBlur={10} fontSize={56} fontStyle="bold" /> : null}
-            </>}
+              shadowBlur={10} fontFamily={ART_FONT_FAMILY} fontSize={56} fontStyle="bold" /> : null}
           </Layer>
         </Stage>
       </div>

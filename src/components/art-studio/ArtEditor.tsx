@@ -8,6 +8,7 @@ import styles from '@/app/admin/admin.module.css';
 import artStyles from './art-studio.module.css';
 import { createCaption, PLATFORM_LABELS,
   type CaptionVehicle, type SocialPlatform } from './caption';
+import { buildMetaLine } from './art-layout';
 import { checkVersion, deliverArt, runArtDelivery } from './share-art';
 import { artFormats, templatesForStatus, type ArtFormat, type ArtTemplate } from './templates';
 
@@ -48,8 +49,6 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
   const shareSupport = useSyncExternalStore(subscribeShareSupport, readShareSupport, () => 'checking');
   const [template, setTemplate] = useState<ArtTemplate>(choices[0].id);
   const [photoId, setPhotoId] = useState(photos.find((photo) => photo.isCover)?.id ?? photos[0]?.id ?? '');
-  const [focalX, setFocalX] = useState(50);
-  const [focalY, setFocalY] = useState(50);
   const [note, setNote] = useState('');
   const [noteApproved, setNoteApproved] = useState(false);
   const [photoState, setPhotoState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -73,7 +72,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
   }, [setPhotoState, setPhotoError]);
   const photoUrl = photos.find((photo) => photo.id === photoId)?.src ?? null;
   const artTitle = [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.title;
-  const canCrop = photos.length > 0 && format !== 'story' && format !== 'tiktok' && template !== 'classic';
+  const artMeta = buildMetaLine(vehicle.year, vehicle.mileageKm, vehicle.color);
   const defaultNote = vehicle.status === 'sold' ? 'Peça opções semelhantes no WhatsApp' :
     vehicle.status === 'reserved' ? 'Consulte a disponibilidade no WhatsApp' : 'Consulte disponibilidade e condições';
   const captionKey = `${platform}:${format}`;
@@ -85,7 +84,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
     `/api/admin/vehicles/${vehicle.id}/art-check?version=${vehicle.version}`, { cache: 'no-store' })),
     [vehicle.id, vehicle.version]);
   const artKey = JSON.stringify([vehicle.version, vehicle.title, vehicle.year, vehicle.price, vehicle.status,
-    phone, photoId, photoRetry, format, template, focalX, focalY, note]);
+    phone, photoId, photoRetry, format, template, artMeta, note]);
 
   // A geração e a conferência acontecem antes do toque: Safari e outros navegadores
   // encerram a ativação do usuário se o compartilhamento esperar por canvas ou rede.
@@ -231,13 +230,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
                   <img src={photo.src} alt="" loading="lazy" />
                   <span>Foto {index + 1}{photo.isCover ? ' · capa' : ''}</span>
                 </button>)}</div>}
-            {canCrop ? <><label className={artStyles.slider}>Enquadramento horizontal
-              <input type="range" min="0" max="100" value={focalX}
-                onChange={(event) => setFocalX(Number(event.target.value))} /></label>
-            <label className={artStyles.slider}>Enquadramento vertical
-              <input type="range" min="0" max="100" value={focalY}
-                onChange={(event) => setFocalY(Number(event.target.value))} /></label></> : null}
-            {photos.length > 0 && !canCrop ? <p className={artStyles.hint}>Neste formato a foto aparece inteira para evitar cortes no veículo.</p> : null}
+            {photos.length > 0 ? <p className={artStyles.hint}>A foto aparece inteira, e a arte se ajusta ao formato dela — retrato ou paisagem.</p> : null}
           </fieldset>
           <fieldset className={artStyles.group}>
             <legend>3. Modelo e texto</legend>
@@ -260,8 +253,8 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem }: {
           <h2 id="art-preview-title">4. Conferir e compartilhar</h2>
           <p className={artStyles.hint}>Prévia no formato escolhido. O arquivo mantém a dimensão indicada acima.</p>
           <ArtCanvas format={format} template={template} photoUrl={photoUrl} photoRetry={photoRetry} title={artTitle}
-            year={vehicle.year} price={vehicle.price} phone={phone} status={vehicle.status} note={note}
-            focalX={focalX} focalY={focalY} stageRef={stageRef} onPhotoLoad={onPhotoLoad} />
+            meta={artMeta} price={vehicle.price} phone={phone} status={vehicle.status} note={note}
+            stageRef={stageRef} onPhotoLoad={onPhotoLoad} />
           {photoState === 'error' ? <div className={artStyles.warning} role="alert">
             <p>{photoError}</p>
             <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
