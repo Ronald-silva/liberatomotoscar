@@ -1,59 +1,71 @@
-# Liberato Motos Car — prévia comercial
+# Liberato Motos Car
 
-> Fundação técnica do futuro painel: [arquitetura, configuração e operação](docs/FUNDACAO_TECNICA_FASE1.md). O site público ainda usa o catálogo estático; não há login habilitado nem migração remota.
+Site e painel operacional para a Liberato Motos Car, em Fortaleza. O mesmo cadastro de veículos alimenta a vitrine pública, o estúdio de artes e as consultas de estoque da Dayse no WhatsApp. O painel também reúne conversas e visitas agendadas.
 
-> Conexão inicial com Neon: [verificações e pendências](docs/INTEGRACAO_NEON_INICIAL.md). Use `npm run db:check` para repetir as consultas de leitura de conexão e branch.
+**Estado em 06/11/2026:** o código compila e tem deployment de produção acessível, mas a liberação comercial completa ainda depende de validação dos dados, dos fluxos externos e da operação com a loja. O site mantém `noindex`. Este repositório atende uma loja; os identificadores de tenant do WhatsApp não tornam o estoque e o painel um SaaS multiloja.
 
-> Painel administrativo: [configuração do login e provisionamento do proprietário](docs/AUTENTICACAO_ADMIN_FASE2_1.md). O acesso permanece fechado até configurar Google OAuth e conceder a permissão explicitamente.
+Leia o [diagnóstico de produto e roteiro de estudo de mercado](docs/DIAGNOSTICO_PRODUTO_E_MERCADO.md) para entender o que existe, o que foi verificado, as lacunas e a ordem recomendada de decisões.
 
-Prévia comercial para a Liberato Motos Car da Itaoca, Fortaleza. A vitrine apresenta sete veículos com fotos e dados de anúncio fornecidos para este projeto. Preço, quilometragem, disponibilidade, configuração e condições devem ser conferidos com a loja antes de uma publicação oficial ou negociação. A prévia permanece com `noindex`.
+## O que existe hoje
 
-## Rodar localmente
+| Área | Função no produto | Entrada principal |
+| --- | --- | --- |
+| Vitrine | Lista veículos publicados e reservados do PostgreSQL; mostra detalhes, fotos e contato | `/`, `/veiculos/[slug]` |
+| Estoque | Cadastro, fotos, preços, situações, auditoria e publicação | `/admin`, `/admin/veiculos/[id]` |
+| Divulgação | Cria artes JPEG para Feed, Stories, Status do WhatsApp e TikTok; compartilha pelo aparelho quando disponível ou baixa o arquivo | `/admin/divulgar`, `/admin/veiculos/[id]/arte` |
+| Atendimento | Recebe mensagens pelo webhook oficial do WhatsApp, usa a Dayse com consulta restrita ao estoque publicado, persiste conversas e permite intervenção do vendedor | `/api/webhooks/whatsapp`, `/admin/atendimento` |
+| Agenda | Lista visitas registradas pela Dayse ou pela equipe; permite correção e cancelamento | `/admin/agenda` |
+| Ajustes | Conexão de número via Meta Embedded Signup e seleção do modo de atendimento | `/admin/ajustes` |
 
-Requer Node.js compatível com Next.js 16.4.2. O build foi validado com Node 26.8.1 neste ambiente.
+O painel usa login Google com lista de e-mails permitidos **e** concessão em `admin_grants`. O serviço de veículos protege as alterações no servidor; esconder uma rota não é a autorização.
+
+### Limites que mudam a leitura do produto
+
+- A vitrine está ligada ao banco, mas o `noindex` global impede tratá-la como canal orgânico já lançado.
+- A arte é preparada para o destino escolhido; o aplicativo de destino ainda precisa da confirmação da pessoa. Não há publicação automática nem calendário de postagens.
+- O chat público do site não existe. As variáveis `SITE_CHAT_ACCESS` e `DEMO_AI_ENABLED` são legado de planejamento e não ativam uma interface de chat.
+- Há código de WhatsApp, mas um deployment `Ready` não comprova recebimento, resposta e handoff no número real. Faça ensaio de ponta a ponta antes de declarar o canal pronto.
+- O modo “Atendimento por menu” está disponível na tela de ajustes, mas o runtime atual só responde automaticamente no modo `ai`; esse modo precisa ser implementado ou retirado da escolha.
+- Eventos de visualização e clique no WhatsApp não são venda ou lead confirmado. Ainda falta um funil que ligue conversa, visita e venda.
+
+## Tecnologia e arquitetura
+
+- Next.js 16.4.2, React 19.3, TypeScript e CSS Modules.
+- PostgreSQL/Neon com Drizzle para estoque, autorização, conversas, visitas e auditoria.
+- Cloudflare R2 para fotos privadas, com URLs temporárias e fila de limpeza.
+- Auth.js com Google OAuth para o painel.
+- Meta WhatsApp Cloud API e Embedded Signup para o canal; OpenRouter com AI SDK para a Dayse. Regras de disponibilidade, limites e autorização ficam no servidor.
+- Konva para compor e exportar as artes no navegador.
+
+Consulte [`src/server/db/schema.ts`](src/server/db/schema.ts), [`src/server/vehicles/service.ts`](src/server/vehicles/service.ts), [`src/server/agent/run.ts`](src/server/agent/run.ts) e [`src/server/whatsapp/webhook-handler.ts`](src/server/whatsapp/webhook-handler.ts) para as fontes técnicas principais.
+
+## Desenvolvimento local
+
+Use preferencialmente Node.js 24.x, versão configurada no projeto Vercel em 06/11/2026. O build local desta revisão também passou com Node 26.8.1.
 
 ```bash
 npm ci
+cp -n .env.example .env.local
 npm run dev
 ```
 
-Abra `http://localhost:3000`. Para conferir a versão de produção:
+Abra `http://localhost:3000`. O catálogo exige `DATABASE_URL`; o painel autenticado exige Google OAuth e uma concessão administrativa; upload de fotos exige R2. Preencha apenas os serviços necessários para o fluxo que vai testar. Não copie credenciais de produção para o README, testes ou commits. A lista de variáveis e as instruções de provisionamento estão em [`.env.example`](.env.example) e em [autenticação do painel](docs/AUTENTICACAO_ADMIN_FASE2_1.md).
 
 ```bash
+npm test
+npm run typecheck
 npm run lint
-npx tsc --noEmit -p tsconfig.json
 npm run build
-npm run start
 ```
 
-## Fluxo da demonstração
+Testes de integração que gravam no banco exigem `TEST_DATABASE_URL` isolada; a execução padrão os pula. Não use a branch compartilhada de produção para esse teste. As avaliações do agente em `npm run eval` chamam um modelo real e têm custo: execute apenas com corpus, orçamento e critério de aceite definidos.
 
-1. Abra a página inicial. A marca aparece no topo e o botão principal leva à vitrine.
-2. Filtre por motos ou carros. O filtro permanece na URL.
-3. Abra um dos sete anúncios em `/veiculos/[slug]`. A página apresenta preço, ano e quilometragem quando informados, descrição, dados do anúncio e especificações de fábrica somente quando a referência técnica é compatível.
-4. Use “Consultar veículo”. A mensagem de WhatsApp inclui a referência do anúncio e, quando presentes, as UTMs da visita.
+## Operação e documentação
 
-Os três links antigos de conceito (`moto-street`, `moto-adventure` e `carro-sedan`) continuam acessíveis para compatibilidade, separados da vitrine de estoque e identificados como ilustrativos.
+- [Diagnóstico atual de produto, prontidão e mercado](docs/DIAGNOSTICO_PRODUTO_E_MERCADO.md): comece aqui para decidir o próximo investimento.
+- [Conferência do estúdio de artes](docs/liberato-inteligente/05-CONFERENCIA-ESTUDIO-ARTES.md): roteiro de validação nos aplicativos e aparelhos reais.
+- [Validação dos anúncios](docs/VALIDACAO_CATALOGO.md): checklist de dados e autorização das fotos.
+- [Plano de avaliação do agente](docs/PLANO-AGENTE-IA-ATENDIMENTO.md): corpus, critérios e revisão humana; leia a data de cada resultado.
+- [Planos e auditorias históricos](docs/liberato-inteligente/01-DIAGNOSTICO-ARQUITETURA.md): registram decisões anteriores; partes já foram implementadas ou alteradas. O diagnóstico atual prevalece para o estado do produto.
 
-Exemplo de URL de campanha: `/?utm_source=meta&utm_medium=cpc&utm_campaign=prospeccao`. A aplicação aceita `utm_source`, `utm_medium`, `utm_campaign` e `utm_content`, sanitiza os valores e os mantém durante a sessão.
-
-## Medição opcional
-
-Copie `.env.example` para `.env.local` e configure os IDs fornecidos pela loja. As tags Meta e Google são carregadas somente após aceitação no aviso de medição. A visita ao detalhe é registrada como `ViewContent`/`view_item`; o clique para WhatsApp como `Contact`/`whatsapp_click`. **Clique não é lead confirmado**. O evento `Lead`/`generate_lead` fica reservado para uma futura confirmação operacional.
-
-Os IDs públicos entram no build. Se forem alterados, execute novo build. Teste os eventos nas ferramentas de diagnóstico das contas antes de publicar.
-
-## Antes de compartilhar o link
-
-Defina `NEXT_PUBLIC_SITE_URL` com o endereço público e refaça o build. Sem ela, a imagem que aparece ao colar o link no WhatsApp aponta para `localhost` e não carrega para ninguém.
-
-## Para transformar em site oficial
-
-- Confirmar com a loja os dados de contato, horário, domínio, redes sociais e autorização de uso da marca.
-- Validar os sete anúncios com a loja, inclusive fotos, preços, quilometragens, anos, versões e disponibilidade. Consulte a [matriz de validação](docs/VALIDACAO_CATALOGO.md).
-- Conectar o catálogo a uma fonte de estoque e definir quem atualiza os dados.
-- Configurar tags, privacidade, domínio e SEO conforme a operação real.
-- Integrar o número comercial à WhatsApp Business Platform ou a um provedor compatível caso o atendimento por IA seja contratado. O link `wa.me` sozinho não dá acesso às conversas nem permite automação.
-- Fornecer uma sequência de fotos do mesmo veículo para habilitar o visualizador 360° real. Com uma só imagem, a página mostra a foto estática e explica essa limitação.
-
-O roteiro e as etapas estão em [docs/PLANO_EXECUCAO.md](docs/PLANO_EXECUCAO.md).
+Antes de trocar domínio, liberar indexação, mudar modo da Dayse ou conectar o número comercial, confirme dados da loja, custos, permissões, retenção, recuperação de falhas e responsáveis pela resposta humana. As etapas e evidências estão no diagnóstico.

@@ -55,13 +55,15 @@ export default async function SettingsPage() {
 
   return <main id="conteudo" className={attendanceStyles.screen}>
     <div className={attendanceStyles.panel}>
-      <Link href="/admin/atendimento" className={attendanceStyles.back}>Voltar às conversas</Link>
-      <h1>Ajustes</h1>
-      <p className={attendanceStyles.intro}>Como a Dayse atende no WhatsApp e qual número ela usa.</p>
-
-      {setting
-        ? <WhatsappModeForm mode={setting.mode} version={setting.version} />
-        : <p className={attendanceStyles.error} role="alert">Não foi possível ler o modo da Dayse agora. Recarregue a página para tentar de novo.</p>}
+      <header className={attendanceStyles.topBar}>
+        <div className={attendanceStyles.topBarTitle}>
+          <h1>Configurações do WhatsApp · Dayse</h1>
+          <p className={attendanceStyles.intro}>Conecte o número da loja na API oficial da Meta e escolha como a Dayse responde aos clientes.</p>
+        </div>
+        <Link href="/admin/atendimento" className={attendanceStyles.secondaryButton}>
+          ← Voltar para Conversas
+        </Link>
+      </header>
 
       {tenants === null ? <p className={attendanceStyles.error} role="alert">Não foi possível listar os números conectados agora. Recarregue a página.</p> : null}
       <WhatsAppOnboardingCard
@@ -69,6 +71,10 @@ export default async function SettingsPage() {
         metaAppId={metaAppId}
         metaConfigId={metaConfigId}
       />
+
+      {setting
+        ? <WhatsappModeForm mode={setting.mode} version={setting.version} />
+        : <p className={attendanceStyles.error} role="alert">Não foi possível ler o modo da Dayse agora. Recarregue a página para tentar de novo.</p>}
 
       <MetaTestNumberForm
         webhookUrl={process.env.WHATSAPP_WEBHOOK_CALLBACK_URL || TEST_WEBHOOK_URL}

@@ -196,6 +196,11 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
     setSeloEscolhido(alvo);
     lembrar(LEMBRADO.selo, alvo);
   }
+  function escolherFoto(id: string) {
+    if (photoId === id) return;
+    setPhotoState('loading');
+    setPhotoId(id);
+  }
 
   // O palco oculto comitou o destino pedido; falta a **pintura**. `fonts.ready` antes do quadro
   // porque o Konva quebra o texto uma vez e não refaz quando a fonte chega (§7).
@@ -468,6 +473,24 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
             acessível e quem usa leitor de tela ouviria o número antes de saber qual é a rede. */}
         <p className={artStyles.hint}>Arquivo de {spec.width} × {spec.height}, com a área segura do {spec.label}. O fantasma mostra onde o aplicativo escreve por cima.</p>
 
+        <div className={`${artStyles.options} ${artStyles.badges}`} role="group" aria-label="Selo da arte">
+          {seloOferecido.map((item) =>
+            <button key={item.id} type="button" className={artStyles.option} aria-pressed={badge === item.id}
+              onClick={() => escolherSelo(item.id)}>{item.label}</button>)}
+        </div>
+        {badge === 'offer' ? <p className={artStyles.hint}>Este selo mostra apenas o preço do cadastro. Desconto e validade não são anunciados sem aprovação.</p> : null}
+
+        {photos.length > 0 ? <div className={artStyles.photos} role="group" aria-label="Foto da arte">
+          {photos.map((photo, index) =>
+            <button key={photo.id} type="button" className={artStyles.photoOption} aria-pressed={photoId === photo.id}
+              onClick={() => escolherFoto(photo.id)}>
+              {/* Fotos antigas usam /images; fotos R2 passam pela rota autenticada. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.src} alt="" loading="lazy" />
+              <span>Foto {index + 1}{photo.isCover ? ' · capa' : ''}</span>
+            </button>)}
+        </div> : <p className={artStyles.hint}>Adicione uma foto no cadastro para montar a peça.</p>}
+
         <div className={artStyles.actions}>
           <button className={styles.button} type="button" disabled={bloqueado} onClick={() => void publicar()}>
             {busy ? 'Abrindo aplicativos…' : spec.actionLabel}</button>
@@ -504,21 +527,8 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
         </details>
 
         <details className={artStyles.captionDetails}>
-          <summary>Foto, selo e texto auxiliar</summary>
+          <summary>Texto auxiliar na arte (opcional)</summary>
           <div className={artStyles.captionDetailsBody}>
-            {photos.length === 0 ? <p>Adicione uma foto no cadastro para montar a peça.</p> :
-              <div className={artStyles.photos}>{photos.map((photo, index) =>
-                <button key={photo.id} type="button" className={artStyles.photoOption} aria-pressed={photoId === photo.id}
-                  onClick={() => { if (photoId === photo.id) return; setPhotoState('loading'); setPhotoId(photo.id); }}>
-                  {/* Fotos antigas usam /images; fotos R2 passam pela rota autenticada. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.src} alt="" loading="lazy" />
-                  <span>Foto {index + 1}{photo.isCover ? ' · capa' : ''}</span>
-                </button>)}</div>}
-            <div className={`${artStyles.options} ${artStyles.badges}`}>{seloOferecido.map((item) =>
-              <button key={item.id} type="button" className={artStyles.option} aria-pressed={badge === item.id}
-                onClick={() => escolherSelo(item.id)}>{item.label}</button>)}</div>
-            {badge === 'offer' ? <p className={artStyles.hint}>Este selo mostra apenas o preço do cadastro. Desconto e validade não são anunciados sem aprovação.</p> : null}
             <label className={`${styles.field} ${artStyles.noteField}`}>Texto auxiliar opcional
               <input className={styles.input} type="text" maxLength={50} value={note}
                 onChange={(event) => { setNote(event.target.value); setNoteApproved(false); }} placeholder={defaultNote} /></label>

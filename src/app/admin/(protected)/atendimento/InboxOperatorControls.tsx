@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState, type FormEvent } from 'react';
+import { useActionState, useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { replyWindowState } from '@/server/attendance/reply-window';
 import { operateInboxConversation, type InboxActionState } from './actions';
@@ -26,12 +26,24 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
   const [body, setBody] = useState('');
   const [replyPending, setReplyPending] = useState(false);
   const [replyState, setReplyState] = useState<InboxActionState>(initialState);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isMine = status === 'open' && owner === 'human' && assignedTo === viewerUserId;
   const takenByOther = status === 'open' && owner === 'human' && Boolean(assignedTo) && assignedTo !== viewerUserId;
   const hasContact = Boolean(customerPhone && tenantId);
   const windowState = replyWindowState(lastVisitorMessageAt ? new Date(lastVisitorMessageAt) : null, new Date());
   const digits = customerPhone?.replace(/\D/g, '') ?? '';
   const whatsappHref = digits.length >= 10 ? `https://wa.me/${digits.length <= 11 ? `55${digits}` : digits}` : null;
+
+  useEffect(() => {
+    const scrollStream = () => {
+      const stream = document.querySelector<HTMLElement>('[aria-label="Histórico de mensagens"]');
+      if (stream) stream.scrollTop = stream.scrollHeight;
+    };
+    scrollStream();
+    const frame = requestAnimationFrame(scrollStream);
+    return () => cancelAnimationFrame(frame);
+  }, [conversationId, lastVisitorMessageAt, body]);
+
   async function sendReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setReplyPending(true);
@@ -66,9 +78,34 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
             <button type="submit" name="intent" value="close" className={attendanceStyles.secondaryButton} disabled={pending}>
               Encerrar conversa
             </button>
-            <button type="submit" name="intent" value="delete" className={attendanceStyles.secondaryButton} disabled={pending}>
-              Excluir conversa
-            </button>
+            {!confirmingDelete ? (
+              <button
+                type="button"
+                className={attendanceStyles.destructiveButton}
+                disabled={pending}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                Excluir conversa
+              </button>
+            ) : null}
+            {confirmingDelete ? (
+              <div className={attendanceStyles.deleteConfirm} role="group" aria-label="Confirmar exclusão da conversa">
+                <p className={attendanceStyles.current} role="alert">
+                  Excluir esta conversa? O histórico de mensagens será apagado permanentemente.
+                </p>
+                <button type="submit" name="intent" value="delete" className={attendanceStyles.destructiveButton} disabled={pending}>
+                  Sim, excluir conversa
+                </button>
+                <button
+                  type="button"
+                  className={attendanceStyles.secondaryButton}
+                  disabled={pending}
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  Manter conversa
+                </button>
+              </div>
+            ) : null}
           </form>
 
           {takenByOther ? (
@@ -121,9 +158,33 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
         <form action={action} className={attendanceStyles.operatorButtons}>
           <input type="hidden" name="conversationId" value={conversationId} />
           <p className={attendanceStyles.current}>Esta conversa foi encerrada.</p>
-          <button type="submit" name="intent" value="delete" className={attendanceStyles.secondaryButton} disabled={pending}>
-            Excluir conversa
-          </button>
+          {!confirmingDelete ? (
+            <button
+              type="button"
+              className={attendanceStyles.destructiveButton}
+              disabled={pending}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Excluir conversa
+            </button>
+          ) : (
+            <div className={attendanceStyles.deleteConfirm} role="group" aria-label="Confirmar exclusão da conversa">
+              <p className={attendanceStyles.current} role="alert">
+                Excluir esta conversa? O histórico de mensagens será apagado permanentemente.
+              </p>
+              <button type="submit" name="intent" value="delete" className={attendanceStyles.destructiveButton} disabled={pending}>
+                Sim, excluir conversa
+              </button>
+              <button
+                type="button"
+                className={attendanceStyles.secondaryButton}
+                disabled={pending}
+                onClick={() => setConfirmingDelete(false)}
+              >
+                Manter conversa
+              </button>
+            </div>
+          )}
         </form>
       )}
       {state.message ? (

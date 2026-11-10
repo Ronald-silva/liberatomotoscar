@@ -18,16 +18,19 @@ export function AgendaView({ groups, vehicles, vehiclesAvailable, minDate }: {
 }) {
   const empty = GROUPS.every(({ key }) => groups[key].length === 0);
   return <>
-    {empty ? <p className={styles.description}>Nenhuma visita marcada. Marque a primeira abaixo.</p> : null}
-    <details className={styles.visitDetails} open={empty}>
-      <summary>Marcar visita</summary>
-      <ManualVisitForm vehicles={vehicles} vehiclesAvailable={vehiclesAvailable} minDate={minDate} />
-    </details>
+    {empty ? <p className={styles.description}>Nenhuma visita agendada. Você pode adicionar uma visita manualmente abaixo.</p> : null}
     {GROUPS.map(({ key, title, showDay }) => groups[key].length === 0 ? null : <section key={key} className={styles.visitGroup} aria-labelledby={`grupo-${key}`}>
       <h2 id={`grupo-${key}`} className={styles.visitGroupTitle}>{title} ({groups[key].length})</h2>
       <ul className={styles.visitList}>
         {groups[key].map((visit) => <VisitCard key={visit.id} visit={visit} vehicles={vehicles} vehiclesAvailable={vehiclesAvailable} showDay={showDay} />)}
       </ul>
     </section>)}
+    {empty ? <section className={styles.visitDetails} aria-labelledby="adicionar-visita-title">
+      <h2 id="adicionar-visita-title" className={styles.visitManualHeading}>Adicionar visita manualmente</h2>
+      <ManualVisitForm vehicles={vehicles} vehiclesAvailable={vehiclesAvailable} minDate={minDate} />
+    </section> : <details className={styles.visitDetails}>
+      <summary>Adicionar visita manualmente</summary>
+      <ManualVisitForm vehicles={vehicles} vehiclesAvailable={vehiclesAvailable} minDate={minDate} />
+    </details>}
   </>;
 }

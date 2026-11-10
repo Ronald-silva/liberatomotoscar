@@ -20,18 +20,42 @@ export type OpcaoFiltro = {
  */
 export function FiltroVitrine({ opcoes }: { opcoes: OpcaoFiltro[] }) {
   const [ativo, setAtivo] = useState(opcoes[0]?.valor ?? 'todos');
+  const [ordem, setOrdem] = useState<'padrao' | 'menor-preco' | 'maior-preco' | 'mais-novos'>('padrao');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const secao = ref.current?.closest('.showcase');
-    if (secao instanceof HTMLElement) secao.dataset.filtro = ativo;
-  }, [ativo]);
+    if (!(secao instanceof HTMLElement)) return;
+    secao.dataset.filtro = ativo;
+    const grid = secao.querySelector('.vehicle-grid');
+    if (!(grid instanceof HTMLElement)) return;
+    const cards = Array.from(grid.querySelectorAll<HTMLElement>('.vehicle-card'));
+    cards.sort((a, b) => {
+      const idxA = Number(a.dataset.ordem ?? 0);
+      const idxB = Number(b.dataset.ordem ?? 0);
+      if (ordem === 'padrao') return idxA - idxB;
+      const precoA = Number(a.dataset.preco ?? 0);
+      const precoB = Number(b.dataset.preco ?? 0);
+      if (ordem === 'menor-preco') {
+        if (precoA <= 0 && precoB > 0) return 1;
+        if (precoB <= 0 && precoA > 0) return -1;
+        return precoA - precoB || idxA - idxB;
+      }
+      if (ordem === 'maior-preco') {
+        return precoB - precoA || idxA - idxB;
+      }
+      const anoA = Number(a.dataset.ano ?? 0);
+      const anoB = Number(b.dataset.ano ?? 0);
+      return anoB - anoA || idxA - idxB;
+    });
+    for (const card of cards) grid.appendChild(card);
+  }, [ativo, ordem]);
 
   const visiveis = opcoes.find((opcao) => opcao.valor === ativo)?.total ?? 0;
 
   return (
-    <>
-      <div className="filter-list" ref={ref} role="group" aria-label="Filtrar veículos por categoria">
+    <div className="showcase-controls" ref={ref}>
+      <div className="filter-list" role="group" aria-label="Filtrar veículos por categoria">
         {opcoes.map((opcao) => (
           <button
             key={opcao.valor}
@@ -45,9 +69,23 @@ export function FiltroVitrine({ opcoes }: { opcoes: OpcaoFiltro[] }) {
           </button>
         ))}
       </div>
+      <label className="sort-control">
+        <span className="sr-only">Ordenar veículos</span>
+        <select
+          className="sort-select"
+          aria-label="Ordenar veículos"
+          value={ordem}
+          onChange={(event) => setOrdem(event.target.value as typeof ordem)}
+        >
+          <option value="padrao">Ordenar: Destaques</option>
+          <option value="menor-preco">Menor preço</option>
+          <option value="maior-preco">Maior preço</option>
+          <option value="mais-novos">Mais novos</option>
+        </select>
+      </label>
       <p className="sr-only" aria-live="polite">
         {visiveis} {visiveis === 1 ? 'opção exibida' : 'opções exibidas'}.
       </p>
-    </>
+    </div>
   );
 }

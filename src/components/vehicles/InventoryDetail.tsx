@@ -53,6 +53,25 @@ export function InventoryDetail({ vehicle, vehicles, images }: { vehicle: Invent
                 {vehicle.priceBRL > 0 ? formatPrice(vehicle.priceBRL) : 'Consulte o preço'}
               </p>
               {isSold ? <p className="detail-price-note">Preço anunciado antes da venda.</p> : null}
+              <div className="detail-cta detail-cta--hero">
+                {!isSold ? (
+                  <WhatsAppLink
+                    className="button button--red"
+                    subject={`${vehicle.title} — referência ${vehicle.slug}`}
+                    placement={`hero_detail_${vehicle.slug}`}
+                    showArrow
+                  >
+                    {isReserved ? 'Falar sobre a reserva' : 'Chamar no WhatsApp'}
+                  </WhatsAppLink>
+                ) : (
+                  <Link className="button button--outline" href="/#vitrine">
+                    <ArrowLeft size={17} aria-hidden="true" /> Explorar estoque disponível
+                  </Link>
+                )}
+                <a className="button button--outline" href="#specification-title">
+                  Ver ficha técnica
+                </a>
+              </div>
               {/* Única ressalva da página, no ponto em que a decisão acontece. O resumo e os
                   destaques saíram daqui: repetiam, cortada, a descrição que vem logo abaixo e
                   os dados que já estão na linha acima. */}

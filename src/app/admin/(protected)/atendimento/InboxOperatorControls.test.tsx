@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { render, screen } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('./actions', () => ({ operateInboxConversation: async () => ({ message: null, error: false }) }));
@@ -9,6 +9,8 @@ import { InboxOperatorControls } from './InboxOperatorControls';
 
 const base = { conversationId: 'c1', status: 'open' as const, owner: 'human' as const,
   assignedTo: 'admin', viewerUserId: 'admin', tenantId: 'tenant-1', customerPhone: '5585999990000' };
+
+afterEach(cleanup);
 
 it('conversa antiga não oferece uma caixa que descartaria a resposta', () => {
   render(<InboxOperatorControls {...base} customerPhone={null} />);
@@ -26,4 +28,14 @@ it('janela encerrada oferece resposta pelo celular da loja', () => {
 it('conversa recente com contato mostra a caixa de resposta', () => {
   render(<InboxOperatorControls {...base} lastVisitorMessageAt={new Date().toISOString()} />);
   expect(screen.getByRole('textbox', { name: 'Responder como vendedor' })).toBeTruthy();
+});
+
+it('exige confirmação em dois passos antes de excluir conversa', () => {
+  render(<InboxOperatorControls {...base} lastVisitorMessageAt={new Date().toISOString()} />);
+  expect(screen.queryByRole('button', { name: 'Sim, excluir conversa' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir conversa' }));
+  expect(screen.getByText(/histórico de mensagens será apagado permanentemente/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Sim, excluir conversa' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Manter conversa' }));
+  expect(screen.queryByRole('button', { name: 'Sim, excluir conversa' })).toBeNull();
 });

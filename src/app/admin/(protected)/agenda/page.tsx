@@ -7,7 +7,7 @@ import styles from '../../admin.module.css';
 import { AgendaView, type AgendaGroups } from './AgendaView';
 import type { VehicleOption, VisitView } from './VisitCard';
 
-export const metadata: Metadata = { title: 'Agenda', robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: 'Visitas agendadas', robots: { index: false, follow: false } };
 
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 type Stock = Awaited<ReturnType<typeof listAdminVehiclesWithCover>>;
@@ -33,7 +33,7 @@ export default async function AgendaPage() {
   if (agenda === null) {
     return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
       <section className={styles.listPanel} aria-labelledby="agenda-title">
-        <h1 id="agenda-title" className={styles.heading}>Agenda</h1>
+        <h1 id="agenda-title" className={styles.heading}>Visitas agendadas</h1>
         <p className={styles.description} role="alert">
           Não foi possível carregar a agenda agora. Isso não quer dizer que não há visitas.
           Atualize a página para tentar de novo.</p>
@@ -61,10 +61,11 @@ export default async function AgendaPage() {
     hoje: agenda.hoje.map(view), amanha: agenda.amanha.map(view), semana: agenda.semana.map(view),
     depois: agenda.depois.map(view), semHora: agenda.semHora.map(view),
   };
+  const empty = Object.values(groups).every((group) => group.length === 0);
 
-  return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
-    <section className={styles.listPanel} aria-labelledby="agenda-title">
-      <h1 id="agenda-title" className={styles.heading}>Agenda</h1>
+  return <main id="conteudo" className={`${styles.screen} ${styles.listScreen} ${empty ? styles.agendaEmptyScreen : ''}`}>
+    <section className={`${styles.listPanel} ${empty ? styles.agendaEmptyPanel : ''}`} aria-labelledby="agenda-title">
+      <h1 id="agenda-title" className={styles.heading}>Visitas agendadas</h1>
       <AgendaView
         vehicles={options} vehiclesAvailable={vehiclesAvailable} minDate={today}
         groups={groups}

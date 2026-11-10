@@ -18,8 +18,10 @@ it('informa a venda no slug antigo e remove o contato para compra', () => {
   expect(screen.getByText(/Vendido · anúncio mantido para consulta histórica/)).toBeTruthy();
   expect(screen.getByText('Preço anunciado antes da venda.')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Este veículo foi vendido.' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Chamar no WhatsApp' })).toBeNull();
   expect(screen.queryByRole('link', { name: 'Consultar veículo' })).toBeNull();
   expect(screen.queryByRole('link', { name: 'Consultar reserva' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Explorar estoque disponível' })).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Ver outros veículos' })).toBeTruthy();
 });
 
@@ -27,5 +29,12 @@ it('diferencia reserva temporária e permite consultar a loja', () => {
   render(<InventoryDetail vehicle={{ ...vehicle, availability: 'reservado' }} vehicles={[]} images={[]} />);
   expect(screen.getByText(/Reservado · indisponível no momento/)).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Veículo reservado.' })).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Falar sobre a reserva' })).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Consultar reserva' })).toBeTruthy();
+});
+
+it('exibe botão de WhatsApp e atalho para a ficha técnica já na primeira dobra', () => {
+  render(<InventoryDetail vehicle={{ ...vehicle, availability: 'disponivel' }} vehicles={[]} images={['/images/fachada.png']} />);
+  expect(screen.getByRole('link', { name: 'Chamar no WhatsApp' })).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Ver ficha técnica' }).getAttribute('href')).toBe('#specification-title');
 });

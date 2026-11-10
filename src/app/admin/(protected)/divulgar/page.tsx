@@ -33,15 +33,17 @@ export default async function DivulgarPage() {
           // A lista só conhece a capa, mas quem tem capa tem foto; a foto ausente é problema do cadastro do mesmo jeito.
           const problem = artExportProblem({ vehicle, photos: vehicle.coverUrl ? [vehicle.coverUrl] : [] });
           return <li key={vehicle.id}>
-            <div className={styles.vehicleCard}>
+            <div className={`${styles.vehicleCard} ${styles.artVehicleCard}`}>
               {vehicle.coverUrl
                 ? <Image className={styles.cover} src={vehicle.coverUrl} alt="" width={144} height={112} sizes="72px" unoptimized={!vehicle.coverUrl.startsWith('/')} />
                 : <span className={styles.coverEmpty} aria-hidden="true">Sem foto</span>}
-              <span className={styles.vehicleTitle}>{title}</span>
-              <span className={styles.vehicleMeta}>{vehicle.year ?? 'Ano não informado'}</span>
-              <span className={styles.vehiclePrice}>{vehicle.priceCents !== null ? brl.format(vehicle.priceCents / 100) : 'Sem preço'}</span>
+              <div className={styles.artVehicleInfo}>
+                <span className={styles.vehicleTitle}>{title}</span>
+                <span className={styles.vehicleMeta}>{vehicle.year ?? 'Ano não informado'}</span>
+                <span className={styles.vehiclePrice}>{vehicle.priceCents !== null ? brl.format(vehicle.priceCents / 100) : 'Sem preço'}</span>
+                {problem ? <span className={styles.vehicleMeta}>{problem}</span> : null}
+              </div>
               {problem ? <>
-                <span className={styles.vehicleMeta}>{problem}</span>
                 <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href={`/admin/veiculos/${vehicle.id}`}
                   aria-label={`Completar cadastro: ${title}`}>Completar cadastro</Link>
               </> : <Link className={`${styles.button} ${styles.buttonCompact}`} href={`/admin/veiculos/${vehicle.id}/arte`}

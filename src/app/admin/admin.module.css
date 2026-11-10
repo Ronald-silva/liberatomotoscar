@@ -106,13 +106,13 @@
 .buttonDestructive { background: transparent; border-color: var(--admin-danger); color: var(--admin-danger); }
 .small { margin: var(--admin-space-3) 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.5; }
 
-.listScreen { align-items: flex-start; justify-content: center; padding: var(--admin-space-2); }
+.listScreen { min-height: calc(100vh - var(--admin-tabbar, 0px)); min-height: calc(100dvh - var(--admin-tabbar, 0px)); align-items: flex-start; justify-content: center; padding: var(--admin-space-2); }
 .listPanel { width: min(100%, 640px); }
 .listHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--admin-space-2); margin-bottom: var(--admin-space-3); }
 .listLogo { display: block; width: 120px; height: auto; }
 .buttonCompact { width: auto; min-height: 44px; padding: var(--admin-space-1) var(--admin-space-2); font-size: 0.9375rem; }
 .empty { padding: var(--admin-space-3) 0; }
-.vehicleList { display: grid; gap: var(--admin-space-2); margin: var(--admin-space-3) 0 0; padding: 0 0 6rem; list-style: none; }
+.vehicleList { display: grid; gap: var(--admin-space-2); margin: var(--admin-space-3) 0 0; padding: 0; list-style: none; }
 .vehicleCard {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -129,6 +129,11 @@
 .vehicleTitle { font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
 .vehicleMeta { color: var(--admin-muted); font-size: 0.875rem; }
 .vehiclePrice { font-weight: 700; text-align: right; }
+.artVehicleCard { grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; }
+.artVehicleCard > .cover, .artVehicleCard > .coverEmpty { grid-row: auto; }
+.artVehicleInfo { display: grid; gap: 0.25rem; min-width: 0; }
+.artVehicleInfo .vehiclePrice { text-align: left; }
+.artVehicleCard > .button { width: auto; }
 .badge { align-self: start; padding: 0.15rem 0.6rem; border: 1px solid var(--admin-line); border-radius: 999px; color: var(--admin-muted); font-size: 0.8125rem; white-space: nowrap; }
 .badge_draft { color: var(--admin-info); border-color: var(--admin-info); }
 .badge_published { color: var(--admin-ok); border-color: var(--admin-ok); }
@@ -174,6 +179,8 @@
      recua sozinha quando não há folga. */
   .panel { padding: var(--admin-space-3); }
   .listScreen { padding-top: var(--admin-space-2); }
+  .artVehicleCard { grid-template-columns: 72px minmax(0, 1fr); }
+  .artVehicleCard > .button { grid-column: 1 / -1; width: 100%; margin-top: var(--admin-space-1); }
 }
 
 .visuallyHidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -355,6 +362,11 @@
 }
 
 /* Agenda */
+.agendaEmptyScreen { align-items: stretch; }
+.agendaEmptyPanel { display: flex; flex-direction: column; }
+.agendaEmptyPanel .visitDetails { display: flex; flex: 1; flex-direction: column; }
+.agendaEmptyPanel .visitForm { display: flex; flex: 1; flex-direction: column; }
+.agendaEmptyPanel .visitForm > .button { margin-top: auto; }
 .visitGroup { margin-top: var(--admin-space-4); }
 .visitGroupTitle { margin: 0 0 var(--admin-space-2); font-size: 1.125rem; }
 .visitList { display: grid; gap: var(--admin-space-2); margin: 0; padding: 0; list-style: none; }
@@ -370,7 +382,11 @@
 .visitQuote { margin: 0; padding-left: var(--admin-space-2); border-left: 3px solid var(--admin-line); }
 .visitActions { display: flex; flex-wrap: wrap; gap: var(--admin-space-1); margin-top: var(--admin-space-1); }
 .visitActions > .button { width: auto; }
-.visitForm { display: grid; gap: var(--admin-space-1); width: 100%; }
+.visitForm { display: grid; gap: var(--admin-space-1); width: 100%; margin: 0; }
 .visitConfirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--admin-space-1); width: 100%; }
 .visitConfirm .notice { margin: 0; flex-basis: 100%; }
+.visitDetails { margin-top: var(--admin-space-4); padding-top: var(--admin-space-3); border-top: 1px solid var(--admin-line); }
+.visitManualHeading { display: flex; align-items: center; min-height: 44px; margin: 0 0 var(--admin-space-2); font-size: 1rem; }
 .visitDetails > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; }
+.visitDetails > summary:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
+.visitDetails[open] > summary { margin-bottom: var(--admin-space-2); }

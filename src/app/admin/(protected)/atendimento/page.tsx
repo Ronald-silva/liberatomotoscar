@@ -71,22 +71,27 @@ export default async function AttendancePage({
   return (
     <main id="conteudo" className={attendanceStyles.screen}>
       <div className={attendanceStyles.panel}>
-        <Link href="/admin/ajustes" className={attendanceStyles.back}>Ajustes do WhatsApp</Link>
-        <h1>Atendimento · Dayse</h1>
-        <p className={attendanceStyles.intro}>
-          A Dayse atende os clientes automaticamente com base no estoque publicado. Para pausar a IA em qualquer conversa, basta clicar em <strong>Assumir conversa</strong> (ou responder direto pelo celular da loja no WhatsApp).
-        </p>
-
-        <section aria-labelledby="inbox-title" className={attendanceStyles.inboxSection}>
-          <div className={attendanceStyles.inboxHeader}>
-            <h2 id="inbox-title">Conversas</h2>
+        <header className={attendanceStyles.topBar}>
+          <div className={attendanceStyles.topBarTitle}>
+            <h1>Atendimento · Dayse</h1>
+            <p className={attendanceStyles.intro}>
+              A Dayse atende com base no estoque publicado. Assuma uma conversa para responder como vendedor e pausar a IA.
+            </p>
           </div>
+          <Link href="/admin/ajustes" className={attendanceStyles.settingsBtn}>
+            <span className={attendanceStyles.settingsDot} aria-hidden="true" />
+            Configurar WhatsApp (Meta)
+          </Link>
+        </header>
+
+        <section aria-label="Fila de conversas" className={attendanceStyles.inboxSection}>
           <nav aria-label="Filtros da fila de atendimento" className={attendanceStyles.filterNav}>
             {tabs.map((tab) => (
               <Link
                 key={tab.id}
                 href={`/admin/atendimento?fila=${tab.id}`}
                 className={`${attendanceStyles.filterTab} ${filter === tab.id ? attendanceStyles.filterTabActive : ''}`}
+                aria-current={filter === tab.id ? 'page' : undefined}
               >
                 {tab.label}
               </Link>
@@ -103,8 +108,9 @@ export default async function AttendancePage({
                   return (
                     <li key={item.id}>
                       <Link
-                        href={`/admin/atendimento?fila=${filter}&conversa=${item.id}`}
+                        href={`/admin/atendimento?fila=${filter}&conversa=${item.id}#conversa-ativa`}
                         className={`${attendanceStyles.conversationLink} ${isSelected ? attendanceStyles.conversationLinkActive : ''}`}
+                        aria-current={isSelected ? 'true' : undefined}
                       >
                         <div className={attendanceStyles.conversationMeta}>
                           <strong>{item.customerName ?? `Atendimento #${protocolOf(item.id)}`}</strong>
@@ -133,7 +139,7 @@ export default async function AttendancePage({
               </ul>
 
               {detail ? (
-                <article className={attendanceStyles.conversationDetail} aria-label={`Conversa ${protocolOf(detail.conversation.id)}`}>
+                <article id="conversa-ativa" className={attendanceStyles.conversationDetail} aria-label={`Conversa ${protocolOf(detail.conversation.id)}`}>
                   <header className={attendanceStyles.detailHeader}>
                     <div>
                       <h3>{detail.conversation.customerName ?? `Atendimento #${protocolOf(detail.conversation.id)}`}</h3>
@@ -197,7 +203,9 @@ export default async function AttendancePage({
                               ? attendanceStyles.messageVisitor
                               : msg.sender === 'human'
                                 ? attendanceStyles.messageHuman
-                                : ''
+                                : msg.sender === 'ai' || msg.sender === 'bot'
+                                  ? attendanceStyles.messageAi
+                                  : ''
                           }`}
                         >
                           <div className={attendanceStyles.messageHeader}>

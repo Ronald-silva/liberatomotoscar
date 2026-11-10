@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react';
 
 interface Viewer360Props {
   images: string[];
@@ -17,84 +17,182 @@ export function Viewer360({
   alt,
   title,
   badge = 'IMAGEM ILUSTRATIVA',
-  singleImageCaption = 'Visualização 360° disponível quando houver fotos do mesmo veículo em todos os ângulos.',
+  singleImageCaption = '',
 }: Viewer360Props) {
   const [frame, setFrame] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const pointerX = useRef<number | null>(null);
-  const isRotatable = images.length > 1;
+  const moved = useRef(false);
+  const hasMultiple = images.length > 1;
+  const activeFrame = frame < images.length ? frame : 0;
 
   useEffect(() => {
-    if (!isRotatable || !playing) return;
-    const timer = window.setInterval(() => {
-      setFrame((current) => (current + 1) % images.length);
-    }, 140);
-    return () => window.clearInterval(timer);
-  }, [images.length, isRotatable, playing]);
+    if (!expanded) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setExpanded(false);
+      else if (event.key === 'ArrowLeft' && hasMultiple) {
+        setFrame((current) => (current - 1 + images.length) % images.length);
+      } else if (event.key === 'ArrowRight' && hasMultiple) {
+        setFrame((current) => (current + 1) % images.length);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [expanded, hasMultiple, images.length]);
 
   if (images.length === 0) return null;
 
   function step(delta: number) {
-    setPlaying(false);
     setFrame((current) => (current + delta + images.length) % images.length);
   }
+
+  const badgeLabel = hasMultiple ? `FOTO ${activeFrame + 1} DE ${images.length}` : badge;
 
   return (
     <div className="viewer">
       <div
-        className={`viewer-stage ${isRotatable ? 'viewer-stage--interactive' : ''}`}
-        onPointerDown={isRotatable ? (event) => {
+        className={`viewer-stage ${hasMultiple ? 'viewer-stage--interactive' : ''}`}
+        onPointerDown={(event) => {
+          if ((event.target as HTMLElement).closest('button')) return;
           pointerX.current = event.clientX;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setPlaying(false);
-        } : undefined}
-        onPointerMove={isRotatable ? (event) => {
+          moved.current = false;
+          if (hasMultiple) event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={hasMultiple ? (event) => {
           if (pointerX.current === null) return;
           const difference = event.clientX - pointerX.current;
-          if (Math.abs(difference) >= 18) {
+          if (Math.abs(difference) >= 28) {
+            moved.current = true;
             setFrame((current) =>
               (current + (difference > 0 ? -1 : 1) + images.length) % images.length,
             );
             pointerX.current = event.clientX;
           }
         } : undefined}
-        onPointerUp={() => { pointerX.current = null; }}
-        onPointerCancel={() => { pointerX.current = null; }}
+        onPointerUp={(event) => {
+          if ((event.target as HTMLElement).closest('button')) return;
+          const wasTap = pointerX.current !== null && !moved.current;
+          pointerX.current = null;
+          if (wasTap) setExpanded(true);
+        }}
+        onPointerCancel={() => { pointerX.current = null; moved.current = false; }}
       >
         <span className="viewer-photo">
           <Image
-            src={images[frame]}
-            unoptimized={images[frame].startsWith('https://')}
-            alt={alt}
+            src={images[activeFrame]}
+            unoptimized={images[activeFrame].startsWith('https://')}
+            alt={`${alt} — foto ${activeFrame + 1} de ${images.length}`}
             fill
             sizes="(max-width: 900px) 100vw, 60vw"
             className="viewer-image"
             priority
           />
         </span>
-        <span className="viewer-badge">{badge}</span>
+        <span className="viewer-badge">{badgeLabel}</span>
+        <button
+          type="button"
+          className="viewer-zoom-btn"
+          aria-label={`Ampliar foto de ${title}`}
+          onClick={() => setExpanded(true)}
+        >
+          <Maximize2 size={16} aria-hidden="true" />
+          <span>Ampliar</span>
+        </button>
       </div>
-      {isRotatable ? (
-        <div className="viewer-controls">
-          <p>Arraste a imagem ou use os controles para girar {title}.</p>
-          <div>
-            <button type="button" aria-label="Girar para a esquerda" onClick={() => step(-1)}>
-              <ChevronLeft aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              aria-label={playing ? 'Pausar rotação' : 'Iniciar rotação'}
-              onClick={() => setPlaying((value) => !value)}
-            >
-              {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            </button>
-            <button type="button" aria-label="Girar para a direita" onClick={() => step(1)}>
-              <ChevronRight aria-hidden="true" />
-            </button>
+
+      {hasMultiple ? (
+        <>
+          <div className="viewer-thumbs" role="group" aria-label={`Miniaturas de ${title}`}>
+            {images.map((src, index) => (
+              <button
+                key={`${src}-${index}`}
+                type="button"
+                className={`viewer-thumb ${index === activeFrame ? 'is-active' : ''}`}
+                aria-label={`Ver foto ${index + 1} de ${images.length}`}
+                aria-current={index === activeFrame ? 'true' : undefined}
+                onClick={() => setFrame(index)}
+              >
+                <Image
+                  src={src}
+                  unoptimized={src.startsWith('https://')}
+                  alt=""
+                  fill
+                  sizes="96px"
+                  className="viewer-thumb-image"
+                />
+              </button>
+            ))}
           </div>
-        </div>
+          <div className="viewer-controls">
+            <p>Toque nas miniaturas ou deslize para ver todos os ângulos de {title}.</p>
+            <div>
+              <button type="button" aria-label="Foto anterior" onClick={() => step(-1)}>
+                <ChevronLeft aria-hidden="true" />
+              </button>
+              <button type="button" aria-label="Próxima foto" onClick={() => step(1)}>
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </>
       ) : singleImageCaption ? (
         <p className="viewer-caption">{singleImageCaption}</p>
+      ) : null}
+
+      {expanded ? (
+        <div
+          className="viewer-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Foto ampliada de ${title}`}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setExpanded(false);
+          }}
+        >
+          <div className="viewer-lightbox-bar">
+            <span>{title} · {badgeLabel}</span>
+            <button
+              type="button"
+              className="viewer-lightbox-close"
+              aria-label="Fechar foto ampliada"
+              onClick={() => setExpanded(false)}
+            >
+              <X size={20} aria-hidden="true" /> Fechar
+            </button>
+          </div>
+          <div className="viewer-lightbox-stage">
+            {hasMultiple ? (
+              <button
+                type="button"
+                className="viewer-lightbox-nav viewer-lightbox-nav--prev"
+                aria-label="Foto anterior"
+                onClick={() => step(-1)}
+              >
+                <ChevronLeft size={24} aria-hidden="true" />
+              </button>
+            ) : null}
+            <div className="viewer-lightbox-photo">
+              <Image
+                src={images[activeFrame]}
+                unoptimized={images[activeFrame].startsWith('https://')}
+                alt={`${alt} — foto ${activeFrame + 1} ampliada`}
+                fill
+                sizes="100vw"
+                className="viewer-lightbox-image"
+              />
+            </div>
+            {hasMultiple ? (
+              <button
+                type="button"
+                className="viewer-lightbox-nav viewer-lightbox-nav--next"
+                aria-label="Próxima foto"
+                onClick={() => step(1)}
+              >
+                <ChevronRight size={24} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </div>
   );

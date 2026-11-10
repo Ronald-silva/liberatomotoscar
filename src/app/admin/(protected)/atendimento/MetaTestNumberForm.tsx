@@ -22,8 +22,8 @@ export function MetaTestNumberForm({ webhookUrl, currentTestNumber, phoneNumberI
   );
 
   return (
-    <details className={attendanceStyles.history} open>
-      <summary>🧪 Testar a Dayse com o número de teste da Meta (sem usar o número da loja)</summary>
+    <details className={attendanceStyles.history}>
+      <summary>Testar a Dayse com número de teste da Meta (avançado / sem usar o número da loja)</summary>
       {currentTestNumber ? <p className={attendanceStyles.current}>Número de teste registrado: <strong>{currentTestNumber}</strong>.</p> : null}
       <p className={attendanceStyles.current}>
         Em developers.facebook.com → seu app → <strong>WhatsApp → API Setup</strong>, copie os três dados abaixo e

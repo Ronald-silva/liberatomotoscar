@@ -52,10 +52,22 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
         </p>
 
         <div className="vehicle-grid">
-          {vehicles.map((vehicle) => (
-            <article className="vehicle-card" key={vehicle.slug} data-categoria={vehicle.category}>
+          {vehicles.map((vehicle, index) => (
+            <article
+              className="vehicle-card"
+              key={vehicle.slug}
+              data-categoria={vehicle.category}
+              data-ordem={index}
+              data-preco={vehicle.priceBRL}
+              data-ano={vehicle.year ?? 0}
+            >
               <div className="vehicle-image-wrap">
-                <span className="vehicle-photo">
+                <Link
+                  href={`/veiculos/${vehicle.slug}`}
+                  className="vehicle-photo"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                >
                   <Image
                     src={vehicle.image}
                     unoptimized={vehicle.image.startsWith('https://')}
@@ -64,7 +76,7 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
                     sizes="(max-width: 800px) 100vw, 560px"
                     className="vehicle-image"
                   />
-                </span>
+                </Link>
                 <span className="vehicle-type">{vehicle.categoryLabel}</span>
               </div>
               <div className="vehicle-content">
@@ -72,7 +84,11 @@ export function Showcase({ vehicles }: { vehicles: InventoryVehicle[] }) {
                   {vehicle.condition && (
                     <p className="vehicle-kicker">{vehicle.condition.toUpperCase()}</p>
                   )}
-                  <h3>{vehicle.title}</h3>
+                  <h3>
+                    <Link href={`/veiculos/${vehicle.slug}`} className="vehicle-title-link">
+                      {vehicle.title}
+                    </Link>
+                  </h3>
                   <p>{vehicle.shortDescription}</p>
                   <dl className="vehicle-facts">
                     {vehicle.year !== undefined && <div><dt>Ano</dt><dd>{vehicle.year}</dd></div>}
