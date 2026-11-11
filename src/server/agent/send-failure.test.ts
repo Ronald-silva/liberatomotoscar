@@ -54,6 +54,20 @@ describe('I4 — a Meta recusou o envio', () => {
     expect(onSendFailed).toHaveBeenCalledWith('conv-1', expect.anything());
   });
 
+  it('token ausente também sinaliza a conversa sem estourar o webhook', async () => {
+    const onSendFailed = vi.fn(async () => {});
+    const sendOutbound = vi.fn(async () => ({ messageId: 'wamid.out' }));
+    const result = await processMetaWebhookPayload(payload, {
+      findTenant: async () => ({ ...tenant, accessToken: undefined }),
+      sendOutbound,
+      pauseOnSellerEcho: async () => undefined,
+      onSendFailed,
+    });
+    expect(result.processedMessages).toBe(0);
+    expect(sendOutbound).not.toHaveBeenCalled();
+    expect(onSendFailed).toHaveBeenCalledWith('conv-1', expect.any(Error));
+  });
+
   it('o mesmo vale quando o envio explode', async () => {
     const onSendFailed = vi.fn(async () => {});
     await expect(processMetaWebhookPayload(payload, {
