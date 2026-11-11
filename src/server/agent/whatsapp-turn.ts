@@ -53,6 +53,8 @@ export function splitPendingMessages(history: MessageRow[]): { anteriores: Messa
 /** Sem cota diária o cliente não fica sem resposta: a conversa vai para o vendedor (5.4). */
 const SEM_COTA_BODY = 'Oi! Neste momento não consigo te responder por aqui. '
   + 'Já chamei um vendedor para falar com você.';
+const MENU_LEGADO_BODY = 'O atendimento por menu está temporariamente indisponível. '
+  + 'Vou chamar um vendedor para continuar seu atendimento.';
 
 export type WhatsappAgentTurnInput = {
   conversationId: string;
@@ -96,7 +98,7 @@ export async function runWhatsappAgentTurn(
   const consumeConversationQuota = deps.consumeConversationQuota ?? consumeConversationQuotaDefault;
 
   const setting = await readSetting();
-  if (setting.mode !== 'ai') return null;
+  if (setting.mode !== 'ai' && setting.mode !== 'deterministic') return null;
 
   // Teto por conversa antes da cota global: quem estourou o próprio limite não gasta a da loja.
   if (!await consumeConversationQuota(input.conversationId)) {
@@ -111,6 +113,15 @@ export async function runWhatsappAgentTurn(
   if (!reserved) return null;
 
   try {
+    // Banco antigo pode ter modo deterministic salvo. Não gastar IA nem ficar mudo:
+    // grava uma resposta explícita e sinaliza a conversa ao vendedor.
+    if (setting.mode === 'deterministic') {
+      const sent = await commitReply(input.conversationId, {
+        sender: 'bot', body: MENU_LEGADO_BODY, cards: [], handoffReason: 'ai_suggested',
+      });
+      return sent ? MENU_LEGADO_BODY : null;
+    }
+
     const quota = await reserveQuota();
     if (!quota) {
       const sent = await commitReply(input.conversationId, {
