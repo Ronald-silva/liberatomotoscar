@@ -83,6 +83,18 @@ describe('turno do agente no WhatsApp', () => {
     expect(deps.reserveTurn).not.toHaveBeenCalled();
   });
 
+  it('modo menu legado informa indisponibilidade e encaminha sem consumir IA', async () => {
+    const deps = depsDoTurno({ readSetting: vi.fn(async () => ({ mode: 'deterministic' })) });
+    const body = await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'Oi' }, deps);
+    expect(body).toContain('vendedor');
+    expect(deps.commitReply).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+      sender: 'bot', handoffReason: 'ai_suggested',
+    }));
+    expect(deps.reserveQuota).not.toHaveBeenCalled();
+    expect(deps.recordTokens).not.toHaveBeenCalled();
+    expect(deps.releaseTurn).toHaveBeenCalledWith('conv-1');
+  });
+
   it('5.2 não responde quando a reserva do turno não é dele', async () => {
     const deps = depsDoTurno({ reserveTurn: vi.fn(async () => null) as never });
     expect(await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'Oi' }, deps)).toBeNull();
