@@ -23,6 +23,10 @@ export function WhatsappModeForm({ mode, version }: { mode: AttendanceMode; vers
   return <section aria-labelledby="modo-title" className={attendanceStyles.form}>
     <h2 id="modo-title">Atendimento da Dayse no WhatsApp</h2>
     <p className={attendanceStyles.current}>Define como a Dayse responde aos clientes que escrevem para a loja.</p>
+    {state.mode === 'deterministic' ? <p className={attendanceStyles.error} role="alert">
+      O modo de menu anterior está indisponível. Novas mensagens são encaminhadas ao vendedor.
+      Selecione Dayse ou Desligada e confirme a mudança para regularizar o atendimento.
+    </p> : null}
     <fieldset className={attendanceStyles.choices} disabled={pending}>
       <legend>Modo da Dayse</legend>
       {whatsappModes.map((option) => <label key={option.value} className={attendanceStyles.choice}>
