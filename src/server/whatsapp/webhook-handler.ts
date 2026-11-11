@@ -251,13 +251,13 @@ export async function processMetaWebhookPayload(
         });
 
         if (replyBody) {
-          const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
-          if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
           // A resposta já foi gravada na conversa. Se o envio falhar e nós lançarmos, a Meta
           // reentrega o evento e a deduplicação engole a retentativa: o banco fica com uma
           // resposta que o cliente nunca recebeu, e ninguém é avisado. Por isso a falha vira
-          // um pedido de atendimento humano, não uma exceção.
+          // um pedido de atendimento humano, não uma exceção. Inclui token ausente/ilegível.
           try {
+            const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
+            if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
             const sent = await sendOutbound({
               phoneNumberId: tenant.whatsappPhoneNumberId,
               accessToken,
