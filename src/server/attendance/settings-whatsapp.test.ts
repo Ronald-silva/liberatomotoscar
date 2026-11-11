@@ -56,7 +56,7 @@ describe('controle do modo do WhatsApp', () => {
 
   it('recusa versao obsoleta com StaleAttendanceSettingError', async () => {
     await setWhatsappMode('disabled', 1); // a linha agora está na versão 2
-    await expect(setWhatsappMode('deterministic', 1)).rejects.toBeInstanceOf(StaleAttendanceSettingError);
+    await expect(setWhatsappMode('ai', 1)).rejects.toBeInstanceOf(StaleAttendanceSettingError);
     expect(db.row?.mode).toBe('disabled');
     expect(db.audit).toHaveLength(1);
   });
@@ -64,13 +64,16 @@ describe('controle do modo do WhatsApp', () => {
   it('recusa versao invalida e modo desconhecido sem tocar no banco', async () => {
     await expect(setWhatsappMode('ai', 0)).rejects.toBeInstanceOf(StaleAttendanceSettingError);
     await expect(setWhatsappMode('desligado', 1)).rejects.toThrow();
+    await expect(setWhatsappMode('deterministic', 1)).rejects.toThrow();
     expect(db.row).toBeNull();
   });
 
-  it('registra a mudanca em channel_settings_audit com o canal whatsapp', async () => {
-    await setWhatsappMode('deterministic', 1);
-    expect(db.audit).toEqual([{ channel: 'whatsapp', actorUserId: 'admin-1', beforeMode: 'ai',
-      afterMode: 'deterministic', beforeVersion: 1, afterVersion: 2 }]);
+  it('permite sair do modo legado sem apagar a trilha de auditoria', async () => {
+    db.row = { channel: 'whatsapp', mode: 'deterministic', version: 2, updatedBy: null, updatedAt: new Date() };
+    const saved = await setWhatsappMode('ai', 2);
+    expect(saved.mode).toBe('ai');
+    expect(db.audit).toEqual([{ channel: 'whatsapp', actorUserId: 'admin-1', beforeMode: 'deterministic',
+      afterMode: 'ai', beforeVersion: 2, afterVersion: 3 }]);
   });
 
   it('nao audita nem avanca a versao quando o modo pedido ja e o atual', async () => {
