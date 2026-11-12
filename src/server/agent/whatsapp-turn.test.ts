@@ -61,6 +61,9 @@ function depsDoTurno(over: Partial<WhatsappAgentTurnDeps> = {}): WhatsappAgentTu
     listMessages: vi.fn(async () => []) as never,
     commitReply: vi.fn(async (_id: string, reply: { body: string }) => ({ id: 'msg-1', body: reply.body })) as never,
     reserveQuota: vi.fn(async () => ({ dayUtc: '2026-10-29' })) as never,
+    // O limite por conversa depende do Postgres real; este teste isola o turno da IA.
+    // A política fail-closed é testada separadamente em attendance/limits.test.ts.
+    consumeConversationQuota: vi.fn(async () => true),
     recordTokens: vi.fn(async () => {}) as never,
     recordGuardRejection: vi.fn(async () => {}) as never,
     searchVehicles: vi.fn(async () => ({ items: [], checkedAt: '2026-10-29T12:00:00.000Z' })) as never,
