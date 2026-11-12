@@ -54,6 +54,20 @@ describe('I4 — a Meta recusou o envio', () => {
     expect(onSendFailed).toHaveBeenCalledWith('conv-1', expect.anything());
   });
 
+  it('token ausente também sinaliza a conversa sem estourar o webhook', async () => {
+    const onSendFailed = vi.fn(async () => {});
+    const sendOutbound = vi.fn(async () => ({ messageId: 'wamid.out' }));
+    const result = await processMetaWebhookPayload(payload, {
+      findTenant: async () => ({ ...tenant, accessToken: undefined }),
+      sendOutbound,
+      pauseOnSellerEcho: async () => undefined,
+      onSendFailed,
+    });
+    expect(result.processedMessages).toBe(0);
+    expect(sendOutbound).not.toHaveBeenCalled();
+    expect(onSendFailed).toHaveBeenCalledWith('conv-1', expect.any(Error));
+  });
+
   it('o mesmo vale quando o envio explode', async () => {
     const onSendFailed = vi.fn(async () => {});
     await expect(processMetaWebhookPayload(payload, {
@@ -63,5 +77,52 @@ describe('I4 — a Meta recusou o envio', () => {
       onSendFailed,
     })).resolves.toBeTruthy();
     expect(onSendFailed).toHaveBeenCalled();
+  });
+});
+
+
+describe('concorrência: falha de envio mantém o ID da conversa correta', () => {
+  it('não atribui a falha do primeiro cliente ao segundo atendimento', async () => {
+    const outroPayload = JSON.parse(JSON.stringify(payload)) as typeof payload;
+    outroPayload.entry[0].changes[0].value.contacts[0].wa_id = '5585999991111';
+    outroPayload.entry[0].changes[0].value.messages[0].from = '5585999991111';
+    outroPayload.entry[0].changes[0].value.messages[0].id = 'wamid.2';
+
+    let avisarPrimeiroEnvio!: () => void;
+    const primeiroEnvioIniciado = new Promise<void>((resolve) => { avisarPrimeiroEnvio = resolve; });
+    let liberarFalha!: () => void;
+    const liberarPrimeiroEnvio = new Promise<void>((resolve) => { liberarFalha = resolve; });
+
+    const onSendFailed = vi.fn(async () => {});
+    const deps = {
+      findTenant: async () => tenant,
+      pauseOnSellerEcho: async () => undefined,
+      onSendFailed,
+      runAgentTurn: async ({ customerWaId, onConversationPersisted }: {
+        customerWaId: string;
+        onConversationPersisted?: (id: string) => void;
+      }) => {
+        onConversationPersisted?.(`conversa-${customerWaId}`);
+        return 'Resposta de teste';
+      },
+      sendOutbound: async ({ to }: { to: string }) => {
+        if (to === '5585999990000') {
+          avisarPrimeiroEnvio();
+          await liberarPrimeiroEnvio;
+          throw new Error('Falha simulada no primeiro envio');
+        }
+        return { messageId: 'wamid.out.2' };
+      },
+    };
+
+    const primeiro = processMetaWebhookPayload(payload, deps);
+    await primeiroEnvioIniciado;
+    const segundo = await processMetaWebhookPayload(outroPayload, deps);
+    expect(segundo.processedMessages).toBe(1);
+    liberarFalha();
+    const resultado = await primeiro;
+    expect(resultado.processedMessages).toBe(0);
+    expect(onSendFailed).toHaveBeenCalledTimes(1);
+    expect(onSendFailed).toHaveBeenCalledWith('conversa-5585999990000', expect.any(Error));
   });
 });

@@ -36,7 +36,9 @@ export async function readAdminWhatsappSetting() {
  */
 export async function setWhatsappMode(requestedMode: unknown, expectedVersion: number): Promise<ChannelSettingRow> {
   const actor = await requireAdmin();
-  const mode = attendanceModeSchema.parse(requestedMode);
+  // O modo legacy 'deterministic' continua legível, mas não pode mais ser selecionado
+  // até existir um fluxo de menu implementado de ponta a ponta.
+  const mode = z.enum(['disabled', 'ai']).parse(requestedMode);
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new StaleAttendanceSettingError();
   await ensureAttendanceTables();
 

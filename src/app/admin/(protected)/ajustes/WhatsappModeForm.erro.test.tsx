@@ -14,18 +14,18 @@ it('erro generico: aparece junto ao botao e a confirmacao continua ali (o servid
   mocks.changeWhatsappMode.mockResolvedValue({ mode: 'ai', version: 3, error: true,
     message: 'Não foi possível alterar o modo. Confira os dados e tente novamente.' });
   render(<WhatsappModeForm mode="ai" version={3} />);
-  fireEvent.click(screen.getByRole('radio', { name: /Atendimento por menu/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Sim, trocar para Atendimento por menu' }));
+  fireEvent.click(screen.getByRole('radio', { name: /Dayse desligada/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, trocar para Dayse desligada' }));
   await waitFor(() => expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toContain('Não foi possível'));
-  expect(screen.getByRole('button', { name: 'Sim, trocar para Atendimento por menu' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Sim, trocar para Dayse desligada' })).toBeTruthy();
 });
 
 it('versao velha: nao oferece repetir (falharia de novo), so recarregar', async () => {
   mocks.changeWhatsappMode.mockResolvedValue({ mode: 'ai', version: 3, error: true, stale: true,
     message: 'O modo de atendimento mudou. Atualize a página antes de tentar novamente.' });
   render(<WhatsappModeForm mode="ai" version={3} />);
-  fireEvent.click(screen.getByRole('radio', { name: /Atendimento por menu/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'Sim, trocar para Atendimento por menu' }));
+  fireEvent.click(screen.getByRole('radio', { name: /Dayse desligada/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, trocar para Dayse desligada' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Recarregar a página' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: /Sim, trocar/ })).toBeNull();
   expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toContain('mudou');

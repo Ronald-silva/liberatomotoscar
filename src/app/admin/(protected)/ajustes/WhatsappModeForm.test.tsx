@@ -18,8 +18,10 @@ afterEach(cleanup);
 
 const label = (value: string) => whatsappModes.find((m) => m.value === value)!.label;
 
-it('lista os tres modos com os textos do servidor e marca o atual', () => {
+it('lista apenas modos implementados, com descrições e atual marcado', () => {
   render(<WhatsappModeForm mode="ai" version={3} />);
+  expect(whatsappModes.map((m) => m.value)).toEqual(['ai', 'disabled']);
+  expect(screen.queryByRole('radio', { name: /Atendimento por menu/ })).toBeNull();
   for (const m of whatsappModes) {
     expect(screen.getByRole('radio', { name: new RegExp(m.label) })).toBeTruthy();
     expect(screen.getByText(m.description)).toBeTruthy();

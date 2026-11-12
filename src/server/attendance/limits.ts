@@ -29,7 +29,9 @@ async function reserveAiRequest(channel: 'site' | 'whatsapp', now: Date, limit: 
       }).returning({ aiRequests: attendanceUsage.aiRequests });
     return row ? { dayUtc } : null;
   } catch {
-    return { dayUtc };
+    // Sem confirmação no banco, NUNCA autorizar uma chamada paga ao modelo.
+    console.error('[attendance] falha ao reservar cota de IA; chamada bloqueada');
+    return null;
   }
 }
 
@@ -82,6 +84,8 @@ export async function consumeRateLimit(bucketKey: string, max: number, windowMs:
       }).returning({ hits: attendanceRateLimits.hits });
     return Boolean(row);
   } catch {
-    return true;
+    // O limite é distribuído: se o banco falhar, não há autorização para consumir.
+    console.error('[attendance] falha ao verificar rate limit; requisição bloqueada');
+    return false;
   }
 }

@@ -61,6 +61,9 @@ function depsDoTurno(over: Partial<WhatsappAgentTurnDeps> = {}): WhatsappAgentTu
     listMessages: vi.fn(async () => []) as never,
     commitReply: vi.fn(async (_id: string, reply: { body: string }) => ({ id: 'msg-1', body: reply.body })) as never,
     reserveQuota: vi.fn(async () => ({ dayUtc: '2026-10-29' })) as never,
+    // O limite por conversa depende do Postgres real; este teste isola o turno da IA.
+    // A política fail-closed é testada separadamente em attendance/limits.test.ts.
+    consumeConversationQuota: vi.fn(async () => true),
     recordTokens: vi.fn(async () => {}) as never,
     recordGuardRejection: vi.fn(async () => {}) as never,
     searchVehicles: vi.fn(async () => ({ items: [], checkedAt: '2026-10-29T12:00:00.000Z' })) as never,
@@ -81,6 +84,18 @@ describe('turno do agente no WhatsApp', () => {
     const deps = depsDoTurno({ readSetting: vi.fn(async () => ({ mode: 'disabled' })) });
     expect(await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'Oi' }, deps)).toBeNull();
     expect(deps.reserveTurn).not.toHaveBeenCalled();
+  });
+
+  it('modo menu legado informa indisponibilidade e encaminha sem consumir IA', async () => {
+    const deps = depsDoTurno({ readSetting: vi.fn(async () => ({ mode: 'deterministic' })) });
+    const body = await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'Oi' }, deps);
+    expect(body).toContain('vendedor');
+    expect(deps.commitReply).toHaveBeenCalledWith('conv-1', expect.objectContaining({
+      sender: 'bot', handoffReason: 'ai_suggested',
+    }));
+    expect(deps.reserveQuota).not.toHaveBeenCalled();
+    expect(deps.recordTokens).not.toHaveBeenCalled();
+    expect(deps.releaseTurn).toHaveBeenCalledWith('conv-1');
   });
 
   it('5.2 não responde quando a reserva do turno não é dele', async () => {

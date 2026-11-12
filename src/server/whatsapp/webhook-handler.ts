@@ -111,6 +111,7 @@ export type WebhookHandlerDeps = {
     customerName?: string | null;
     waMessageId: string;
     text: string;
+    onConversationPersisted?: (conversationId: string) => void;
   }) => Promise<string | null>;
   sendOutbound?: (params: {
     phoneNumberId: string;
@@ -133,6 +134,7 @@ async function defaultRunAgentTurn(params: {
   customerName?: string | null;
   waMessageId: string;
   text: string;
+  onConversationPersisted?: (conversationId: string) => void;
 }): Promise<string | null> {
   const conversationId = await recordIncomingWhatsappMessage({
     tenantId: params.tenant.tenantId,
@@ -144,15 +146,9 @@ async function defaultRunAgentTurn(params: {
   // A Meta reentrega o mesmo evento quando o webhook demora. Sem esta saída o cliente
   // receberia duas respostas para a mesma frase.
   if (!conversationId) return null;
-  ultimaConversa = conversationId;
+  params.onConversationPersisted?.(conversationId);
   return runWhatsappAgentTurn({ conversationId, message: params.text.slice(0, 1000) });
 }
-
-/**
- * Id da conversa do turno em curso. O contrato de `runAgentTurn` devolve só o texto a enviar,
- * e o handler precisa do id para marcar a conversa quando o envio falha.
- */
-let ultimaConversa: string | null = null;
 
 /**
  * Falha de envio: a conversa entra na fila do vendedor, porque o cliente está esperando e não
@@ -243,23 +239,25 @@ export async function processMetaWebhookPayload(
           value?.contacts?.find((c) => c.wa_id === incoming.from) ?? value?.contacts?.[0];
         const customerName = contactMatch?.profile?.name?.trim() || null;
 
-        ultimaConversa = null;
+        // Escopo da própria mensagem: requisições simultâneas não compartilham o ID.
+        let conversationIdForTurn: string | null = null;
         const replyBody = await runTurn({
           tenant,
           customerWaId: incoming.from,
           customerName,
           waMessageId: incoming.id,
           text: normalizedText,
+          onConversationPersisted: (id) => { conversationIdForTurn = id; },
         });
 
         if (replyBody) {
-          const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
-          if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
           // A resposta já foi gravada na conversa. Se o envio falhar e nós lançarmos, a Meta
           // reentrega o evento e a deduplicação engole a retentativa: o banco fica com uma
           // resposta que o cliente nunca recebeu, e ninguém é avisado. Por isso a falha vira
-          // um pedido de atendimento humano, não uma exceção.
+          // um pedido de atendimento humano, não uma exceção. Inclui token ausente/ilegível.
           try {
+            const accessToken = tenant.accessToken ?? (tenant.encryptedAccessToken ? decrypt(tenant.encryptedAccessToken) : null);
+            if (!accessToken) throw new Error('Token de envio do WhatsApp não configurado para o número recebido.');
             const sent = await sendOutbound({
               phoneNumberId: tenant.whatsappPhoneNumberId,
               accessToken,
@@ -270,11 +268,11 @@ export async function processMetaWebhookPayload(
             processedMessages += 1;
           } catch (erro) {
             console.error('[agente] envio ao WhatsApp falhou', JSON.stringify({
-              evento: 'envio_falhou', conversationId: ultimaConversa,
+              evento: 'envio_falhou', conversationId: conversationIdForTurn,
               detalhe: erro instanceof Error ? erro.message : String(erro),
               em: new Date().toISOString(),
             }));
-            await onSendFailed(ultimaConversa ?? '', erro);
+            await onSendFailed(conversationIdForTurn ?? '', erro);
           }
         } else {
           console.info('Webhook WhatsApp: conversa sem resposta automática (modo desativado, vendedor ativo ou mensagem duplicada).');
