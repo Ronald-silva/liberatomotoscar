@@ -15,6 +15,11 @@ import { TEST_TENANT_ID } from './test-number';
 type WebhookTenant = Pick<WhatsappTenantRow, 'tenantId' | 'wabaId' | 'whatsappPhoneNumberId' | 'isActive'> & {
   encryptedAccessToken?: string;
   accessToken?: string;
+  /**
+   * `false` quando o `wabaId` deste tenant veio do próprio evento, por falta de
+   * `WHATSAPP_WABA_ID`. Ausente significa origem confiável (banco ou ambiente).
+   */
+  wabaVerified?: boolean;
 };
 
 /** O token salvo e validado no painel tem prioridade; o ambiente cobre apenas o primeiro cadastro. */
@@ -25,7 +30,8 @@ export async function resolveWebhookTenant(
 ): Promise<WebhookTenant | null> {
   const dbTenant = await findDbTenant(phoneNumberId);
   const envPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
-  const envWabaId = process.env.WHATSAPP_WABA_ID?.trim() || eventWabaId;
+  const configuredWabaId = process.env.WHATSAPP_WABA_ID?.trim();
+  const envWabaId = configuredWabaId || eventWabaId;
   const envAccessToken = process.env.WHATSAPP_TOKEN?.trim();
   if (dbTenant) {
     return dbTenant;
@@ -38,6 +44,12 @@ export async function resolveWebhookTenant(
       whatsappPhoneNumberId: envPhoneNumberId,
       isActive: true,
       accessToken: envAccessToken,
+      /**
+       * Sem `WHATSAPP_WABA_ID` o `wabaId` é o próprio `entry.id` do evento, e a guarda lá embaixo
+       * passa a comparar o valor com ele mesmo. Marcar aqui é o que impede a conferência vacuosa
+       * de se passar por conferência feita.
+       */
+      wabaVerified: Boolean(configuredWabaId),
     };
   }
   return null;
@@ -199,6 +211,19 @@ export async function processMetaWebhookPayload(
       if (entry.id && entry.id !== tenant.wabaId) {
         if (value?.messages?.length) console.warn('Webhook WhatsApp: WABA do evento diferente da conta configurada; nenhuma resposta enviada.');
         continue;
+      }
+      /**
+       * A comparação acima só vale quando o `wabaId` do tenant tem origem independente do evento.
+       * No caminho de ambiente sem `WHATSAPP_WABA_ID` ela compara `entry.id` com `entry.id`: não
+       * reprova nada. Bloquear aqui deixaria o cliente sem resposta e sem vendedor por uma
+       * variável ausente — o que a assinatura HMAC e o `phone_number_id` já barram —, então o
+       * atendimento segue e a lacuna fica registrada, com nome próprio, até a variável existir
+       * nas duas produções.
+       */
+      if (entry.id && tenant.wabaVerified === false && value?.messages?.length) {
+        console.warn('[whatsapp] WABA do evento não conferida: WHATSAPP_WABA_ID ausente', JSON.stringify({
+          evento: 'waba_nao_verificada', wabaDoEvento: entry.id, em: new Date().toISOString(),
+        }));
       }
 
       // 1. Modo Coexistência: vendedor respondeu pelo WhatsApp Business do celular
