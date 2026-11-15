@@ -52,7 +52,12 @@ export function Hero() {
         <div className="container hero-bottom-inner">
           <span>LIBERATO MOTOS CAR</span>
           <span>COMPRA <b>•</b> VENDA <b>•</b> TROCA</span>
-          <Link href="#vitrine" aria-label="Ir para os veículos">
+          {/*
+            WCAG 2.5.3 (Label in Name): o nome acessível precisa conter o texto visível. O rótulo
+            anterior era "Ir para os veículos" sobre o texto "DESLIZE PARA EXPLORAR" — quem usa
+            comando de voz dizia o que lia na tela e o navegador não encontrava o link.
+          */}
+          <Link href="#vitrine" aria-label="Deslize para explorar os veículos">
             DESLIZE PARA EXPLORAR <ArrowDown size={16} aria-hidden="true" />
           </Link>
         </div>
