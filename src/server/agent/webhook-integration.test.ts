@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { WhatsappTurnResult } from '@/server/agent/whatsapp-turn';
 
 vi.mock('@/server/authz', () => ({
   AccessDeniedError: class AccessDeniedError extends Error {},
@@ -8,7 +9,8 @@ vi.mock('@/server/authz', () => ({
 // vi.mock é içado acima das declarações do módulo; vi.hoisted cria os espiões junto.
 const { recordVisitorMessage, runTurn } = vi.hoisted(() => ({
   recordVisitorMessage: vi.fn(async (): Promise<string | null> => 'conv-1'),
-  runTurn: vi.fn(async (): Promise<string | null> => 'Claro! Você procura moto ou carro?'),
+  runTurn: vi.fn(async (): Promise<WhatsappTurnResult | null> =>
+    ({ status: 'resposta' as const, body: 'Claro! Você procura moto ou carro?' })),
 }));
 
 vi.mock('@/server/agent/incoming', () => ({

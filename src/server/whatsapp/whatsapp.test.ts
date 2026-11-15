@@ -213,15 +213,19 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
         findTenant: async (id) => (id === 'phone_liberato_1' ? fakeTenant : null),
         decryptToken: (enc) => decryptAccessToken(enc, TEST_HEX_KEY),
         pauseOnSellerEcho,
-        runAgentTurn: async ({ text }) =>
-          formatAgentWhatsAppReply(`Olá! Sou a Dayse. Você perguntou: ${text}`, [
+        runAgentTurn: async ({ text }) => ({
+          status: 'resposta' as const,
+          body: formatAgentWhatsAppReply(`Olá! Sou a Dayse. Você perguntou: ${text}`, [
             { title: 'Honda CG 160 Titan', year: 2023, priceCents: 1690000, href: '/veiculos/honda-titan' },
           ]),
+        }),
         sendOutbound,
       },
     );
 
-    expect(result).toEqual({ processedMessages: 1, pausedConversations: 1 });
+    // `falhasOperacionais: 0` é o que precisa valer no caminho bom: ninguém ficou esperando.
+    expect(result).toEqual({ processedMessages: 1, pausedConversations: 1,
+      encaminhamentos: 0, falhasOperacionais: 0 });
     expect(sendOutbound).toHaveBeenCalledWith({
       phoneNumberId: 'phone_liberato_1',
       accessToken: 'TOKEN_SECRETO_LIBERATO',
@@ -252,7 +256,7 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
         } }] }],
       }, {
         findTenant: (id, wabaId) => resolveWebhookTenant(id, async () => null, wabaId),
-        runAgentTurn: async () => 'Boa tarde! Sou a Dayse.',
+        runAgentTurn: async () => ({ status: 'resposta' as const, body: 'Boa tarde! Sou a Dayse.' }),
         sendOutbound,
       });
       expect(result.processedMessages).toBe(1);
@@ -283,7 +287,7 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
       } }] }],
     }, {
       findTenant: async () => ({ tenantId: TEST_TENANT_ID, wabaId: 'waba_test', whatsappPhoneNumberId: 'phone_test', isActive: true, accessToken: 'TOKEN' }),
-      runAgentTurn: async () => 'Olá!',
+      runAgentTurn: async () => ({ status: 'resposta' as const, body: 'Olá!' }),
       sendOutbound,
     });
     expect(sendOutbound).toHaveBeenCalledWith(expect.objectContaining({ to: '5585991234567' }));
@@ -352,7 +356,7 @@ describe('Tech Provider Meta WhatsApp Cloud API (RonalDigital ISP Platform)', ()
       } }] }],
     }, {
       findTenant: async () => tenant,
-      runAgentTurn: async () => 'Olá!',
+      runAgentTurn: async () => ({ status: 'resposta' as const, body: 'Olá!' }),
       sendOutbound: async () => ({ messageId: null }),
       onSendFailed,
     });

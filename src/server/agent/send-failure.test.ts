@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { WhatsappTurnResult } from '@/server/agent/whatsapp-turn';
 
 vi.mock('@/server/authz', () => ({
   AccessDeniedError: class AccessDeniedError extends Error {},
@@ -7,7 +8,8 @@ vi.mock('@/server/authz', () => ({
 
 const { recordVisitor, runTurn, pausar } = vi.hoisted(() => ({
   recordVisitor: vi.fn(async (): Promise<string | null> => 'conv-1'),
-  runTurn: vi.fn(async (): Promise<string | null> => 'Claro! Moto ou carro?'),
+  runTurn: vi.fn(async (): Promise<WhatsappTurnResult | null> =>
+    ({ status: 'resposta' as const, body: 'Claro! Moto ou carro?' })),
   pausar: vi.fn(async () => {}),
 }));
 
@@ -103,7 +105,7 @@ describe('concorrência: falha de envio mantém o ID da conversa correta', () =>
         onConversationPersisted?: (id: string) => void;
       }) => {
         onConversationPersisted?.(`conversa-${customerWaId}`);
-        return 'Resposta de teste';
+        return { status: 'resposta' as const, body: 'Resposta de teste' };
       },
       sendOutbound: async ({ to }: { to: string }) => {
         if (to === '5585999990000') {

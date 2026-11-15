@@ -2,9 +2,10 @@ import { eq } from 'drizzle-orm';
 import {
   ensureWhatsappConversation, recordIncomingWhatsappMessage, whatsappConversationToken,
 } from '@/server/agent/incoming';
-import { runWhatsappAgentTurn } from '@/server/agent/whatsapp-turn';
+import { runWhatsappAgentTurn, type WhatsappTurnResult } from '@/server/agent/whatsapp-turn';
 import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
+import { notifyOps, type OpsAlertOutcome } from '@/server/ops/alert';
 import { decryptAccessToken } from './crypto';
 
 export { whatsappConversationToken };
@@ -124,21 +125,45 @@ export type WebhookHandlerDeps = {
     waMessageId: string;
     text: string;
     onConversationPersisted?: (conversationId: string) => void;
-  }) => Promise<string | null>;
+  }) => Promise<WhatsappTurnResult | null>;
   sendOutbound?: (params: {
     phoneNumberId: string;
     accessToken: string;
     to: string;
     body: string;
   }) => Promise<{ messageId: string | null }>;
-  /** Chamado quando a Meta não confirma a entrega: a conversa passa a esperar um humano. */
-  onSendFailed?: (conversationId: string, erro: unknown) => Promise<void>;
+  /**
+   * Chamado quando a Meta não confirma a entrega: a conversa passa a esperar um humano.
+   *
+   * `false` significa "ninguém foi avisado" e conta como falha operacional. `void` é o
+   * desconhecido de um duplo injetado em teste, e não conta.
+   */
+  onSendFailed?: (conversationId: string, erro: unknown) => Promise<boolean | void>;
+  /** Destino humano dos incidentes. Injetável para que o teste não dependa de rede. */
+  alertOps?: typeof notifyOps;
 };
 
 /**
- * Persiste a mensagem do cliente e devolve a resposta do agente, ou null quando não há resposta
- * automática a dar: evento reentregue pela Meta, canal fora do modo ai, vendedor no comando, ou
- * resposta descartada no commit porque um humano assumiu durante a geração.
+ * Falha ao gravar a mensagem que o cliente acabou de mandar.
+ *
+ * Tem classe própria porque é o **único** erro do atendimento que deve derrubar o webhook: nada
+ * foi gravado, então não existe deduplicação para engolir a reentrega da Meta. O webhook devolve
+ * erro, a Meta reentrega, e quando o banco voltar a mensagem é processada de verdade. Tratar como
+ * os outros — respondendo e seguindo — perderia a mensagem em silêncio.
+ *
+ * Os erros de depois da gravação são o caso oposto: ali a reentrega JÁ é engolida pela
+ * deduplicação, e deixar estourar condena a conversa ao silêncio permanente.
+ */
+export class InboundPersistenceError extends Error {
+  constructor(cause: unknown) {
+    super('Não foi possível gravar a mensagem recebida do WhatsApp.', { cause });
+    this.name = 'InboundPersistenceError';
+  }
+}
+
+/**
+ * Persiste a mensagem do cliente e devolve o resultado do turno, ou null quando a Meta reentregou
+ * um evento já gravado.
  */
 async function defaultRunAgentTurn(params: {
   tenant: WebhookTenant;
@@ -147,14 +172,19 @@ async function defaultRunAgentTurn(params: {
   waMessageId: string;
   text: string;
   onConversationPersisted?: (conversationId: string) => void;
-}): Promise<string | null> {
-  const conversationId = await recordIncomingWhatsappMessage({
-    tenantId: params.tenant.tenantId,
-    customerWaId: params.customerWaId,
-    customerName: params.customerName,
-    waMessageId: params.waMessageId,
-    text: params.text,
-  });
+}): Promise<WhatsappTurnResult | null> {
+  let conversationId: string | null;
+  try {
+    conversationId = await recordIncomingWhatsappMessage({
+      tenantId: params.tenant.tenantId,
+      customerWaId: params.customerWaId,
+      customerName: params.customerName,
+      waMessageId: params.waMessageId,
+      text: params.text,
+    });
+  } catch (erro) {
+    throw new InboundPersistenceError(erro);
+  }
   // A Meta reentrega o mesmo evento quando o webhook demora. Sem esta saída o cliente
   // receberia duas respostas para a mesma frase.
   if (!conversationId) return null;
@@ -166,11 +196,20 @@ async function defaultRunAgentTurn(params: {
  * Falha de envio: a conversa entra na fila do vendedor, porque o cliente está esperando e não
  * recebeu nada — mas CONTINUA com a automação. Marcar como humana aqui desligou o agente em
  * produção quando o token do número expirou, e ele seguiu mudo depois do token ser renovado.
+ *
+ * Devolve se o pedido de atendimento humano ficou gravado. O `return` silencioso que existia
+ * quando o id da conversa não chegava apagava a falha inteira: ninguém era avisado e o webhook
+ * reportava sucesso.
  */
-async function defaultOnSendFailed(conversationId: string) {
-  if (!conversationId) return;
+async function defaultOnSendFailed(conversationId: string): Promise<boolean> {
+  if (!conversationId) {
+    console.error('[agente] falha de envio sem conversa identificada; ninguém foi avisado',
+      JSON.stringify({ evento: 'falha_envio_sem_conversa', em: new Date().toISOString() }));
+    return false;
+  }
   const { flagConversationForHuman } = await import('@/server/attendance/conversation-repository');
-  await flagConversationForHuman(conversationId, 'ai_suggested');
+  const sinalizada = await flagConversationForHuman(conversationId, 'ai_suggested');
+  return Boolean(sinalizada);
 }
 
 /**
@@ -182,9 +221,9 @@ async function defaultOnSendFailed(conversationId: string) {
 export async function processMetaWebhookPayload(
   payload: MetaWebhookPayload,
   deps: WebhookHandlerDeps = {},
-): Promise<{ processedMessages: number; pausedConversations: number }> {
+): Promise<{ processedMessages: number; pausedConversations: number; encaminhamentos: number; falhasOperacionais: number }> {
   if (payload.object !== 'whatsapp_business_account') {
-    return { processedMessages: 0, pausedConversations: 0 };
+    return { processedMessages: 0, pausedConversations: 0, encaminhamentos: 0, falhasOperacionais: 0 };
   }
 
   const findTenant = deps.findTenant ?? ((id: string, wabaId?: string) => resolveWebhookTenant(id, findActiveTenantByPhoneNumberId, wabaId));
@@ -192,10 +231,25 @@ export async function processMetaWebhookPayload(
   const pauseEcho = deps.pauseOnSellerEcho ?? pauseAutomationOnSellerEcho;
   const runTurn = deps.runAgentTurn ?? defaultRunAgentTurn;
   const onSendFailed = deps.onSendFailed ?? defaultOnSendFailed;
+  const alertOps = deps.alertOps ?? notifyOps;
+  /**
+   * O alerta sai por fora do log porque log de função serverless não acorda ninguém. Ele nunca
+   * lança e nunca segura o laço por muito tempo: o incidente já está registrado e contado, e o
+   * envio do aviso não pode virar uma segunda falha.
+   */
+  const alertar = (alerta: Parameters<typeof notifyOps>[0]): Promise<OpsAlertOutcome> =>
+    alertOps(alerta).catch(() => 'falhou' as const);
   const sendOutbound = deps.sendOutbound ?? sendWhatsAppTextMessage;
 
   let processedMessages = 0;
   let pausedConversations = 0;
+  /** Encaminhamentos ao vendedor que substituíram uma resposta da IA (limite, menu, falha). */
+  let encaminhamentos = 0;
+  /**
+   * Casos em que o cliente ficou esperando e NÃO há confirmação de que alguém foi avisado. É o
+   * número que precisa ser zero no ensaio real; qualquer valor acima de zero é incidente.
+   */
+  let falhasOperacionais = 0;
 
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
@@ -266,16 +320,69 @@ export async function processMetaWebhookPayload(
 
         // Escopo da própria mensagem: requisições simultâneas não compartilham o ID.
         let conversationIdForTurn: string | null = null;
-        const replyBody = await runTurn({
-          tenant,
-          customerWaId: incoming.from,
-          customerName,
-          waMessageId: incoming.id,
-          text: normalizedText,
-          onConversationPersisted: (id) => { conversationIdForTurn = id; },
-        });
+        let turno: WhatsappTurnResult | null;
+        try {
+          turno = await runTurn({
+            tenant,
+            customerWaId: incoming.from,
+            customerName,
+            waMessageId: incoming.id,
+            text: normalizedText,
+            onConversationPersisted: (id) => { conversationIdForTurn = id; },
+          });
+        } catch (erro) {
+          /**
+           * A mensagem do cliente já está gravada, então a deduplicação engoliria a reentrega da
+           * Meta: deixar estourar aqui condena a conversa ao silêncio permanente. O turno já trata
+           * as próprias falhas; esta é a rede de fora, para o que escapar dele.
+           *
+           * A exceção é a gravação da entrada: nada foi persistido, nada será deduplicado, e a
+           * reentrega da Meta é a recuperação. Essa sobe.
+           */
+          if (erro instanceof InboundPersistenceError) throw erro;
+          console.error('[agente] turno estourou no webhook', JSON.stringify({
+            evento: 'turno_estourou', conversationId: conversationIdForTurn,
+            detalhe: erro instanceof Error ? erro.message : String(erro),
+            em: new Date().toISOString(),
+          }));
+          const avisado = await onSendFailed(conversationIdForTurn ?? '', erro).catch(() => false);
+          if (avisado === false) {
+            falhasOperacionais += 1;
+            const destino = await alertar({
+              evento: 'cliente_sem_atendimento',
+              resumo: 'cliente sem resposta e sem vendedor avisado',
+              conversationId: conversationIdForTurn,
+              motivo: 'turno_estourou',
+            });
+            console.error('[agente] ALERTA: cliente sem resposta e sem vendedor avisado',
+              JSON.stringify({ evento: 'cliente_sem_atendimento', conversationId: conversationIdForTurn,
+                alerta: destino, em: new Date().toISOString() }));
+          }
+          continue;
+        }
 
-        if (replyBody) {
+        if (turno?.status === 'encaminhado' && turno.registro === 'nenhum') {
+          // O cliente vai receber a frase, mas o banco não confirmou nada: não há conversa na fila
+          // de ninguém. Isto é incidente, e não pode passar por atendimento concluído.
+          falhasOperacionais += 1;
+          const destino = await alertar({
+            evento: 'encaminhamento_nao_registrado',
+            resumo: 'cliente recebeu encaminhamento que não entrou na fila de ninguém',
+            conversationId: conversationIdForTurn,
+            motivo: turno.motivo,
+          });
+          console.error('[agente] ALERTA: encaminhamento não registrado', JSON.stringify({
+            evento: 'encaminhamento_nao_registrado', conversationId: conversationIdForTurn,
+            motivo: turno.motivo, alerta: destino, em: new Date().toISOString(),
+          }));
+        }
+
+        // O turno inteiro, e não só o texto: o ramo de envio precisa saber se o que vai ao
+        // cliente é resposta da IA ou encaminhamento, para contar e registrar cada um.
+        const entrega = turno && turno.status !== 'sem_resposta' ? turno : null;
+
+        if (entrega) {
+          const replyBody = entrega.body;
           // A resposta já foi gravada na conversa. Se o envio falhar e nós lançarmos, a Meta
           // reentrega o evento e a deduplicação engole a retentativa: o banco fica com uma
           // resposta que o cliente nunca recebeu, e ninguém é avisado. Por isso a falha vira
@@ -291,21 +398,69 @@ export async function processMetaWebhookPayload(
             });
             if (!sent.messageId) throw new Error('A API da Meta não confirmou o envio da resposta do agente.');
             processedMessages += 1;
+            if (entrega.status === 'encaminhado') {
+              encaminhamentos += 1;
+              console.warn('[agente] cliente recebeu encaminhamento ao vendedor', JSON.stringify({
+                evento: `encaminhado_${entrega.motivo}`, conversationId: conversationIdForTurn,
+                registro: entrega.registro, em: new Date().toISOString(),
+              }));
+            }
           } catch (erro) {
             console.error('[agente] envio ao WhatsApp falhou', JSON.stringify({
               evento: 'envio_falhou', conversationId: conversationIdForTurn,
               detalhe: erro instanceof Error ? erro.message : String(erro),
               em: new Date().toISOString(),
             }));
-            await onSendFailed(conversationIdForTurn ?? '', erro);
+            // A sinalização ao vendedor é a última linha de defesa; se ela também falhar, o
+            // cliente ficou esperando e ninguém sabe. Nunca deixar a exceção subir daqui: a
+            // reentrega da Meta é engolida pela deduplicação da mensagem de entrada.
+            const avisado = await onSendFailed(conversationIdForTurn ?? '', erro).catch((falha: unknown) => {
+              console.error('[agente] sinalização de falha de envio também falhou', JSON.stringify({
+                evento: 'sinalizacao_falha_envio_falhou', conversationId: conversationIdForTurn,
+                detalhe: falha instanceof Error ? falha.message : String(falha),
+                em: new Date().toISOString(),
+              }));
+              return false;
+            });
+            if (avisado === false) {
+              falhasOperacionais += 1;
+              const destino = await alertar({
+                evento: 'cliente_sem_atendimento',
+                resumo: 'cliente sem resposta e sem vendedor avisado',
+                conversationId: conversationIdForTurn,
+                motivo: 'envio_falhou',
+              });
+              console.error('[agente] ALERTA: cliente sem resposta e sem vendedor avisado',
+                JSON.stringify({ evento: 'cliente_sem_atendimento', conversationId: conversationIdForTurn,
+                  alerta: destino, em: new Date().toISOString() }));
+            }
           }
-        } else {
-          console.info('Webhook WhatsApp: conversa sem resposta automática (modo desativado, vendedor ativo ou mensagem duplicada).');
+        } else if (turno === null) {
+          // Reentrega da Meta. Não é incidente: a resposta da primeira entrega já foi enviada.
+          console.info('[agente] evento reentregue pela Meta; mensagem já processada', JSON.stringify({
+            evento: 'mensagem_duplicada', waMessageId: incoming.id, em: new Date().toISOString(),
+          }));
+        } else if (turno.status === 'sem_resposta') {
+          /**
+           * Os três motivos abaixo são silêncio correto, e por isso têm log distinto: antes uma
+           * frase só cobria "modo desativado, vendedor ativo ou mensagem duplicada" — e também o
+           * teto da conversa, que não estava na lista e deixava o cliente sem ninguém. Sem
+           * separar, não havia como saber depois do fato se um cliente foi ignorado.
+           */
+          const explicacao = {
+            modo_desligado: 'canal fora do modo automático; a equipe responde pela caixa de entrada',
+            turno_reservado: 'outra instância está respondendo este turno, ou a conversa já é de um vendedor',
+            humano_assumiu: 'vendedor assumiu durante a geração; resposta automática descartada',
+          }[turno.motivo];
+          console.info('[agente] sem resposta automática', JSON.stringify({
+            evento: `sem_resposta_${turno.motivo}`, conversationId: conversationIdForTurn,
+            explicacao, em: new Date().toISOString(),
+          }));
         }
       }
     }
   }
 
-  return { processedMessages, pausedConversations };
+  return { processedMessages, pausedConversations, encaminhamentos, falhasOperacionais };
 }
 

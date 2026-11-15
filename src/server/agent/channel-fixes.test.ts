@@ -21,10 +21,11 @@ function deps(over: Partial<WhatsappAgentTurnDeps> = {}): WhatsappAgentTurnDeps 
     releaseTurn: vi.fn(async () => {}) as never,
     listMessages: vi.fn(async () => []) as never,
     commitReply: vi.fn(async (_id: string, r: { body: string }) => ({ id: 'm', body: r.body })) as never,
-    reserveQuota: vi.fn(async () => ({ dayUtc: '2026-10-29' })) as never,
+    reserveQuota: vi.fn(async () => ({ status: 'reservado' as const, dayUtc: '2026-10-29' })) as never,
     recordTokens: vi.fn(async () => {}) as never,
     recordGuardRejection: vi.fn(async () => {}) as never,
-    consumeConversationQuota: vi.fn(async () => true),
+    flagForHuman: vi.fn(async () => ({ id: 'conv-1' })) as never,
+    consumeConversationQuota: vi.fn(async () => 'liberado' as const),
     searchVehicles: vi.fn(async () => ({ items: [], checkedAt: 'x' })) as never,
     readVehicle: vi.fn(async () => ({ item: null, checkedAt: 'x' })) as never,
     ...over,
@@ -79,11 +80,14 @@ describe('I5 — cliente que divide a pergunta em duas mensagens', () => {
 });
 
 describe('I8 — um número não pode queimar a cota do dia inteiro', () => {
-  it('para de responder quando a conversa estoura o próprio teto', async () => {
-    const d = deps({ consumeConversationQuota: vi.fn(async () => false) });
-    const body = await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'oi' }, d);
-    expect(body).toBeNull();
+  it('para de usar a IA quando a conversa estoura o próprio teto, mas não para de atender', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const d = deps({ consumeConversationQuota: vi.fn(async () => 'limite' as const) });
+    const r = await runWhatsappAgentTurn({ conversationId: 'conv-1', message: 'oi' }, d);
+    // O teto continua valendo para o CUSTO; o que mudou é que ele não cala mais o atendimento.
     expect(d.reserveQuota, 'nem gasta cota global').not.toHaveBeenCalled();
+    expect(r).toMatchObject({ status: 'encaminhado', motivo: 'teto_conversa' });
+    expect(r.status !== 'sem_resposta' && r.body).toContain('vendedor');
   });
 });
 

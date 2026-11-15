@@ -1,10 +1,10 @@
 import {
-  commitAutomatedReply, listConversationMessages, releaseAutomatedTurn, reserveAutomatedTurn,
-  type MessageRow,
+  commitAutomatedReply, flagConversationForHuman, listConversationMessages, releaseAutomatedTurn,
+  reserveAutomatedTurn, type MessageRow,
 } from '@/server/attendance/conversation-repository';
-import { consumeRateLimit } from '@/server/attendance/limits';
 import {
-  recordWhatsappAiTokens, recordWhatsappGuardRejection, reserveWhatsappAiRequest,
+  consumeRateLimit, recordWhatsappAiTokens, recordWhatsappGuardRejection, reserveWhatsappAiRequest,
+  type RateLimitOutcome,
 } from '@/server/attendance/limits';
 import { formatAgentWhatsAppReply } from '@/server/whatsapp/outbound';
 import { runAgentTurn, type AgentTurnDeps } from './run';
@@ -55,6 +55,19 @@ const SEM_COTA_BODY = 'Oi! Neste momento não consigo te responder por aqui. '
   + 'Já chamei um vendedor para falar com você.';
 const MENU_LEGADO_BODY = 'O atendimento por menu está temporariamente indisponível. '
   + 'Vou chamar um vendedor para continuar seu atendimento.';
+/**
+ * Teto da própria conversa. Não diz "você falou demais": a causa é do nosso lado e quem lê é um
+ * cliente que acabou de escrever. O que ele precisa saber é que alguém vai responder.
+ */
+const TETO_CONVERSA_BODY = 'Oi! Já trocamos bastante mensagem por aqui hoje. '
+  + 'Vou passar seu atendimento para um vendedor, que continua com você.';
+/**
+ * Falha de infraestrutura. Antes este caminho era `return null`: o cliente ficava sem resposta e
+ * sem vendedor, exatamente o que o AGENTS.md proíbe. A mensagem não menciona erro técnico porque
+ * isso não ajuda quem está comprando uma moto — mas o log e o alerta são explícitos.
+ */
+const FALHA_TECNICA_BODY = 'Oi! Estou com uma instabilidade e não consigo te responder agora. '
+  + 'Já chamei um vendedor para falar com você.';
 
 export type WhatsappAgentTurnInput = {
   conversationId: string;
@@ -62,72 +75,209 @@ export type WhatsappAgentTurnInput = {
   message: string;
 };
 
+/**
+ * Por que não houve resposta automática — e todos estes são casos em que o silêncio é correto:
+ * ninguém está esperando a Dayse.
+ *
+ * - `modo_desligado`: a loja escolheu responder à mão; as mensagens chegam na caixa de entrada.
+ * - `turno_reservado`: a reserva não é desta execução — outra instância já está respondendo este
+ *   turno, ou a conversa já pertence a um vendedor (`reserveAutomatedTurn` exige automação como
+ *   dona). Nos dois casos alguém está com ela.
+ * - `humano_assumiu`: um vendedor pegou a conversa durante a geração, e humano tem precedência.
+ */
+export type WhatsappTurnSilence = 'modo_desligado' | 'turno_reservado' | 'humano_assumiu';
+
+/** Por que a conversa foi ao vendedor sem passar pela IA. Cada motivo tem log próprio. */
+export type WhatsappTurnHandoff = 'menu_legado' | 'sem_cota_loja' | 'teto_conversa' | 'infraestrutura';
+
+/**
+ * O que ficou registrado no banco junto do encaminhamento.
+ *
+ * - `completo`: a resposta entrou no histórico e o handoff foi gravado.
+ * - `parcial`: o histórico não recebeu a mensagem, mas a conversa está na fila do vendedor.
+ * - `nenhum`: o banco não confirmou nada. **Não presumir que alguém vai ver esta conversa.**
+ */
+export type WhatsappTurnRegistro = 'completo' | 'parcial' | 'nenhum';
+
+/**
+ * Resultado de um turno. Era `string | null`, e o `null` juntava quatro situações distintas —
+ * modo desligado, turno de outra instância, vendedor assumiu e teto estourado. As três primeiras
+ * são silêncio correto; a quarta deixava o cliente esperando para sempre. Sem distinguir no tipo,
+ * o webhook não tinha como logar nem agir diferente, e o relatório de incidente não existia.
+ */
+export type WhatsappTurnResult =
+  | { status: 'resposta'; body: string }
+  | { status: 'encaminhado'; body: string; motivo: WhatsappTurnHandoff; registro: WhatsappTurnRegistro }
+  | { status: 'sem_resposta'; motivo: WhatsappTurnSilence };
+
 export type WhatsappAgentTurnDeps = AgentTurnDeps & {
   reserveTurn?: typeof reserveAutomatedTurn;
   releaseTurn?: typeof releaseAutomatedTurn;
   listMessages?: typeof listConversationMessages;
   commitReply?: typeof commitAutomatedReply;
+  /** Rede de segurança do encaminhamento quando `commitReply` não consegue gravar. */
+  flagForHuman?: typeof flagConversationForHuman;
   reserveQuota?: typeof reserveWhatsappAiRequest;
   recordTokens?: typeof recordWhatsappAiTokens;
   recordGuardRejection?: typeof recordWhatsappGuardRejection;
   /** Teto por conversa, para um número só não queimar a cota do dia inteiro (I8). */
-  consumeConversationQuota?: (conversationId: string) => Promise<boolean>;
+  consumeConversationQuota?: (conversationId: string) => Promise<RateLimitOutcome>;
   /** Chamado pelo webhook quando a Meta recusa o envio: a conversa vai para um humano (I4). */
   markSendFailure?: (conversationId: string, erro: unknown) => Promise<void>;
   onSendFailed?: (conversationId: string, erro: unknown) => Promise<void>;
   readSetting?: () => Promise<{ mode: string }>;
 };
 
+function log(nivel: 'info' | 'warn' | 'error', mensagem: string, dados: Record<string, unknown>) {
+  console[nivel](mensagem, JSON.stringify({ ...dados, em: new Date().toISOString() }));
+}
+
 /**
- * Um turno completo no canal WhatsApp. Devolve o texto a enviar, ou null quando não há resposta
- * automática a dar — modo desligado, vendedor no comando, turno já reservado por outra instância
- * ou resposta descartada no commit porque um humano assumiu durante a geração.
+ * Encaminha ao vendedor com registro verificável, em dois níveis.
+ *
+ * O primeiro nível é `commitReply`, que grava a resposta no histórico e abre o handoff na mesma
+ * transação. Quando ele falha — e falha justamente quando o banco está ruim, que é quando mais
+ * precisamos encaminhar — o segundo nível é `flagForHuman`, que só toca `conversations` e
+ * `handoffs`: menos escrita, mais chance de passar.
+ *
+ * O retorno nunca mente sobre o que foi gravado. `registro: 'nenhum'` é o sinal de que **ninguém
+ * foi avisado**, e quem chamou tem de tratar isso como incidente, não como atendimento concluído.
+ */
+async function encaminharAoVendedor(
+  conversationId: string,
+  body: string,
+  motivo: WhatsappTurnHandoff,
+  commitReply: NonNullable<WhatsappAgentTurnDeps['commitReply']>,
+  flagForHuman: NonNullable<WhatsappAgentTurnDeps['flagForHuman']>,
+): Promise<WhatsappTurnResult> {
+  try {
+    const gravada = await commitReply(conversationId, {
+      sender: 'bot', body, cards: [], handoffReason: 'ai_suggested',
+    });
+    // null do commit significa que um vendedor assumiu durante a geração: o humano tem
+    // precedência e a resposta é descartada sem ir ao cliente.
+    if (!gravada) return { status: 'sem_resposta', motivo: 'humano_assumiu' };
+    return { status: 'encaminhado', body, motivo, registro: 'completo' };
+  } catch (erro) {
+    log('error', '[agente] não foi possível gravar a resposta de encaminhamento', {
+      evento: 'encaminhamento_commit_falhou', conversationId, motivo,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+  }
+  try {
+    const sinalizada = await flagForHuman(conversationId, 'ai_suggested');
+    if (sinalizada) {
+      log('warn', '[agente] encaminhamento registrado sem a mensagem no histórico', {
+        evento: 'encaminhamento_registro_parcial', conversationId, motivo,
+      });
+      return { status: 'encaminhado', body, motivo, registro: 'parcial' };
+    }
+  } catch (erro) {
+    log('error', '[agente] a rede de segurança do encaminhamento também falhou', {
+      evento: 'encaminhamento_sinalizacao_falhou', conversationId, motivo,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+  }
+  // A mensagem ainda vai ao cliente: ele fica sabendo que um vendedor foi chamado. O que não
+  // podemos afirmar é que a conversa apareceu na fila de alguém.
+  return { status: 'encaminhado', body, motivo, registro: 'nenhum' };
+}
+
+/**
+ * Um turno completo no canal WhatsApp.
+ *
+ * A regra que governa este arquivo: **nenhum limite e nenhuma falha de infraestrutura devolve
+ * silêncio.** Limite da loja, teto da conversa, banco indisponível e erro inesperado todos
+ * terminam com uma frase para o cliente e um pedido de vendedor. Silêncio sobrou só para os três
+ * casos em que ninguém está esperando resposta automática (ver `WhatsappTurnSilence`).
  */
 export async function runWhatsappAgentTurn(
   input: WhatsappAgentTurnInput,
   deps: WhatsappAgentTurnDeps = {},
-): Promise<string | null> {
+): Promise<WhatsappTurnResult> {
   const reserveTurn = deps.reserveTurn ?? reserveAutomatedTurn;
   const releaseTurn = deps.releaseTurn ?? releaseAutomatedTurn;
   const listMessages = deps.listMessages ?? listConversationMessages;
   const commitReply = deps.commitReply ?? commitAutomatedReply;
+  const flagForHuman = deps.flagForHuman ?? flagConversationForHuman;
   const reserveQuota = deps.reserveQuota ?? reserveWhatsappAiRequest;
   const recordTokens = deps.recordTokens ?? recordWhatsappAiTokens;
   const recordGuard = deps.recordGuardRejection ?? recordWhatsappGuardRejection;
   const readSetting = deps.readSetting ?? readWhatsappModeDefault;
   const consumeConversationQuota = deps.consumeConversationQuota ?? consumeConversationQuotaDefault;
+  const encaminhar = (body: string, motivo: WhatsappTurnHandoff) =>
+    encaminharAoVendedor(input.conversationId, body, motivo, commitReply, flagForHuman);
 
-  const setting = await readSetting();
-  if (setting.mode !== 'ai' && setting.mode !== 'deterministic') return null;
-
-  // Teto por conversa antes da cota global: quem estourou o próprio limite não gasta a da loja.
-  if (!await consumeConversationQuota(input.conversationId)) {
-    console.warn('[agente] conversa acima do teto diário próprio', JSON.stringify({
-      evento: 'teto_por_conversa', conversationId: input.conversationId, em: new Date().toISOString(),
-    }));
-    return null;
+  /**
+   * A leitura do modo é a primeira ida ao banco do turno. Se ela falhar, o modo é desconhecido —
+   * e tratar desconhecido como "desligado" devolveria silêncio a uma loja que está com a Dayse
+   * ligada. Encaminha.
+   */
+  let setting: { mode: string };
+  try {
+    setting = await readSetting();
+  } catch (erro) {
+    log('error', '[agente] não foi possível ler o modo do canal', {
+      evento: 'modo_indisponivel', conversationId: input.conversationId,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+    return encaminhar(FALHA_TECNICA_BODY, 'infraestrutura');
+  }
+  if (setting.mode !== 'ai' && setting.mode !== 'deterministic') {
+    return { status: 'sem_resposta', motivo: 'modo_desligado' };
   }
 
-  // A reserva é o que impede duas instâncias de responderem o mesmo turno.
-  const reserved = await reserveTurn(input.conversationId);
-  if (!reserved) return null;
+  /**
+   * A reserva é o que impede duas instâncias de responderem o mesmo turno — e agora ela vem
+   * **antes** do teto por conversa, não depois.
+   *
+   * O motivo é que o teto deixou de ser um `return null` e passou a gravar uma resposta de
+   * encaminhamento. Fora da reserva, duas mensagens simultâneas do mesmo número acima do teto
+   * gravariam e enviariam duas vezes a mesma frase ao cliente. Dentro dela, uma só vence.
+   *
+   * O teto de custo não muda de lugar por isso: a cota paga da loja (`reserveQuota`) continua
+   * depois do teto da conversa, então quem estourou o próprio limite não gasta a cota de IA.
+   *
+   * Falha de banco na reserva não pode virar silêncio nem resposta sem reserva: encaminha.
+   */
+  let reserved: Awaited<ReturnType<typeof reserveAutomatedTurn>>;
+  try {
+    reserved = await reserveTurn(input.conversationId);
+  } catch (erro) {
+    log('error', '[agente] não foi possível reservar o turno', {
+      evento: 'reserva_indisponivel', conversationId: input.conversationId,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+    return encaminhar(FALHA_TECNICA_BODY, 'infraestrutura');
+  }
+  if (!reserved) return { status: 'sem_resposta', motivo: 'turno_reservado' };
 
   try {
+    // Teto da própria conversa, para um número só não queimar a cota do dia inteiro (I8).
+    const tetoConversa = await consumeConversationQuota(input.conversationId);
+    if (tetoConversa !== 'liberado') {
+      const motivo = tetoConversa === 'limite' ? 'teto_conversa' : 'infraestrutura';
+      log('warn', '[agente] turno bloqueado antes da IA', {
+        evento: motivo === 'teto_conversa' ? 'teto_por_conversa' : 'teto_por_conversa_indisponivel',
+        conversationId: input.conversationId,
+      });
+      return await encaminhar(motivo === 'teto_conversa' ? TETO_CONVERSA_BODY : FALHA_TECNICA_BODY, motivo);
+    }
+
     // Banco antigo pode ter modo deterministic salvo. Não gastar IA nem ficar mudo:
     // grava uma resposta explícita e sinaliza a conversa ao vendedor.
     if (setting.mode === 'deterministic') {
-      const sent = await commitReply(input.conversationId, {
-        sender: 'bot', body: MENU_LEGADO_BODY, cards: [], handoffReason: 'ai_suggested',
-      });
-      return sent ? MENU_LEGADO_BODY : null;
+      return await encaminhar(MENU_LEGADO_BODY, 'menu_legado');
     }
 
     const quota = await reserveQuota();
-    if (!quota) {
-      const sent = await commitReply(input.conversationId, {
-        sender: 'bot', body: SEM_COTA_BODY, cards: [], handoffReason: 'ai_suggested',
+    if (quota.status !== 'reservado') {
+      const motivo = quota.status === 'limite' ? 'sem_cota_loja' : 'infraestrutura';
+      log('warn', '[agente] cota de IA não liberou o turno', {
+        evento: motivo === 'sem_cota_loja' ? 'sem_cota_loja' : 'cota_indisponivel',
+        conversationId: input.conversationId,
       });
-      return sent ? SEM_COTA_BODY : null;
+      return await encaminhar(motivo === 'sem_cota_loja' ? SEM_COTA_BODY : FALHA_TECNICA_BODY, motivo);
     }
 
     const history = await listMessages(input.conversationId);
@@ -153,8 +303,32 @@ export async function runWhatsappAgentTurn(
     const sent = await commitReply(input.conversationId, { ...turn.reply, body });
     // null do commit significa que um vendedor assumiu durante a geração: o humano tem
     // precedência e a resposta é descartada sem ir ao cliente.
-    return sent ? body : null;
+    if (!sent) return { status: 'sem_resposta', motivo: 'humano_assumiu' };
+    return { status: 'resposta', body };
+  } catch (erro) {
+    /**
+     * Qualquer falha daqui para baixo (histórico, contadores, gravação da resposta) deixava o
+     * turno estourar. O webhook devolvia 500, a Meta reentregava, e a deduplicação da mensagem
+     * de entrada engolia a retentativa: o cliente nunca mais recebia nada.
+     */
+    log('error', '[agente] turno falhou depois da reserva', {
+      evento: 'turno_falhou', conversationId: input.conversationId,
+      detalhe: erro instanceof Error ? erro.message : String(erro),
+    });
+    return await encaminhar(FALHA_TECNICA_BODY, 'infraestrutura');
   } finally {
-    await releaseTurn(input.conversationId);
+    /**
+     * Liberar a reserva é melhor-esforço. `commitAutomatedReply` já zera `turnLockedUntil` no
+     * caminho normal e a reserva expira sozinha em 45 s, então uma falha aqui não trava a
+     * conversa — mas, sem o try, ela descartaria um resultado que já tem resposta para o cliente.
+     */
+    try {
+      await releaseTurn(input.conversationId);
+    } catch (erro) {
+      log('warn', '[agente] não foi possível liberar a reserva do turno', {
+        evento: 'liberacao_reserva_falhou', conversationId: input.conversationId,
+        detalhe: erro instanceof Error ? erro.message : String(erro),
+      });
+    }
   }
 }
