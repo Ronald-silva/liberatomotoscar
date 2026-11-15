@@ -28,7 +28,8 @@ describe('divulgar', () => {
     list.mockResolvedValue([]);
     render(await DivulgarPage());
     expect(screen.getByText(/Nenhum veículo publicado/)).toBeTruthy();
-    expect(screen.getByText(/só é criada para veículo publicado/)).toBeTruthy();
+    // A arte passou a ser montável antes de publicar: o texto não pode mais afirmar o contrário.
+    expect(screen.getByText(/montar a arte de um rascunho pela tela do próprio veículo/)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ver o estoque' }).getAttribute('href')).toBe('/admin');
     expect(screen.queryByRole('link', { name: /Criar arte/ })).toBeNull();
   });
@@ -37,7 +38,7 @@ describe('divulgar', () => {
     list.mockResolvedValue([vehicle({ priceCents: null })]);
     render(await DivulgarPage());
     expect(screen.queryByRole('link', { name: /Criar arte/ })).toBeNull();
-    expect(screen.getByText(/Complete marca, modelo, ano e preço/)).toBeTruthy();
+    expect(screen.getByText(/Complete no cadastro: preço/)).toBeTruthy();
     expect(screen.getByRole('link', { name: /Completar cadastro.*Honda CG 160/ }).getAttribute('href')).toBe('/admin/veiculos/v1');
   });
 

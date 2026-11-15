@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getArtVehicleData, artExportProblem } from '@/server/art-studio/vehicle-art-data';
+import { hasPublicPage } from '@/server/art-studio/policy';
 import { SITE_URL, STORE } from '@/data/store';
 import { BRAND } from '@/data/brand';
 import { ArtEditor } from '@/components/art-studio/ArtEditor';
@@ -22,7 +23,10 @@ export default async function ArtPage({ params }: { params: Promise<{ id: string
       { style: 'currency', currency: 'BRL' }).format(vehicle.priceCents / 100) : 'Preço não informado',
     priceCents: vehicle.priceCents, slug: vehicle.slug, type: vehicle.type,
     brand: vehicle.brand, model: vehicle.model, mileageKm: vehicle.mileageKm, color: vehicle.color,
-    publicUrl: SITE_URL.startsWith('https://') ? `${SITE_URL}/veiculos/${vehicle.slug}` : null }}
+    // A arte agora pode ser montada antes de publicar, e o anúncio de um rascunho responde 404:
+    // sem a conferência da situação, a legenda convidaria o cliente para uma página inexistente.
+    publicUrl: SITE_URL.startsWith('https://') && hasPublicPage(vehicle.status)
+      ? `${SITE_URL}/veiculos/${vehicle.slug}` : null }}
     photos={photos.map((photo) => ({ id: photo.id, isCover: photo.isCover,
       // Fotos importadas já são públicas. Usar o arquivo diretamente evita
       // redirecionamento pelo endereço interno do servidor no Railway.

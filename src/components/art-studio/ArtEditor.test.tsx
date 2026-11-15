@@ -513,8 +513,10 @@ it('§7 o texto auxiliar não confirmado barra a entrega', async () => {
 // botão promete publicação.
 it('§7 com exportProblem a prévia aparece, nada é pré-renderizado e nenhum botão promete publicação', async () => {
   comFotoPronta();
-  const { container } = render(<ArtEditor {...props({ exportProblem: 'Publique o anúncio antes de baixar uma arte comercial.' })} />);
-  expect(screen.getByText(/Publique o anúncio antes/)).toBeTruthy();
+  // A mensagem é a que `artExportProblem` produz hoje: a lista do que falta no cadastro. O bloqueio
+  // por "ainda não publicado" saiu na Fase 0 — a arte pode ser montada antes de publicar.
+  const { container } = render(<ArtEditor {...props({ exportProblem: 'Complete no cadastro: preço, pelo menos uma foto.' })} />);
+  expect(screen.getByText(/Complete no cadastro: preço/)).toBeTruthy();
   expect(container.querySelector('[data-palco="previa"] [data-destino]')).not.toBeNull();
   expect(botao(/Publicar no/).disabled).toBe(true);
   expect(botao('Baixar').disabled).toBe(true);

@@ -24,7 +24,7 @@ export default async function DivulgarPage() {
         Não foi possível carregar os veículos agora. Atualize a página para tentar de novo.</p>
       : published.length === 0 ? <div className={styles.empty}>
         <p className={styles.description}>Nenhum veículo publicado no momento.</p>
-        <p className={styles.description}>A arte só é criada para veículo publicado. Publique um anúncio no estoque e ele aparece aqui.</p>
+        <p className={styles.description}>Esta lista mostra os anúncios publicados. Você também pode montar a arte de um rascunho pela tela do próprio veículo, no estoque.</p>
         <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/admin">Ver o estoque</Link>
       </div> : <ul className={styles.vehicleList}>
         {published.map((vehicle) => {

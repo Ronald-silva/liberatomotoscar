@@ -37,6 +37,24 @@ it('compõe o título da arte sem repetir o que a versão suja já traz', async 
   expect(page.props.vehicle.title).toBe('Yamaha Lander 250 XTZ');
 });
 
+/**
+ * A arte passou a ser montável antes de publicar. O endereço do anúncio de um rascunho responde
+ * 404, então a peça não pode carregar link: `caption.ts` só escreve "Anúncio:" quando recebe
+ * `publicUrl`, e é aqui que ele deixa de existir para quem ainda não está na vitrine.
+ */
+it('rascunho e arquivado não levam o endereço do anúncio para a legenda', async () => {
+  for (const status of ['draft', 'archived']) {
+    mocks.getArtVehicleData.mockResolvedValue({
+      vehicle: { id: 'v4', versionNumber: 1, status, brand: 'Honda', model: 'CG 160',
+        version: null, year: 2024, priceCents: 1_850_000, slug: 'cg-160', type: 'motorcycle',
+        mileageKm: 1_200, color: 'Preta' },
+      photos: [{ id: 'p1', isCover: true, storageProvider: 'r2', storageKey: 'drafts/v4/p1.jpg' }],
+    });
+    const page = await ArtPage({ params: Promise.resolve({ id: 'v4' }) });
+    expect(page.props.vehicle.publicUrl, status).toBeNull();
+  }
+});
+
 it('rascunho sem marca nem modelo abre com o título de reserva, não com uma letra solta', async () => {
   mocks.getArtVehicleData.mockResolvedValue({
     vehicle: { id: 'v3', versionNumber: 1, status: 'draft', brand: null, model: null, version: 'x',
