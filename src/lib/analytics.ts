@@ -33,11 +33,16 @@ export function trackPageView(pathname: string): void {
   browser.gtag?.('event', 'page_view', { page_path: pathname });
 }
 
+/**
+ * `content_category` carrega a categoria real do veículo. Enquanto a vitrine era uma prévia
+ * comercial, todo evento ia ao Pixel como `vitrine_ilustrativa`: com a loja operando de verdade,
+ * isso agrupava carro e moto numa categoria inventada e tornava o público do Meta inútil.
+ */
 export function trackVehicleView(slug: string, category: string, attribution: Attribution): void {
   track(
     'ViewContent',
     'view_item',
-    { content_ids: [slug], content_category: 'vitrine_ilustrativa', ...attribution },
+    { content_ids: [slug], content_category: category, ...attribution },
     { items: [{ item_id: slug, item_name: slug, item_category: category }], ...attribution },
   );
 }
