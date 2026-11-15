@@ -9,9 +9,14 @@ const test = vi.hoisted(() => ({
   send: vi.fn(),
   inserted: [] as Record<string, unknown>[],
   failInsert: false,
+  /** Transações abertas neste instante, para provar que a rede não acontece dentro de uma. */
+  abertas: 0,
+  abertasNoEnvio: -1,
 }));
 
-vi.mock('@/server/db/client', () => ({ getDb: () => ({ transaction: async (fn: (tx: unknown) => unknown) => fn({
+vi.mock('@/server/db/client', () => ({ getDb: () => ({ transaction: async (fn: (tx: unknown) => unknown) => {
+  test.abertas += 1;
+  try { return await fn({
   select: () => ({
     from(table: unknown) {
       const rows = table === conversations ? [test.conversation] : table === whatsappTenants
@@ -28,7 +33,8 @@ vi.mock('@/server/db/client', () => ({ getDb: () => ({ transaction: async (fn: (
     return [{ id: 'm1', ...value }];
   } }) }),
   update: () => ({ set: () => ({ where: async () => [] }) }),
-}) }) }));
+  }); } finally { test.abertas -= 1; }
+} }) }));
 vi.mock('@/server/whatsapp/crypto', () => ({ decryptAccessToken: () => 'token' }));
 vi.mock('@/server/whatsapp/outbound', () => ({
   normalizeWhatsAppRecipient: (phone: string) => phone,
@@ -47,7 +53,12 @@ beforeEach(() => {
   test.tenantCount = 1;
   test.inserted = [];
   test.failInsert = false;
-  test.send.mockReset().mockResolvedValue({ messageId: 'wamid-1' });
+  test.abertas = 0;
+  test.abertasNoEnvio = -1;
+  test.send.mockReset().mockImplementation(async () => {
+    test.abertasNoEnvio = test.abertas;
+    return { messageId: 'wamid-1' };
+  });
 });
 
 it('confirma na Meta antes de gravar a resposta do vendedor', async () => {
@@ -95,4 +106,40 @@ it('envio aceito pela Meta e sem registro no banco pede conferência antes de re
   expect(result.delivered).toBe(false);
   expect(result.reason).toMatch(/Confira no celular antes de tentar novamente/);
   expect(test.send).toHaveBeenCalledTimes(1);
+});
+
+/**
+ * O envio ficava dentro de `transaction` com `FOR UPDATE` e timeout de 12 s: uma Meta lenta
+ * segurava lock e conexão do pool do Neon por resposta de vendedor. Agora a rede acontece entre
+ * duas transações curtas.
+ */
+it('chama a Meta fora de qualquer transação aberta', async () => {
+  const result = await sendOperatorReply('c1', 'admin', 'Oi, Ana.', now);
+  expect(result.delivered).toBe(true);
+  expect(test.send).toHaveBeenCalledTimes(1);
+  expect(test.abertasNoEnvio).toBe(0);
+  expect(test.abertas).toBe(0);
+});
+
+it('recusa antes da Meta não abre a segunda transação nem envia', async () => {
+  test.lastVisitor = new Date('2026-11-02T12:59:59Z');
+  const result = await sendOperatorReply('c1', 'admin', 'Oi.', now);
+  expect(result).toMatchObject({ delivered: false, message: null });
+  expect(test.send).not.toHaveBeenCalled();
+  expect(test.inserted).toHaveLength(0);
+});
+
+/**
+ * O cliente já recebeu: engolir a gravação porque outro vendedor assumiu no intervalo deixaria o
+ * histórico mentindo sobre o que foi enviado.
+ */
+it('grava a mensagem mesmo que a conversa mude de dono durante o envio', async () => {
+  test.send.mockImplementation(async () => {
+    test.conversation.owner = 'ai';
+    test.conversation.assignedTo = null;
+    return { messageId: 'wamid-1' };
+  });
+  const result = await sendOperatorReply('c1', 'admin', 'Oi, Ana.', now);
+  expect(result.delivered).toBe(true);
+  expect(test.inserted).toMatchObject([{ sender: 'human', body: 'Oi, Ana.' }]);
 });
