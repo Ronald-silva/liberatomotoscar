@@ -9,6 +9,14 @@ import { maskMileage, maskPrice, yearOptions } from '../masks';
 import { SaveIndicator } from './SaveIndicator';
 import type { DraftFieldName, VehicleDraft } from './useVehicleDraft';
 
+/**
+ * Quantas fichas de marca e de cor abrem de cara.
+ *
+ * Seis cabem em duas fileiras num celular de 390px; doze ocupavam quatro. O número é o mesmo nos
+ * dois campos de propósito: ritmo igual ao descer a tela.
+ */
+const CHIPS_VISIVEIS = 6;
+
 export function VehicleForms({ draft, type, currentYear }: { draft: VehicleDraft; type: VehicleType; currentYear: number }) {
   const { fields } = draft;
   const bind = (name: DraftFieldName) => ({
@@ -20,9 +28,14 @@ export function VehicleForms({ draft, type, currentYear }: { draft: VehicleDraft
   const isMotorcycle = type === 'motorcycle';
 
   return <div className={styles.form} onBlurCapture={() => draft.flush()}>
+    {/* As listas do catálogo já estão na ordem do que a loja vende, então as seis primeiras
+        resolvem quase todo cadastro e o resto fica a um toque. Antes, marca e cor somavam 25
+        fichas abertas ao mesmo tempo — meia tela de celular de decisões antes do primeiro campo
+        de texto. Nada foi removido do catálogo. */}
     <ChipPicker legend="Marca" hint={isMotorcycle ? 'Toque na marca da moto.' : 'Toque na marca do carro.'}
       options={brands} value={fields.brand} onChange={(value) => { draft.set('brand', value); draft.set('model', ''); }}
-      otherLabel="Outra marca" otherPlaceholder="Digite a marca" />
+      otherLabel="Outra marca" otherPlaceholder="Digite a marca"
+      visibleCount={CHIPS_VISIVEIS} allLabel="Ver todas as marcas" />
 
     <Combobox label="Modelo" value={fields.model} onChange={(value) => draft.set('model', value)}
       options={models} suggest={suggest} placeholder="Comece a digitar"
@@ -44,7 +57,8 @@ export function VehicleForms({ draft, type, currentYear }: { draft: VehicleDraft
     </div>
 
     <ChipPicker legend="Cor" options={COMMON_COLORS} value={fields.color}
-      onChange={(value) => draft.set('color', value)} otherLabel="Outra cor" otherPlaceholder="Digite a cor" />
+      onChange={(value) => draft.set('color', value)} otherLabel="Outra cor" otherPlaceholder="Digite a cor"
+      visibleCount={CHIPS_VISIVEIS} allLabel="Ver todas as cores" />
 
     <div className={styles.field}>
       <label htmlFor="vehicle-price">Preço</label>

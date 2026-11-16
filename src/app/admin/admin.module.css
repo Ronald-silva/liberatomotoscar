@@ -230,6 +230,10 @@
 .chip:hover { border-color: var(--admin-ink); }
 .chip:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
 .chipOn { border-color: transparent; background: var(--admin-accent); color: #fff; font-weight: 700; }
+/* "Ver todas" não é uma opção da lista: é o que abre o resto dela. Borda tracejada para a diferença
+   ser visível sem depender de cor — ao lado de uma ficha escolhida, só a cor confundiria. */
+.chipMore { border-style: dashed; color: var(--admin-muted); }
+.chipMore:hover { color: var(--admin-ink); }
 
 .comboLabel { font-weight: 600; }
 .comboWrap { position: relative; }
