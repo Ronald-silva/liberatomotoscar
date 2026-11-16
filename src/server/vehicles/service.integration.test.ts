@@ -475,5 +475,74 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('serviços com PostgreSQL real (
       expect(after.discarded - before.discarded).toBe(1);
       expect(after.sold).toBe(before.sold);
     });
+
+    // O `translate()` da busca é SQL cru: o teste de unidade prova o texto da consulta, e só o
+    // Postgres de verdade prova que ela faz o que diz.
+    describe('busca por texto', () => {
+      const cadastrar = async (brand: string, model: string, year: number | null) => {
+        const draft = await createDraft({ type: 'motorcycle' });
+        return updateVehicle(draft.id, draft.versionNumber, { details: { brand, model, year, mileageKm: null } });
+      };
+      const achados = async (busca: string) =>
+        (await listAdminVehiclesWithCover({ search: busca, storage: noStorage })).map((item) => item.id);
+
+      it('acha sem acento e sem caixa o que foi cadastrado com acento', async () => {
+        const acentuado = await cadastrar('Citroën', 'C4 Cactus', 2019);
+        for (const busca of ['citroen', 'CITROEN', 'Citroën', 'cactus']) {
+          expect(await achados(busca)).toContain(acentuado.id);
+        }
+      });
+
+      it('duas palavras são dois filtros, em qualquer ordem', async () => {
+        const fan = await cadastrar('Honda', 'CG 160 Fan', 2015);
+        const titan = await cadastrar('Honda', 'CG 160 Titan', 2015);
+        expect(await achados('honda fan')).toContain(fan.id);
+        expect(await achados('honda fan')).not.toContain(titan.id);
+        expect(await achados('fan honda')).toContain(fan.id);
+      });
+
+      it('o ano é buscável como texto', async () => {
+        const antiga = await cadastrar('Suzuki', 'Yes 125', 2008);
+        expect(await achados('2008')).toContain(antiga.id);
+        expect(await achados('2009')).not.toContain(antiga.id);
+      });
+
+      it('o curinga digitado é texto procurado, não "liste tudo"', async () => {
+        await cadastrar('Dafra', 'Horizon 150', 2020);
+        expect(await achados('%')).toEqual([]);
+        expect(await achados('_')).toEqual([]);
+      });
+
+      it('a contagem por estado obedece à busca, para a ficha não mentir', async () => {
+        const marca = `Marca${randomUUID().slice(0, 8)}`;
+        await cadastrar(marca, 'Unica', 2021);
+        const contagem = await countAdminVehiclesByStatus(marca);
+        expect(contagem.draft).toBe(1);
+        expect(contagem.published).toBe(0);
+      });
+
+      it('a página seguinte não repete nem pula o que a primeira trouxe', async () => {
+        const marca = `Lote${randomUUID().slice(0, 8)}`;
+        for (let i = 0; i < 5; i += 1) await cadastrar(marca, `Modelo ${i}`, 2020 + i);
+        const primeira = (await listAdminVehiclesWithCover({ search: marca, page: 1, pageSize: 2, storage: noStorage })).map((v) => v.id);
+        const segunda = (await listAdminVehiclesWithCover({ search: marca, page: 2, pageSize: 2, storage: noStorage })).map((v) => v.id);
+        const terceira = (await listAdminVehiclesWithCover({ search: marca, page: 3, pageSize: 2, storage: noStorage })).map((v) => v.id);
+        expect(primeira).toHaveLength(2);
+        expect(segunda).toHaveLength(2);
+        expect(terceira).toHaveLength(1);
+        expect(new Set([...primeira, ...segunda, ...terceira]).size).toBe(5);
+      });
+
+      // O defeito que a ordem estável existe para matar: gravar um veículo movia-o de lugar.
+      it('gravar um veículo não o move de posição na lista', async () => {
+        const marca = `Ordem${randomUUID().slice(0, 8)}`;
+        for (let i = 0; i < 4; i += 1) await cadastrar(marca, `Modelo ${i}`, 2020 + i);
+        const antes = await achados(marca);
+        const meio = antes[2];
+        const [linha] = await getDb().select().from(vehicles).where(eq(vehicles.id, meio));
+        await updateVehicle(meio, linha.versionNumber, { details: {}, priceCents: 12_345_00 });
+        expect(await achados(marca)).toEqual(antes);
+      });
+    });
   });
 });

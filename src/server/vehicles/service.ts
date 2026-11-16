@@ -5,6 +5,7 @@ import { getDb } from '@/server/db/client';
 import { vehicleAudit, vehicleImages, vehicles } from '@/server/db/schema';
 import { createR2Storage, checkPhoto, type PhotoStorage } from '@/server/storage/r2';
 import { queueR2Cleanup, queueUploadRollback, tryDeleteQueuedR2 } from '@/server/storage/cleanup';
+import { vehicleSearchCondition } from './search';
 import { assertPublishable, assertStatusTransition, detailsInput, draftInput, idSchema, isDiscardable, priceInput, slugSchema, vehicleStatus, versionInput } from './validation';
 
 type Vehicle = typeof vehicles.$inferSelect;
@@ -96,24 +97,62 @@ export async function listAdminVehicles() {
   return getDb().select().from(vehicles).orderBy(desc(vehicles.updatedAt));
 }
 
+/**
+ * Quantos veículos a tela mostra por página.
+ *
+ * Com o estoque de hoje (onze veículos) nenhuma página some: o controle de páginas só aparece
+ * quando há mais de uma. O limite existe para o dia em que houver duzentos — e para que esse dia
+ * não chegue como uma tela que baixa duzentas capas assinadas de uma vez.
+ */
+export const ADMIN_PAGE_SIZE = 20;
+
+/**
+ * A ordem do estoque, e por que não é a da última alteração.
+ *
+ * `updatedAt` muda a cada gravação automática — e o editor grava sozinho a cada pausa na digitação.
+ * O veículo que a pessoa acabou de abrir pulava para o topo, e o que ela procurava na terceira
+ * linha estava na quinta na visita seguinte. `createdAt` não se mexe depois do cadastro, então a
+ * posição de um veículo só muda quando outro entra ou sai. O `id` desempata cadastros do mesmo
+ * instante — sem ele, duas linhas com o mesmo `createdAt` podem trocar de lugar entre consultas,
+ * e com paginação isso significa um veículo aparecer duas vezes ou nenhuma.
+ */
+const ordemEstavel = [desc(vehicles.createdAt), asc(vehicles.id)] as const;
+
+// Sem estado pedido, o descartado fica de fora: o rascunho jogado fora sai do estoque, mas segue
+// acessível se pedido de forma explícita.
+const filtroDeEstado = (status?: Status) => status ? eq(vehicles.status, status) : ne(vehicles.status, 'discarded');
+
 // Estoque com a foto de capa, em uma única consulta (sem N+1). R2 vira URL assinada de curta duração; legacy_public já é caminho público.
-// Sem estado pedido, o descartado fica de fora: o rascunho jogado fora sai do estoque, mas segue acessível se pedido de forma explícita.
-export async function listAdminVehiclesWithCover(options: { status?: Status; storage?: PhotoStorage } = {}) {
+export async function listAdminVehiclesWithCover(options: {
+  status?: Status; search?: string | null; page?: number; pageSize?: number; storage?: PhotoStorage;
+} = {}) {
   await requireAdmin();
-  const { status, storage } = options;
+  const { status, search, storage } = options;
+  const pageSize = Math.max(1, Math.trunc(options.pageSize ?? ADMIN_PAGE_SIZE));
+  const page = Math.max(1, Math.trunc(options.page ?? 1));
   const rows = await getDb().select({ vehicle: vehicles, cover: { storageKey: vehicleImages.storageKey, storageProvider: vehicleImages.storageProvider } })
     .from(vehicles)
     .leftJoin(vehicleImages, and(eq(vehicleImages.vehicleId, vehicles.id), eq(vehicleImages.isCover, true)))
-    .where(status ? eq(vehicles.status, status) : ne(vehicles.status, 'discarded'))
-    .orderBy(desc(vehicles.updatedAt));
+    .where(and(filtroDeEstado(status), vehicleSearchCondition(search)))
+    .orderBy(...ordemEstavel)
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
   const photoUrl = photoUrlResolver(rows.map(({ cover }) => cover), storage);
   return Promise.all(rows.map(async ({ vehicle, cover }) => ({ ...vehicle, coverUrl: await photoUrl(cover) })));
 }
 
-// Um único group by; os estados sem veículo entram com zero para a tela não ter de adivinhar chaves ausentes.
-export async function countAdminVehiclesByStatus(): Promise<Record<Status, number>> {
+/**
+ * Um único group by; os estados sem veículo entram com zero para a tela não ter de adivinhar
+ * chaves ausentes.
+ *
+ * A busca entra aqui também, e não é detalhe: com "honda" digitado, um contador que ignorasse a
+ * busca diria "Publicados (5)" para uma lista de dois. O número que a ficha mostra é o número de
+ * veículos que aquela ficha abre.
+ */
+export async function countAdminVehiclesByStatus(search?: string | null): Promise<Record<Status, number>> {
   await requireAdmin();
-  const rows = await getDb().select({ status: vehicles.status, total: sql<number>`count(*)::int` }).from(vehicles).groupBy(vehicles.status);
+  const rows = await getDb().select({ status: vehicles.status, total: sql<number>`count(*)::int` })
+    .from(vehicles).where(vehicleSearchCondition(search)).groupBy(vehicles.status);
   const counts = Object.fromEntries(vehicleStatus.options.map((status) => [status, 0])) as Record<Status, number>;
   for (const { status, total } of rows) counts[status] = total;
   return counts;
