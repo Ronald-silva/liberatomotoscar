@@ -93,6 +93,9 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
                 <p className={attendanceStyles.current} role="alert">
                   Excluir esta conversa? O histórico de mensagens será apagado permanentemente.
                 </p>
+                {/* O que o servidor confere. Nasce com a caixa e morre com ela, e vale o id desta
+                    conversa: um formulário que já nascesse confirmado não teria este campo. */}
+                <input type="hidden" name="confirm" value={conversationId} />
                 <button type="submit" name="intent" value="delete" className={attendanceStyles.destructiveButton} disabled={pending}>
                   Sim, excluir conversa
                 </button>
@@ -172,6 +175,7 @@ export function InboxOperatorControls({ conversationId, status, owner, assignedT
               <p className={attendanceStyles.current} role="alert">
                 Excluir esta conversa? O histórico de mensagens será apagado permanentemente.
               </p>
+              <input type="hidden" name="confirm" value={conversationId} />
               <button type="submit" name="intent" value="delete" className={attendanceStyles.destructiveButton} disabled={pending}>
                 Sim, excluir conversa
               </button>

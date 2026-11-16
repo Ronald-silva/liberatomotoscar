@@ -119,6 +119,13 @@ export async function operateInboxConversation(_previous: InboxActionState, form
       return { message: 'Conversa encerrada.', error: false };
     }
     if (intent === 'delete') {
+      // A única ação daqui que apaga histórico e não se desfaz. A confirmação do cliente é
+      // conforto; esta é a trava. Ela exige que o pedido **repita qual** conversa vai sumir, pelo
+      // mesmo motivo de `changeWhatsappMode`: um valor fixo escondido no formulário (o antigo
+      // `confirm=yes`) viajaria em toda requisição e tornaria a trava decorativa.
+      if (!id || formData.get('confirm') !== id) {
+        return { message: 'Confirme a exclusão da conversa antes de apagar o histórico.', error: true };
+      }
       await deleteInboxConversation(id);
       revalidateAttendance();
       return { message: 'Conversa excluída.', error: false };

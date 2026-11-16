@@ -39,3 +39,23 @@ it('exige confirmação em dois passos antes de excluir conversa', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Manter conversa' }));
   expect(screen.queryByRole('button', { name: 'Sim, excluir conversa' })).toBeNull();
 });
+
+// O campo que o servidor exige só **existe** depois da confirmação, e vale o id desta conversa.
+// É o que impede o formulário de nascer já confirmado, como acontecia com o `confirm=yes` fixo.
+it('o campo de confirmação da exclusão só nasce com a caixa aberta e repete a conversa', () => {
+  const { container } = render(<InboxOperatorControls {...base} lastVisitorMessageAt={new Date().toISOString()} />);
+  const campo = () => container.querySelector<HTMLInputElement>('input[name="confirm"]');
+  expect(campo()).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir conversa' }));
+  expect(campo()?.value).toBe('c1');
+  fireEvent.click(screen.getByRole('button', { name: 'Manter conversa' }));
+  expect(campo()).toBeNull();
+});
+
+it('conversa encerrada também confirma antes de apagar e também traz o campo', () => {
+  const { container } = render(<InboxOperatorControls {...base} status="closed" />);
+  expect(container.querySelector('input[name="confirm"]')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir conversa' }));
+  expect(container.querySelector<HTMLInputElement>('input[name="confirm"]')?.value).toBe('c1');
+  expect(screen.getByRole('button', { name: 'Sim, excluir conversa' })).toBeTruthy();
+});

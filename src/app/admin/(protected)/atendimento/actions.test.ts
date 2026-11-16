@@ -133,9 +133,45 @@ it('executa ações do operador na conversa (assumir, responder, devolver e ence
   const deleteForm = new FormData();
   deleteForm.set('conversationId', convId);
   deleteForm.set('intent', 'delete');
+  deleteForm.set('confirm', convId);
   const deleted = await operateInboxConversation({ message: null, error: false }, deleteForm);
   expect(mocks.deleteInboxConversation).toHaveBeenCalledWith(convId);
   expect(deleted.error).toBe(false);
+});
+
+// A confirmação do cliente é conforto; a trava é esta. A exclusão apaga o histórico da conversa e
+// não se desfaz, então o servidor exige que o pedido repita **qual** conversa está sendo apagada.
+// Um `confirm` fixo — o antigo `confirm=yes` da tela de modo — passaria em qualquer requisição e
+// deixaria a trava decorativa.
+it('exclusão de conversa sem confirmação não chega ao banco', async () => {
+  const form = new FormData();
+  form.set('conversationId', 'conversa-1');
+  form.set('intent', 'delete');
+  const state = await operateInboxConversation({ message: null, error: false }, form);
+  expect(mocks.deleteInboxConversation).not.toHaveBeenCalled();
+  expect(state.error).toBe(true);
+  expect(state.message).toBe('Confirme a exclusão da conversa antes de apagar o histórico.');
+});
+
+it.each(['yes', 'true', 'on', '1', 'outra-conversa'])(
+  'exclusão com confirmação forjada (%s) não chega ao banco', async (forjado) => {
+    const form = new FormData();
+    form.set('conversationId', 'conversa-1');
+    form.set('intent', 'delete');
+    form.set('confirm', forjado);
+    const state = await operateInboxConversation({ message: null, error: false }, form);
+    expect(mocks.deleteInboxConversation).not.toHaveBeenCalled();
+    expect(state.error).toBe(true);
+  });
+
+// As outras três ações não apagam nada e não podem herdar a exigência: encerrar uma conversa com
+// um toque continua sendo um toque.
+it.each(['assume', 'release', 'close'])('a ação %s segue sem exigir confirmação', async (intent) => {
+  const form = new FormData();
+  form.set('conversationId', 'conversa-1');
+  form.set('intent', intent);
+  const state = await operateInboxConversation({ message: null, error: false }, form);
+  expect(state.error).toBe(false);
 });
 
 it('define todas as classes referenciadas por attendanceStyles em attendance.module.css', () => {
