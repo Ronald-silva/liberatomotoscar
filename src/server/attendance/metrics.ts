@@ -1,6 +1,8 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { getDb } from '@/server/db/client';
-import { attendanceUsage, conversationMessages, conversations, handoffs } from '@/server/db/schema';
+import {
+  attendanceUsage, conversationMessages, conversations, handoffs, visitAppointments,
+} from '@/server/db/schema';
 
 /**
  * Métricas da Fase 6. Sem elas não há como dizer ao lojista que o agente funciona — e é a
@@ -24,9 +26,22 @@ export function buildConversationMetricsQuery(db: Db, { channel, since }: Metric
     conversas: sql<number>`count(distinct ${conversations.id})`,
     // 6.1 — resolvida no canal é a conversa que nunca precisou de vendedor.
     conversasComHandoff: sql<number>`count(distinct ${handoffs.conversationId})`,
-    // 6.2 — a visita é um fato anotado por registrar_lead, não uma coluna própria.
-    conversasComVisita: sql<number>`count(distinct ${conversations.id})
+    /**
+     * 6.2 — **intenção** de visita: um fato que a Dayse anotou a partir da frase do cliente
+     * (`registrar_lead`). Chamar isto de "visita agendada" era a métrica que mentia: "quero
+     * passar aí sábado" conta aqui mesmo que ninguém tenha marcado nada.
+     */
+    conversasComIntencaoDeVisita: sql<number>`count(distinct ${conversations.id})
       filter (where ${conversations.facts} @> '[{"field":"visit"}]'::jsonb)`,
+    /**
+     * 6.2 (de verdade) — visita **marcada**, lida de `visit_appointments`, que é a agenda que o
+     * vendedor abre. `exists` e não join: `visit_appointments` tem índice único por conversa, mas
+     * um join a mais neste SELECT multiplicaria as outras contagens se esse índice mudasse.
+     */
+    conversasComVisitaMarcada: sql<number>`count(distinct ${conversations.id}) filter (where exists (
+      select 1 from ${visitAppointments}
+      where ${visitAppointments.conversationId} = ${conversations.id}
+    ))`,
     mensagens: sql<number>`count(distinct ${conversationMessages.id})`,
   }).from(conversations)
     .leftJoin(handoffs, eq(handoffs.conversationId, conversations.id))
@@ -75,7 +90,8 @@ export function buildUsageMetricsQuery(
 export type RawAgentMetrics = {
   conversas: number;
   conversasComHandoff: number;
-  conversasComVisita: number;
+  conversasComIntencaoDeVisita: number;
+  conversasComVisitaMarcada: number;
   mensagens: number;
   segundosAtePrimeiraResposta: number | null;
   aiRequests: number;
@@ -103,10 +119,19 @@ export function deriveAgentMetrics(raw: RawAgentMetrics) {
   return {
     conversas: raw.conversas,
     resolvidasNoCanalPct: taxa(resolvidas, raw.conversas),
-    visitaAgendadaPct: taxa(raw.conversasComVisita, raw.conversas),
+    /**
+     * Dois nomes porque são dois dados. `visitaIntencaoPct` sai de `conversations.facts` (a Dayse
+     * ouviu o cliente falar de visita); `visitaMarcadaPct` sai de `visit_appointments` (existe
+     * linha na agenda). O primeiro é sempre maior ou igual ao segundo numa loja saudável, e a
+     * diferença entre eles é o número que importa: intenção que não virou visita.
+     */
+    visitaIntencaoPct: taxa(raw.conversasComIntencaoDeVisita, raw.conversas),
+    visitaMarcadaPct: taxa(raw.conversasComVisitaMarcada, raw.conversas),
     mensagensPorConversa: media(raw.mensagens, raw.conversas),
     segundosAtePrimeiraResposta: raw.segundosAtePrimeiraResposta,
     guardaReprovadaPct: taxa(raw.guardRejections, raw.aiRequests),
     tokensPorConversa: media(raw.inputTokens + raw.outputTokens, raw.conversas, 0),
   };
 }
+
+export type AgentMetrics = ReturnType<typeof deriveAgentMetrics>;
