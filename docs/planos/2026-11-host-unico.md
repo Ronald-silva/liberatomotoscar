@@ -1,7 +1,31 @@
 # Plano — host único (Railway × Vercel)
 
-_Escrito em 2026-11-15. **Plano, não execução.** A decisão é sua; nada foi alterado. Os dados abaixo
-vieram de leitura das APIs do Railway e da CLI da Vercel — **nomes** de variáveis, nunca valores._
+_Escrito em 2026-11-15. **Plano, não execução.** Os dados abaixo vieram de leitura das APIs do
+Railway e da CLI da Vercel — **nomes** de variáveis, nunca valores._
+
+## 0. Decisão — 16/11/2026: fica o **Railway**
+
+Decidido pelo dono, contra a recomendação do §3 (que era Vercel). Motivo dele: processo contínuo,
+mais previsível. O que isso obriga, e que a Vercel dava de graça:
+
+- **A retenção precisa do agendador do §6.** O cron de `vercel.json` não dispara no Railway. Sem
+  isso, `/api/cron/retencao` é rota pronta que ninguém chama, e "retenção ligada" continua falso.
+- **`vercel.json` fica como configuração morta** (`regions`, `crons`) enquanto a Vercel existir.
+  Não apagar antes do corte: durante a observação ela ainda serve o mesmo app.
+- Ler o §5 de baixo para cima: onde está escrito "host vencedor", leia Railway; o host a desligar
+  no passo 9 é a **Vercel** (desconectar o Git do projeto para parar o deploy automático).
+
+**Lista real de variáveis do Railway**, conferida em 16/11 (nomes, valores redigidos pela API):
+já tem `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WEBHOOK_CALLBACK_URL`,
+`META_APP_ID`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `META_EMBEDDED_SIGNUP_CONFIG_ID`,
+`AUTH_URL`, `DATABASE_URL`. **Falta criar lá:** `WHATSAPP_TOKEN_ENCRYPTION_KEY`,
+`WHATSAPP_WABA_ID`, `CRON_SECRET`, `OPS_ALERT_WEBHOOK_URL`, `NEXT_PUBLIC_META_PIXEL_ID`,
+`NEXT_PUBLIC_GA_MEASUREMENT_ID`.
+
+**Correção ao §4:** `DATABASE_URL_DIRECT` e `NEON_DEVELOPMENT_BRANCH_ID` **não** precisam ir para o
+Railway. Só migrações e scripts os leem (`getMigrationDatabaseUrl`, `check-neon-connection`,
+`grant-admin-development`); o app em execução usa apenas `DATABASE_URL`. Levá-los ao Railway seria
+pôr a credencial direta do banco num processo que não a usa.
 
 ## 1. O problema
 
@@ -170,7 +194,7 @@ porque é a existência da variável que faz a Vercel enviar o `Authorization` a
 
 ## 7. Decisões que são suas
 
-- [ ] **Qual host fica.** (recomendação: Vercel)
+- [x] **Qual host fica.** → **Railway**, decidido em 16/11/2026 (recomendação era Vercel).
 - [ ] Rodar a migração da chave junto com o corte (passo 4) ou depois?
 - [ ] Autorizar o ensaio real com o número de teste da Meta (passo 6)?
 - [ ] Desligar o perdedor de vez (passo 9) ou deixá-lo pausado por um mês?

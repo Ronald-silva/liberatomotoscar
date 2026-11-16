@@ -29,7 +29,15 @@ de motos e carros. Piloto assistido; ainda não é SaaS multiloja.
 
 - Stack: Next.js 16 / React 19, PostgreSQL (Neon) + Drizzle, Cloudflare R2, Auth.js (Google),
   Meta WhatsApp Cloud API, OpenRouter (Dayse). Vercel AI Gateway **não** está integrado.
-- Deploy: Vercel (projeto `liberatomotoscar`, Node 24.x).
+- Deploy: **Railway** (projeto `liberato-motos-car`, serviço `liberatomotoscar`, Node 24.x,
+  `liberatomotoscar-production.up.railway.app`). Decidido em 16/11/2026, conforme
+  `docs/planos/2026-11-host-unico.md`. A Vercel segue no ar durante a observação e depois sai; até
+  o corte terminar, **os dois hosts leem o mesmo Neon**, então nunca presuma host único no código.
+  Consequência: o cron de `vercel.json` **não dispara no Railway** — a retenção precisa do
+  agendador próprio descrito no §6 do plano.
+- Banco: branch Neon `production` (`br-quiet-tooth-b83ew3t8`) é a da loja; o trabalho local usa a
+  branch `development` (`br-dark-smoke-b89bby7c`), que é para onde o `.env` aponta. Migrações em
+  produção só com autorização explícita.
 - Avaliação mais recente e confiável: `docs/auditorias/AUDITORIA-STATUS-E-VALOR-2026-11-11.md`
   (os demais diagnósticos em `docs/` são de datas anteriores).
 
