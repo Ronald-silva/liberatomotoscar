@@ -495,3 +495,53 @@ describe('o que o §7 do spec manda não regredir', () => {
     expect(typeof ArtCanvasDefault).toBe('function');
   });
 });
+
+/**
+ * A prévia fixa do celular encolhe a peça na tela. A pergunta que estes testes respondem é a que o
+ * brief da Fase 5 faz em voz alta: **a prévia e o arquivo exportado continuam idênticos?**
+ *
+ * Continuam, e por construção, não por sorte. `compact` entra numa conta só — a altura disponível
+ * para a escala do CSS. O `Stage` é declarado em `width`/`height` do destino, a transformação é
+ * `transform: scale()` numa `div` **fora** do `Stage`, e o arquivo nasce no palco oculto, que
+ * monta o `ArtCanvas` sem `compact`. Uma escala que alcançasse o `Stage` mudaria o JPEG; o teste
+ * abaixo é o que impede alguém de ligar as duas coisas numa limpeza futura.
+ */
+describe('a prévia compacta não alcança o arquivo', () => {
+  const texto = () => fonte();
+
+  it('compact só altera a altura disponível da prévia', () => {
+    // Uma ocorrência na assinatura, uma no JSDoc da prop, uma na conta da altura. Se aparecer em
+    // qualquer outro lugar, alguém a ligou ao desenho.
+    const usos = [...texto().matchAll(/\bcompact\b/g)];
+    expect(usos.length).toBeGreaterThan(0);
+    expect(texto()).toMatch(/const previewHeight = compact/);
+    // O palco e a cena não a recebem.
+    expect(texto()).not.toMatch(/<Stage[^>]*compact/);
+    expect(texto()).not.toMatch(/<ArtScene[^>]*compact/);
+    expect(texto()).not.toMatch(/layoutArt\([^)]*compact/);
+  });
+
+  it('a escala mora no CSS, fora do Stage, e o Stage mantém a medida do destino', () => {
+    // Já afirmado acima para o `Stage`; aqui o outro lado: a transformação é de uma div irmã.
+    expect(texto()).toMatch(/transform: `scale\(\$\{scale\}\)`/);
+    expect(texto()).toMatch(/<div style=\{\{ width, height, transform: `scale/);
+  });
+
+  it('o palco oculto, que é de onde sai o arquivo, nunca é compacto', () => {
+    const editor = readFileSync('src/components/art-studio/ArtEditor.tsx', 'utf8');
+    const oculto = editor.match(/data-palco="oculto"[\s\S]*?<\/div>/)?.[0] ?? '';
+    expect(oculto).toContain('<ArtCanvas');
+    expect(oculto).not.toContain('compact');
+    // E a prévia é a única que recebe.
+    const previa = editor.match(/data-palco="previa"[\s\S]*?<\/div>/)?.[0] ?? '';
+    expect(previa).toContain('compact={telaEstreita}');
+  });
+
+  it('a fração compacta deixa a maior parte da janela para os controles', () => {
+    const fracao = Number(texto().match(/FRACAO_COMPACTA = ([\d.]+)/)?.[1]);
+    expect(fracao).toBeGreaterThanOrEqual(0.3);
+    expect(fracao).toBeLessThanOrEqual(0.5);
+    // Numa janela baixa a fração sozinha apagaria a prévia; o piso existe para isso.
+    expect(texto()).toMatch(/Math\.max\(ALTURA_COMPACTA_MINIMA/);
+  });
+});

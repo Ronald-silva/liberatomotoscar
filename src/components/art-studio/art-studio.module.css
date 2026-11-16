@@ -42,8 +42,25 @@
 /* O palco oculto desenha os quatro arquivos fora da vista. `display: none` não serve: o canvas
    precisa de caixa para o navegador pintar, e sem pintura o JPEG sai em branco. */
 .offstage { position: absolute; left: -10000px; top: 0; width: 1080px; height: 1920px; overflow: hidden; pointer-events: none; }
-@media (max-width: 480px) {
-  .preview { padding: var(--admin-space-2); }
+/* A prévia fixa no topo do celular.
+   O número 600px é o mesmo de `TELA_ESTREITA` em `ArtEditor.tsx`, que decide a escala compacta do
+   canvas; `art-studio-css.test.ts` prova que os dois não se separam. Divergindo, a prévia encolhe
+   sem grudar (sobra vazia no topo) ou gruda sem encolher (cobre os controles).
+   Nada na cadeia de ancestrais tem `overflow` — se algum ganhar, o `sticky` morre em silêncio. */
+@media (max-width: 600px) {
+  .preview {
+    position: sticky;
+    top: 0;
+    /* Acima dos controles que passam por baixo, e abaixo do `.comboList` do painel (z-index 5). */
+    z-index: 3;
+    /* `.preview` já tem fundo opaco; a sombra é o que separa a peça do que desliza sob ela. */
+    box-shadow: 0 10px 20px -12px rgb(0 0 0 / 70%);
+    padding: var(--admin-space-2);
+  }
+  /* O título da seção continua existindo para o `aria-labelledby`, mas ocupa menos altura: cada
+     pixel aqui sai dos controles, que dividem a mesma janela. */
+  .preview h2 { font-size: 1rem; }
+  .chromeToggle { margin-top: var(--admin-space-1); font-size: 0.9375rem; }
   .actions { grid-template-columns: 1fr; }
   .destinations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .destinationChip { font-size: 0.9375rem; }

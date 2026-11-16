@@ -337,12 +337,31 @@ function useVehiclePhoto(src: string | null, retry: number) {
   return state?.src === src && state.retry === retry ? state : null;
 }
 
+/**
+ * Quanto da janela a prévia ocupa quando está fixa no topo do celular.
+ *
+ * O resto da janela é dos controles. Com 40% sobram ~440 px num iPhone de 844 — tirando a barra
+ * de navegação, dois grupos de controle por vez. Abaixo de 38% a peça deixa de ser lida como
+ * peça; acima de 45% escolher a foto volta a exigir rolagem, que é o defeito que a prévia fixa
+ * existe para resolver.
+ */
+const FRACAO_COMPACTA = 0.4;
+/** Piso em px: numa janela baixa (teclado aberto, navegador com barras) 40% viram nada. */
+const ALTURA_COMPACTA_MINIMA = 240;
+
 export default function ArtCanvas({ destination, badge, brand, showChrome, photoUrl, photoRetry,
-  title, meta, price, phone, status, note, stageRef, onPhotoLoad, onDropped }: {
+  title, meta, price, phone, status, note, stageRef, onPhotoLoad, onDropped, compact = false }: {
   destination: ArtDestination; badge: ArtBadge; brand: BrandKit; showChrome: boolean;
   photoUrl: string | null; title: string; meta: string;
   price: string; phone: string; status: string; note: string;
   photoRetry: number; stageRef: RefObject<Konva.Stage | null>;
+  /**
+   * A prévia está fixa no topo de uma tela estreita e divide a janela com os controles.
+   *
+   * Muda **só a escala do CSS**: o `Stage` continua nas medidas do destino, e o arquivo sai do
+   * palco oculto, que nunca é compacto. Prévia menor não é arquivo menor.
+   */
+  compact?: boolean;
   onPhotoLoad: (state: 'loading' | 'ready' | 'error', error?: string) => void;
   /**
    * O que o teto de altura obrigou a deixar de fora, como lista separada por vírgula ('' no caso
@@ -377,7 +396,9 @@ export default function ArtCanvas({ destination, badge, brand, showChrome, photo
   }, []);
 
   // A prévia cabe inteira na janela, enquanto o Stage exportado mantém a medida do destino.
-  const previewHeight = Math.max(600, viewportHeight - 200);
+  const previewHeight = compact
+    ? Math.max(ALTURA_COMPACTA_MINIMA, Math.round(viewportHeight * FRACAO_COMPACTA))
+    : Math.max(600, viewportHeight - 200);
   const scale = Math.min(1, (availableWidth || 360) / width, previewHeight / height);
 
   const content = artContentFor({ title, meta, price, phone, note, status, badge,

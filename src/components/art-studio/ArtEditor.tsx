@@ -82,6 +82,29 @@ function lembrado(chave: string): string | null {
 const semNotificacao = () => () => {};
 const nadaLembrado = () => null;
 
+/**
+ * A largura a partir da qual a prévia fica **fixa no topo** e os controles rolam por baixo dela.
+ *
+ * O problema que isso resolve está medido: num iPhone de 390×844, chegar ao seletor de foto
+ * exigia rolar 831 px, e aí a prévia estava 207 px acima do topo da janela — zero pixel visível.
+ * A pessoa escolhia a foto da peça sem ver a peça. A auditoria propunha dois botões-âncora; o
+ * estúdio reescrito já os tinha removido, e âncora de todo jeito é contorno: leva a pessoa até a
+ * prévia **depois** de ela ter decidido no escuro.
+ *
+ * O mesmo número está em `art-studio.module.css`, e `art-studio-css.test.ts` prova que os dois
+ * concordam — se divergirem, a prévia encolhe sem ficar fixa, ou fica fixa sem encolher.
+ */
+export const TELA_ESTREITA = '(max-width: 600px)';
+const assinarTelaEstreita = (avisar: () => void) => {
+  const consulta = window.matchMedia(TELA_ESTREITA);
+  consulta.addEventListener('change', avisar);
+  return () => consulta.removeEventListener('change', avisar);
+};
+const lerTelaEstreita = () => window.matchMedia(TELA_ESTREITA).matches;
+// No servidor não há janela. A prévia nasce no tamanho grande e encolhe na hidratação, em vez de
+// nascer compacta e crescer — num monitor, crescer seria o salto visível.
+const telaLargaNoServidor = () => false;
+
 export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareSupport: shareSupportProp }: {
   vehicle: ArtVehicle; photos: { id: string; isCover: boolean; src: string }[]; phone: string;
   exportProblem: string | null; brand: BrandKit;
@@ -103,6 +126,7 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
   // depois da última visita. Honrá-lo anunciaria "Destaque da semana" num carro já vendido.
   const badge = seloEscolhido
     ?? (seloOferecido.find((item) => item.id === seloLembrado)?.id ?? seloOferecido[0].id);
+  const telaEstreita = useSyncExternalStore(assinarTelaEstreita, lerTelaEstreita, telaLargaNoServidor);
   const detectado = useSyncExternalStore(subscribeShareSupport, readShareSupport, () => 'checking' as ShareSupport);
   const shareSupport = shareSupportProp ?? detectado;
   const [showChrome, setShowChrome] = useState(true);
@@ -434,13 +458,17 @@ export function ArtEditor({ vehicle, photos, phone, exportProblem, brand, shareS
       {exportProblem ? <p className={artStyles.warning} role="status">Prévia disponível. Para publicar ou baixar: {exportProblem}</p> : null}
 
       <div className={artStyles.stack}>
+        {/* No celular esta seção fica fixa no topo e os controles rolam por baixo dela: trocar
+            destino, selo ou foto acontece com a peça à vista. Em tela larga nada gruda — lá a
+            prévia e os controles já cabiam juntos. */}
         <section className={artStyles.preview} aria-labelledby="art-preview-title">
           <h2 id="art-preview-title">Prévia da arte</h2>
           <div data-palco="previa">
             <ArtCanvas destination={destination} badge={badge} brand={brand} showChrome={showChrome}
               photoUrl={photoUrl} photoRetry={photoRetry} title={artTitle} meta={artMeta}
               price={vehicle.price} phone={phone} status={vehicle.status} note={note}
-              stageRef={previewStage} onPhotoLoad={onPhotoLoad} onDropped={setDescartados} />
+              stageRef={previewStage} onPhotoLoad={onPhotoLoad} onDropped={setDescartados}
+              compact={telaEstreita} />
           </div>
           <label className={artStyles.chromeToggle}>
             <input type="checkbox" checked={showChrome} onChange={(event) => setShowChrome(event.target.checked)} />
