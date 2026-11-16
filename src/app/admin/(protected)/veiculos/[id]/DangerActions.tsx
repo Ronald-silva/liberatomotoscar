@@ -56,6 +56,6 @@ export function DangerActions({ vehicleId, draft, canDiscard, archiveTargetAvail
       {canDiscard ? <button className={`${styles.button} ${styles.buttonDestructive}`} type="button"
         onClick={() => setConfirming('discard')}>Excluir veículo</button> : null}
     </>}
-    <FormNotice message={message} vehicleId={vehicleId} />
+    <FormNotice message={message} vehicleId={vehicleId} role="alert" />
   </section>;
 }

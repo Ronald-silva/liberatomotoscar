@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { VehicleEditor } from './VehicleEditor';
 
-const { changeStatus, saveVehicle, refresh, push } = vi.hoisted(() => ({ changeStatus: vi.fn(), saveVehicle: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
-vi.mock('../actions', () => ({ changeStatus, saveVehicle, addVehiclePhoto: vi.fn(), removeVehiclePhoto: vi.fn(), setVehicleCover: vi.fn(), discardVehicleDraft: vi.fn() }));
+const { changeStatus, saveVehicle, discardVehicleDraft, refresh, push } = vi.hoisted(() => ({ changeStatus: vi.fn(), saveVehicle: vi.fn(), discardVehicleDraft: vi.fn(), refresh: vi.fn(), push: vi.fn() }));
+vi.mock('../actions', () => ({ changeStatus, saveVehicle, discardVehicleDraft, addVehiclePhoto: vi.fn(), removeVehiclePhoto: vi.fn(), setVehicleCover: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh, push }) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -15,7 +15,7 @@ const props = {
   initialFields: fields, initialMissing: ['Pelo menos uma foto'], photos: [], currentYear: 2026,
 };
 
-beforeEach(() => { changeStatus.mockReset(); saveVehicle.mockReset(); refresh.mockReset(); push.mockReset(); });
+beforeEach(() => { changeStatus.mockReset(); saveVehicle.mockReset(); discardVehicleDraft.mockReset(); refresh.mockReset(); push.mockReset(); });
 afterEach(cleanup);
 
 it('ordena as três seções e mantém uma ação principal no rodapé', () => {
@@ -156,4 +156,44 @@ it('arquivar com gravação falhando explica dentro da caixa, que continua abert
   await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
   expect(within(section).getByRole('button', { name: 'Sim, arquivar' })).toBeTruthy();
   expect(changeStatus).not.toHaveBeenCalled();
+});
+
+// As duas ações que faltavam ao conjunto acima. "Marcar vendido" e "Excluir veículo" são as que
+// mais custam se a tela mentir: uma tira o anúncio da vitrine, a outra apaga as fotos. Em ambas a
+// caixa de confirmação fica aberta com o motivo dentro, para o segundo toque ser a repetição da
+// mesma ação e não um novo caminho.
+it('marcar vendido com gravação falhando explica na caixa, que continua aberta', async () => {
+  render(<VehicleEditor {...props} status="published" isNew={false} canDiscard={false}
+    targets={['sold', 'archived']} initialMissing={[]} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Marcar vendido' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, marcar vendido' }));
+  const section = screen.getByRole('heading', { name: /^Situação:/ }).closest('section') as HTMLElement;
+  await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
+  expect(within(section).getByRole('button', { name: 'Sim, marcar vendido' })).toBeTruthy();
+  expect(changeStatus).not.toHaveBeenCalled();
+});
+
+it('excluir veículo com gravação falhando explica dentro da caixa, que continua aberta', async () => {
+  render(<VehicleEditor {...props} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir veículo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, excluir veículo' }));
+  const section = screen.getByRole('heading', { name: 'Gerenciar anúncio' }).closest('section') as HTMLElement;
+  await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
+  expect(within(section).getByRole('button', { name: 'Sim, excluir veículo' })).toBeTruthy();
+  expect(discardVehicleDraft).not.toHaveBeenCalled();
+});
+
+// Quem não enxerga a tela precisa ser avisado do mesmo jeito: a explicação de uma ação que falhou
+// é interrupção, não recado de rodapé.
+it('o motivo da falha em Gerenciar anúncio é anunciado como alerta', async () => {
+  render(<VehicleEditor {...props} />);
+  failNextSave();
+  fireEvent.click(screen.getByRole('button', { name: 'Excluir veículo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Sim, excluir veículo' }));
+  const section = screen.getByRole('heading', { name: 'Gerenciar anúncio' }).closest('section') as HTMLElement;
+  await waitFor(() => expect(within(section).getByText(SAVE_FAILED)).toBeTruthy());
+  const alerts = within(section).getAllByRole('alert').map((node) => node.textContent);
+  expect(alerts).toContain(SAVE_FAILED);
 });

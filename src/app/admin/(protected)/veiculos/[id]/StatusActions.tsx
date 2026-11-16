@@ -23,8 +23,10 @@ export function StatusActions({ vehicleId, draft, status, targets }: {
   async function change(target: VehicleStatus) {
     setBusy(true);
     setMessage(null);
+    // A caixa de confirmação continua aberta com o motivo dentro, como em `DangerActions`: fechá-la
+    // devolvia a tela ao estado de antes do toque, e "marcar vendido" ficava parecendo feito.
     const saved = await draft.saveBeforeAction();
-    if (!saved.ok) { setMessage(saved.message); setBusy(false); setConfirming(null); return; }
+    if (!saved.ok) { setMessage(saved.message); setBusy(false); return; }
     const state = await draft.enqueue((version) => {
       const data = new FormData();
       data.set('id', vehicleId);
