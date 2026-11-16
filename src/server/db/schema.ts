@@ -321,3 +321,35 @@ export const whatsappTenants = pgTable('whatsapp_tenants', {
   index('whatsapp_tenants_tenant_id_idx').on(table.tenantId),
 ]);
 
+
+/**
+ * Incidentes e encaminhamentos do atendimento, para que o lojista veja na tela o que antes só
+ * existia em `console.error` de função serverless — log que ninguém lê e que a Vercel descarta.
+ *
+ * Uma linha por evento, nunca um contador agregado: a tela precisa dizer **qual** conversa ficou
+ * sem vendedor, não só quantas. `conversationId` é `set null` no apagamento da conversa porque a
+ * retenção expurga conversas antigas e o incidente tem de sobreviver à conversa que o causou —
+ * senão a janela de 30 dias esconderia justamente as falhas mais antigas.
+ *
+ * **O que esta tabela não garante:** quando o banco está indisponível, a gravação do incidente
+ * falha junto com tudo o mais. Ela cobre a falha de envio, a de token e a de registro parcial;
+ * não cobre o banco fora do ar. Por isso o alerta de `notifyOps` continua existindo: ele é o
+ * caminho que não depende do Postgres.
+ */
+export const attendanceIncidents = pgTable('attendance_incidents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  channel: text('channel', { enum: ['site', 'whatsapp'] }).notNull(),
+  /** `encaminhado_<motivo>`, `encaminhamento_nao_registrado` ou `cliente_sem_atendimento`. */
+  evento: text('evento').notNull(),
+  /** `teto_conversa`, `sem_cota_loja`, `infraestrutura`, `menu_legado`, `envio_falhou`, … */
+  motivo: text('motivo'),
+  /** O que o banco confirmou no encaminhamento: `completo`, `parcial` ou `nenhum`. */
+  registro: text('registro'),
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('attendance_incidents_channel_valid', sql`${table.channel} IN ('site', 'whatsapp')`),
+  check('attendance_incidents_registro_valid',
+    sql`${table.registro} IS NULL OR ${table.registro} IN ('completo', 'parcial', 'nenhum')`),
+  index('attendance_incidents_channel_time_idx').on(table.channel, table.occurredAt),
+]);

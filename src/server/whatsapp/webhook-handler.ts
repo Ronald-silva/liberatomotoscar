@@ -5,6 +5,7 @@ import {
 import { runWhatsappAgentTurn, type WhatsappTurnResult } from '@/server/agent/whatsapp-turn';
 import { getDb } from '@/server/db/client';
 import { conversations } from '@/server/db/schema';
+import { recordAttendanceIncident } from '@/server/attendance/incidents';
 import { notifyOps, type OpsAlertOutcome } from '@/server/ops/alert';
 import { decryptAccessToken } from './crypto';
 
@@ -141,6 +142,17 @@ export type WebhookHandlerDeps = {
   onSendFailed?: (conversationId: string, erro: unknown) => Promise<boolean | void>;
   /** Destino humano dos incidentes. Injetável para que o teste não dependa de rede. */
   alertOps?: typeof notifyOps;
+  /**
+   * Gravação do incidente para a tela de métricas. Injetável porque o teste do webhook não tem
+   * banco — e porque o que a tela mostra precisa ser verificável sem subir Postgres.
+   */
+  recordIncident?: (incidente: {
+    channel: 'site' | 'whatsapp';
+    evento: string;
+    motivo?: string | null;
+    registro?: 'completo' | 'parcial' | 'nenhum' | null;
+    conversationId?: string | null;
+  }) => Promise<unknown>;
 };
 
 /**
@@ -239,6 +251,17 @@ export async function processMetaWebhookPayload(
    */
   const alertar = (alerta: Parameters<typeof notifyOps>[0]): Promise<OpsAlertOutcome> =>
     alertOps(alerta).catch(() => 'falhou' as const);
+  const recordIncident = deps.recordIncident ?? recordAttendanceIncident;
+  /**
+   * O incidente é gravado para aparecer na TELA; o alerta é para acordar alguém. Os dois existem
+   * porque falham por motivos diferentes: a gravação morre com o Postgres, e é justamente o
+   * Postgres que causa boa parte destes incidentes. Nunca lança e nunca segura o laço.
+   */
+  const registrarIncidente = async (incidente: Parameters<NonNullable<WebhookHandlerDeps['recordIncident']>>[0]) => {
+    // try/catch e não só `.catch`: um duplo de teste ou um `getDb()` sem conexão lança de forma
+    // síncrona, e aí não existe Promise nenhuma para encadear o tratamento.
+    try { await recordIncident(incidente); } catch { /* o incidente já está no log e no alerta */ }
+  };
   const sendOutbound = deps.sendOutbound ?? sendWhatsAppTextMessage;
 
   let processedMessages = 0;
@@ -348,6 +371,10 @@ export async function processMetaWebhookPayload(
           const avisado = await onSendFailed(conversationIdForTurn ?? '', erro).catch(() => false);
           if (avisado === false) {
             falhasOperacionais += 1;
+            await registrarIncidente({
+              channel: 'whatsapp', evento: 'cliente_sem_atendimento',
+              motivo: 'turno_estourou', conversationId: conversationIdForTurn,
+            });
             const destino = await alertar({
               evento: 'cliente_sem_atendimento',
               resumo: 'cliente sem resposta e sem vendedor avisado',
@@ -365,6 +392,10 @@ export async function processMetaWebhookPayload(
           // O cliente vai receber a frase, mas o banco não confirmou nada: não há conversa na fila
           // de ninguém. Isto é incidente, e não pode passar por atendimento concluído.
           falhasOperacionais += 1;
+          await registrarIncidente({
+            channel: 'whatsapp', evento: 'encaminhamento_nao_registrado',
+            motivo: turno.motivo, registro: 'nenhum', conversationId: conversationIdForTurn,
+          });
           const destino = await alertar({
             evento: 'encaminhamento_nao_registrado',
             resumo: 'cliente recebeu encaminhamento que não entrou na fila de ninguém',
@@ -400,6 +431,11 @@ export async function processMetaWebhookPayload(
             processedMessages += 1;
             if (entrega.status === 'encaminhado') {
               encaminhamentos += 1;
+              await registrarIncidente({
+                channel: 'whatsapp', evento: `encaminhado_${entrega.motivo}`,
+                motivo: entrega.motivo, registro: entrega.registro,
+                conversationId: conversationIdForTurn,
+              });
               console.warn('[agente] cliente recebeu encaminhamento ao vendedor', JSON.stringify({
                 evento: `encaminhado_${entrega.motivo}`, conversationId: conversationIdForTurn,
                 registro: entrega.registro, em: new Date().toISOString(),
@@ -424,6 +460,10 @@ export async function processMetaWebhookPayload(
             });
             if (avisado === false) {
               falhasOperacionais += 1;
+              await registrarIncidente({
+                channel: 'whatsapp', evento: 'cliente_sem_atendimento',
+                motivo: 'envio_falhou', conversationId: conversationIdForTurn,
+              });
               const destino = await alertar({
                 evento: 'cliente_sem_atendimento',
                 resumo: 'cliente sem resposta e sem vendedor avisado',

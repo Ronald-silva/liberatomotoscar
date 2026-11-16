@@ -168,6 +168,29 @@ export function ensureAttendanceTables(): Promise<void> {
           CREATE INDEX IF NOT EXISTS "visit_appointments_scheduled_idx"
             ON "visit_appointments" ("scheduled_for")
         `);
+        // Incidentes do atendimento. A tela de métricas é a única coisa que faz o lojista ver
+        // um encaminhamento que não entrou na fila de ninguém; sem a tabela ela mostraria zero
+        // em vez de "não sei", que é pior do que nada.
+        await db.execute(sql`
+          CREATE TABLE IF NOT EXISTS "attendance_incidents" (
+            "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+            "channel" text NOT NULL,
+            "evento" text NOT NULL,
+            "motivo" text,
+            "registro" text,
+            "conversation_id" uuid,
+            "occurred_at" timestamp with time zone DEFAULT now() NOT NULL,
+            CONSTRAINT "attendance_incidents_channel_valid" CHECK ("channel" IN ('site', 'whatsapp')),
+            CONSTRAINT "attendance_incidents_registro_valid"
+              CHECK ("registro" IS NULL OR "registro" IN ('completo', 'parcial', 'nenhum')),
+            CONSTRAINT "attendance_incidents_conversation_id_conversations_id_fk"
+              FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE SET NULL
+          )
+        `);
+        await db.execute(sql`
+          CREATE INDEX IF NOT EXISTS "attendance_incidents_channel_time_idx"
+            ON "attendance_incidents" ("channel", "occurred_at")
+        `);
       } catch (error) {
         ensuredPromise = null;
         console.warn('Aviso ao verificar tabelas de atendimento:', error instanceof Error ? error.message : 'erro');

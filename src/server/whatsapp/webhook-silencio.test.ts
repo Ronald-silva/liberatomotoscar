@@ -292,3 +292,81 @@ describe('guarda de WABA', () => {
     expect(r.processedMessages).toBe(0);
   });
 });
+
+/**
+ * Missão 3: o alerta acorda quem está de plantão, mas ninguém fica de plantão numa revenda. O que
+ * o lojista abre no dia seguinte é a TELA — e a tela só mostra o que foi gravado. Estes testes
+ * fixam o que o webhook grava para cada incidente, porque é esse registro, e não o log, que
+ * alimenta `/admin/metricas`.
+ */
+describe('o incidente fica gravado para aparecer na tela', () => {
+  it('encaminhamento entregue grava evento, motivo e o que o banco confirmou', async () => {
+    runTurn.mockResolvedValueOnce({ status: 'encaminhado', body: 'Chamei um vendedor.',
+      motivo: 'teto_conversa', registro: 'completo' });
+    const recordIncident = vi.fn(async () => undefined);
+    await processMetaWebhookPayload(payload, {
+      ...base, sendOutbound: async () => ({ messageId: 'wamid.out' }), recordIncident,
+    });
+    expect(recordIncident).toHaveBeenCalledWith({
+      channel: 'whatsapp', evento: 'encaminhado_teto_conversa',
+      motivo: 'teto_conversa', registro: 'completo', conversationId: 'conv-1',
+    });
+  });
+
+  it('encaminhamento que não entrou na fila de ninguém grava registro nenhum', async () => {
+    runTurn.mockResolvedValueOnce({ status: 'encaminhado', body: 'Chamei um vendedor.',
+      motivo: 'infraestrutura', registro: 'nenhum' });
+    const recordIncident = vi.fn(async () => undefined);
+    await processMetaWebhookPayload(payload, {
+      ...base, sendOutbound: async () => ({ messageId: 'wamid.out' }), recordIncident,
+    });
+    expect(recordIncident).toHaveBeenCalledWith(expect.objectContaining({
+      evento: 'encaminhamento_nao_registrado', motivo: 'infraestrutura', registro: 'nenhum',
+    }));
+  });
+
+  it('cliente sem atendimento por falha de envio grava o motivo do envio', async () => {
+    const recordIncident = vi.fn(async () => undefined);
+    const r = await processMetaWebhookPayload(payload, {
+      ...base, sendOutbound: async () => ({ messageId: null }),
+      onSendFailed: async () => false, recordIncident,
+    });
+    expect(r.falhasOperacionais).toBe(1);
+    expect(recordIncident).toHaveBeenCalledWith(expect.objectContaining({
+      evento: 'cliente_sem_atendimento', motivo: 'envio_falhou',
+    }));
+  });
+
+  it('turno que estoura grava com motivo próprio', async () => {
+    runTurn.mockRejectedValueOnce(new Error('banco fora'));
+    const recordIncident = vi.fn(async () => undefined);
+    await processMetaWebhookPayload(payload, {
+      ...base, sendOutbound: async () => ({ messageId: 'wamid.out' }),
+      onSendFailed: async () => false, recordIncident,
+    });
+    expect(recordIncident).toHaveBeenCalledWith(expect.objectContaining({
+      evento: 'cliente_sem_atendimento', motivo: 'turno_estourou',
+    }));
+  });
+
+  /** A gravação é do mesmo banco que causa o incidente: ela falha junto, e não pode levar nada. */
+  it('gravação do incidente que estoura não derruba o webhook nem apaga o alerta', async () => {
+    const recordIncident = vi.fn(() => { throw new Error('connection refused'); });
+    const alertOps = vi.fn(async () => 'enviado' as const);
+    const r = await processMetaWebhookPayload(payload, {
+      ...base, sendOutbound: async () => ({ messageId: null }),
+      onSendFailed: async () => false, recordIncident, alertOps,
+    });
+    expect(r.falhasOperacionais).toBe(1);
+    expect(alertOps).toHaveBeenCalledWith(expect.objectContaining({ evento: 'cliente_sem_atendimento' }));
+  });
+
+  it('turno normal não grava incidente nenhum', async () => {
+    const recordIncident = vi.fn(async () => undefined);
+    const r = await processMetaWebhookPayload(payload, {
+      ...base, sendOutbound: async () => ({ messageId: 'wamid.out' }), recordIncident,
+    });
+    expect(r).toMatchObject({ processedMessages: 1, falhasOperacionais: 0 });
+    expect(recordIncident).not.toHaveBeenCalled();
+  });
+});
