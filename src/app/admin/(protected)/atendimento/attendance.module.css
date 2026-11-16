@@ -233,3 +233,5 @@
   .operatorButtons > .submit, .operatorButtons > .secondaryButton, .operatorButtons > .destructiveButton { width: 100%; }
   .ficha { grid-template-columns: 1fr; }
 }
+/* Dois atalhos no cabeçalho de Conversas (métricas e ajustes): empilham no celular. */
+.headerActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--attendance-space-1); }

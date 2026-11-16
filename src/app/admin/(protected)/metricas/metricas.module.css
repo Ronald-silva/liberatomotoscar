@@ -1,0 +1,55 @@
+/*
+ * A folha de Conversas (`attendance.module.css`) dá a moldura: tela, painel, cabeçalho, botões e
+ * avisos. Aqui só mora o que é desta tela — a grade de números e o painel de incidentes.
+ */
+.grid {
+  display: grid;
+  gap: var(--attendance-space-2);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  margin: 0;
+  padding: 0;
+}
+.card {
+  display: grid;
+  gap: 0.35rem;
+  padding: var(--attendance-space-3);
+  border: 1px solid var(--attendance-line);
+  border-radius: var(--attendance-radius);
+  background: var(--attendance-surface);
+}
+.cardLabel { margin: 0; color: var(--attendance-muted); font-size: 0.875rem; line-height: 1.35; }
+/* tabular-nums para o número não dançar de largura quando a janela muda de 7 para 30 dias. */
+.cardValue { margin: 0; font-size: clamp(1.6rem, 4vw, 2.1rem); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cardHint { margin: 0; color: var(--attendance-muted); font-size: 0.8125rem; line-height: 1.4; }
+/* "sem dados" não é zero: fica no tom apagado para não ser lido como medição. */
+.cardEmpty { color: var(--attendance-muted); font-size: 1.1rem; font-weight: 600; }
+
+.section { display: grid; gap: var(--attendance-space-2); margin-top: var(--attendance-space-3); }
+.section h2 { margin: 0; font-size: 1.25rem; line-height: 1.2; }
+.incidentPanel {
+  display: grid;
+  gap: var(--attendance-space-2);
+  padding: var(--attendance-space-3);
+  border: 1px solid var(--attendance-line);
+  border-radius: var(--attendance-radius);
+  background: var(--attendance-surface);
+}
+/* Falha operacional acima de zero é incidente: a borda vermelha é o aviso que não exige leitura. */
+.incidentPanelAlarm { border-color: #ff9aa2; background: rgba(255, 154, 162, 0.06); }
+.incidentList { display: grid; gap: var(--attendance-space-1); margin: 0; padding: 0; list-style: none; }
+.incidentList li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--attendance-space-1);
+  padding-bottom: var(--attendance-space-1);
+  border-bottom: 1px solid var(--attendance-line);
+}
+.incidentList li:last-child { padding-bottom: 0; border-bottom: 0; }
+.incidentCount { font-variant-numeric: tabular-nums; font-weight: 700; }
+.alarmCount { color: #ff9aa2; }
+.conversationRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--attendance-space-1); min-width: 0; }
+.conversationRow code { overflow-wrap: anywhere; font-size: 0.8125rem; }
+.conversationRow time { color: var(--attendance-muted); font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+.note { margin: 0; max-width: 72ch; color: var(--attendance-muted); font-size: 0.875rem; line-height: 1.45; }
+.windowNav { display: flex; flex-wrap: wrap; gap: 0.5rem; }

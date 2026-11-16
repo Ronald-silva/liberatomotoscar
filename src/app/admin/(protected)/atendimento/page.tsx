@@ -78,10 +78,15 @@ export default async function AttendancePage({
               A Dayse atende com base no estoque publicado. Assuma uma conversa para responder como vendedor e pausar a IA.
             </p>
           </div>
-          <Link href="/admin/ajustes" className={attendanceStyles.settingsBtn}>
-            <span className={attendanceStyles.settingsDot} aria-hidden="true" />
-            Configurar WhatsApp (Meta)
-          </Link>
+          <div className={attendanceStyles.headerActions}>
+            <Link href="/admin/metricas" className={attendanceStyles.secondaryButton}>
+              Ver métricas
+            </Link>
+            <Link href="/admin/ajustes" className={attendanceStyles.settingsBtn}>
+              <span className={attendanceStyles.settingsDot} aria-hidden="true" />
+              Configurar WhatsApp (Meta)
+            </Link>
+          </div>
         </header>
 
         <section aria-label="Fila de conversas" className={attendanceStyles.inboxSection}>

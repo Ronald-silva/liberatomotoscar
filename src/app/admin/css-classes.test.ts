@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { statusLabels } from './(protected)/veiculos/status';
 
@@ -12,6 +12,12 @@ import { statusLabels } from './(protected)/veiculos/status';
  * que as telas do painel referenciam com o que a folha realmente define.
  *
  * O contrário não é exigido: classe definida e não usada é só sobra, não defeito.
+ *
+ * A versão anterior procurava `styles.X` e media tudo contra `admin.module.css`. Isso valia
+ * enquanto havia uma folha só; com `attendance.module.css` e `metricas.module.css`, um arquivo
+ * que importa a própria folha como `styles` passou a ser medido contra a folha errada — e a tela
+ * de métricas, que tem folha própria, ficaria fora de qualquer guarda. Agora cada referência é
+ * resolvida pelo import que a trouxe, qualquer que seja o nome da variável.
  */
 
 const ADMIN_DIR = join(import.meta.dirname, '.');
@@ -35,14 +41,31 @@ function definedClasses(css: string): Set<string> {
   return defined;
 }
 
-function referencedClasses(): Map<string, string[]> {
-  const references = new Map<string, string[]>();
+/** `import algumaCoisa from './x.module.css'` → { algumaCoisa: '/caminho/absoluto/x.module.css' }. */
+function cssImports(file: string, source: string): Map<string, string> {
+  const imports = new Map<string, string>();
+  for (const match of source.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+\.css)['"]/g)) {
+    imports.set(match[1], resolve(dirname(file), match[2]));
+  }
+  return imports;
+}
+
+/** Cada referência vira "folha → classe → arquivos que a usam", para o erro dizer onde olhar. */
+function referencesByStylesheet(): Map<string, Map<string, string[]>> {
+  const byStylesheet = new Map<string, Map<string, string[]>>();
   for (const file of filesUnder(ADMIN_DIR, '.tsx')) {
-    for (const match of readFileSync(file, 'utf8').matchAll(/\bstyles\.([A-Za-z_][\w]*)/g)) {
-      references.set(match[1], [...(references.get(match[1]) ?? []), file.slice(ADMIN_DIR.length)]);
+    const source = readFileSync(file, 'utf8');
+    const imports = cssImports(file, source);
+    for (const [variable, stylesheet] of imports) {
+      const pattern = new RegExp(`\\b${variable}\\.([A-Za-z_][\\w]*)`, 'g');
+      for (const match of source.matchAll(pattern)) {
+        const classes = byStylesheet.get(stylesheet) ?? new Map<string, string[]>();
+        classes.set(match[1], [...(classes.get(match[1]) ?? []), file.slice(ADMIN_DIR.length)]);
+        byStylesheet.set(stylesheet, classes);
+      }
     }
   }
-  return references;
+  return byStylesheet;
 }
 
 describe('classes de CSS Modules do painel', () => {
@@ -53,10 +76,23 @@ describe('classes de CSS Modules do painel', () => {
     expect(defined.size).toBeGreaterThan(20);
   });
 
-  it('define toda classe referenciada pelas telas', () => {
-    const missing = [...referencedClasses()]
-      .filter(([name]) => !defined.has(name))
-      .map(([name, files]) => `${name} (usada em ${files.join(', ')})`);
+  // Sem isto, um import renomeado tiraria a tela da guarda sem nenhum teste falhar.
+  it('cobre mais de uma folha: toda folha importada pelas telas é medida', () => {
+    const stylesheets = [...referencesByStylesheet().keys()];
+    expect(stylesheets.length).toBeGreaterThanOrEqual(3);
+    expect(stylesheets).toContain(CSS_PATH);
+  });
+
+  it('define toda classe referenciada pelas telas, em cada folha', () => {
+    const missing: string[] = [];
+    for (const [stylesheet, classes] of referencesByStylesheet()) {
+      const declared = definedClasses(readFileSync(stylesheet, 'utf8'));
+      for (const [name, files] of classes) {
+        if (!declared.has(name)) {
+          missing.push(`${name} (${stylesheet.slice(ADMIN_DIR.length)}, usada em ${files.join(', ')})`);
+        }
+      }
+    }
     expect(missing).toEqual([]);
   });
 
