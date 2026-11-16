@@ -1,4 +1,19 @@
-CREATE TABLE "attendance_rate_limits" (
+-- Aditiva e repetível, como 0009 a 0012.
+--
+-- A versão original criava estas sete tabelas sem guarda. `attendance/ensure-schema.ts` já as cria
+-- em runtime, então em qualquer banco que tenha atendido um cliente antes de migrar o primeiro
+-- `CREATE TABLE "attendance_rate_limits"` estourava com "relation already exists" — e o
+-- `drizzle-kit migrate` morria aí, sem registrar nada. Resultado: 0008 a 0012 nunca entravam no
+-- `__drizzle_migrations`, e o esquema só se mantinha de pé pelo ensure-schema. Qualquer coisa que
+-- o ensure-schema não cobrisse ficaria faltando em silêncio.
+--
+-- O ensure-schema cria as tabelas SEM os CHECKs, e `CREATE TABLE IF NOT EXISTS` não os
+-- acrescenta a uma tabela que já existe. Por isso cada CHECK é reaplicado como
+-- `DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT` no fim do arquivo — a mesma técnica de 0009.
+-- Chave primária e UNIQUE não são reaplicados: o ensure-schema já os cria (com nome automático),
+-- e uma tabela não aceita duas chaves primárias.
+
+CREATE TABLE IF NOT EXISTS "attendance_rate_limits" (
 	"bucket_key" text NOT NULL,
 	"window_start" timestamp with time zone NOT NULL,
 	"hits" integer DEFAULT 0 NOT NULL,
@@ -6,7 +21,7 @@ CREATE TABLE "attendance_rate_limits" (
 	CONSTRAINT "attendance_rate_limits_hits_valid" CHECK ("attendance_rate_limits"."hits" >= 0)
 );
 --> statement-breakpoint
-CREATE TABLE "attendance_usage" (
+CREATE TABLE IF NOT EXISTS "attendance_usage" (
 	"channel" text NOT NULL,
 	"day_utc" text NOT NULL,
 	"ai_requests" integer DEFAULT 0 NOT NULL,
@@ -18,7 +33,7 @@ CREATE TABLE "attendance_usage" (
 	CONSTRAINT "attendance_usage_nonnegative" CHECK ("attendance_usage"."ai_requests" >= 0 AND "attendance_usage"."input_tokens" >= 0 AND "attendance_usage"."output_tokens" >= 0)
 );
 --> statement-breakpoint
-CREATE TABLE "channel_settings" (
+CREATE TABLE IF NOT EXISTS "channel_settings" (
 	"channel" text PRIMARY KEY NOT NULL,
 	"mode" text DEFAULT 'disabled' NOT NULL,
 	"version" integer DEFAULT 1 NOT NULL,
@@ -29,7 +44,7 @@ CREATE TABLE "channel_settings" (
 	CONSTRAINT "channel_settings_version_valid" CHECK ("channel_settings"."version" >= 1)
 );
 --> statement-breakpoint
-CREATE TABLE "channel_settings_audit" (
+CREATE TABLE IF NOT EXISTS "channel_settings_audit" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"channel" text NOT NULL,
 	"actor_user_id" text NOT NULL,
@@ -43,7 +58,7 @@ CREATE TABLE "channel_settings_audit" (
 	CONSTRAINT "channel_settings_audit_versions_valid" CHECK ("channel_settings_audit"."before_version" >= 1 AND "channel_settings_audit"."after_version" = "channel_settings_audit"."before_version" + 1)
 );
 --> statement-breakpoint
-CREATE TABLE "conversation_messages" (
+CREATE TABLE IF NOT EXISTS "conversation_messages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"conversation_id" uuid NOT NULL,
 	"sender" text NOT NULL,
@@ -57,7 +72,7 @@ CREATE TABLE "conversation_messages" (
 	CONSTRAINT "conversation_messages_author_valid" CHECK (("conversation_messages"."sender" = 'human') = ("conversation_messages"."author_user_id" IS NOT NULL))
 );
 --> statement-breakpoint
-CREATE TABLE "conversations" (
+CREATE TABLE IF NOT EXISTS "conversations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"channel" text NOT NULL,
 	"token_hash" text NOT NULL,
@@ -81,7 +96,7 @@ CREATE TABLE "conversations" (
 	CONSTRAINT "conversations_turns_valid" CHECK ("conversations"."visitor_turns" >= 0)
 );
 --> statement-breakpoint
-CREATE TABLE "handoffs" (
+CREATE TABLE IF NOT EXISTS "handoffs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"conversation_id" uuid NOT NULL,
 	"event" text NOT NULL,
@@ -93,18 +108,128 @@ CREATE TABLE "handoffs" (
 	CONSTRAINT "handoffs_actor_valid" CHECK ("handoffs"."event" = 'requested' OR "handoffs"."actor_user_id" IS NOT NULL)
 );
 --> statement-breakpoint
-ALTER TABLE "channel_settings" ADD CONSTRAINT "channel_settings_updated_by_user_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "channel_settings_audit" ADD CONSTRAINT "channel_settings_audit_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_author_user_id_user_id_fk" FOREIGN KEY ("author_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_assigned_to_user_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_closed_by_user_id_fk" FOREIGN KEY ("closed_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "attendance_rate_limits_window_idx" ON "attendance_rate_limits" USING btree ("window_start");--> statement-breakpoint
-CREATE INDEX "channel_settings_audit_channel_time_idx" ON "channel_settings_audit" USING btree ("channel","occurred_at");--> statement-breakpoint
-CREATE INDEX "conversation_messages_conversation_time_idx" ON "conversation_messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "conversation_messages_client_uidx" ON "conversation_messages" USING btree ("conversation_id","client_message_id") WHERE "conversation_messages"."client_message_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX "conversations_channel_status_last_idx" ON "conversations" USING btree ("channel","status","last_message_at");--> statement-breakpoint
-CREATE INDEX "conversations_expires_idx" ON "conversations" USING btree ("expires_at");--> statement-breakpoint
-CREATE INDEX "handoffs_conversation_time_idx" ON "handoffs" USING btree ("conversation_id","occurred_at");
+ALTER TABLE "channel_settings" DROP CONSTRAINT IF EXISTS "channel_settings_updated_by_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "channel_settings" ADD CONSTRAINT "channel_settings_updated_by_user_id_fk" FOREIGN KEY ("updated_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" DROP CONSTRAINT IF EXISTS "channel_settings_audit_actor_user_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" ADD CONSTRAINT "channel_settings_audit_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" DROP CONSTRAINT IF EXISTS "conversation_messages_conversation_id_conversations_id_fk";
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" DROP CONSTRAINT IF EXISTS "conversation_messages_author_user_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_author_user_id_user_id_fk" FOREIGN KEY ("author_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_assigned_to_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_assigned_to_user_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_closed_by_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_closed_by_user_id_fk" FOREIGN KEY ("closed_by") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "handoffs" DROP CONSTRAINT IF EXISTS "handoffs_conversation_id_conversations_id_fk";
+--> statement-breakpoint
+ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "handoffs" DROP CONSTRAINT IF EXISTS "handoffs_actor_user_id_user_id_fk";
+--> statement-breakpoint
+ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_actor_user_id_user_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."user"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "attendance_rate_limits_window_idx" ON "attendance_rate_limits" USING btree ("window_start");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "channel_settings_audit_channel_time_idx" ON "channel_settings_audit" USING btree ("channel","occurred_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "conversation_messages_conversation_time_idx" ON "conversation_messages" USING btree ("conversation_id","created_at");
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "conversation_messages_client_uidx" ON "conversation_messages" USING btree ("conversation_id","client_message_id") WHERE "conversation_messages"."client_message_id" IS NOT NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "conversations_channel_status_last_idx" ON "conversations" USING btree ("channel","status","last_message_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "conversations_expires_idx" ON "conversations" USING btree ("expires_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "handoffs_conversation_time_idx" ON "handoffs" USING btree ("conversation_id","occurred_at");
+--> statement-breakpoint
+ALTER TABLE "attendance_rate_limits" DROP CONSTRAINT IF EXISTS "attendance_rate_limits_hits_valid";
+--> statement-breakpoint
+ALTER TABLE "attendance_rate_limits" ADD CONSTRAINT "attendance_rate_limits_hits_valid" CHECK ("attendance_rate_limits"."hits" >= 0);
+--> statement-breakpoint
+ALTER TABLE "attendance_usage" DROP CONSTRAINT IF EXISTS "attendance_usage_day_format";
+--> statement-breakpoint
+ALTER TABLE "attendance_usage" ADD CONSTRAINT "attendance_usage_day_format" CHECK ("attendance_usage"."day_utc" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+--> statement-breakpoint
+ALTER TABLE "attendance_usage" DROP CONSTRAINT IF EXISTS "attendance_usage_nonnegative";
+--> statement-breakpoint
+ALTER TABLE "attendance_usage" ADD CONSTRAINT "attendance_usage_nonnegative" CHECK ("attendance_usage"."ai_requests" >= 0 AND "attendance_usage"."input_tokens" >= 0 AND "attendance_usage"."output_tokens" >= 0);
+--> statement-breakpoint
+ALTER TABLE "channel_settings" DROP CONSTRAINT IF EXISTS "channel_settings_channel_valid";
+--> statement-breakpoint
+ALTER TABLE "channel_settings" ADD CONSTRAINT "channel_settings_channel_valid" CHECK ("channel_settings"."channel" IN ('site', 'whatsapp'));
+--> statement-breakpoint
+ALTER TABLE "channel_settings" DROP CONSTRAINT IF EXISTS "channel_settings_mode_valid";
+--> statement-breakpoint
+ALTER TABLE "channel_settings" ADD CONSTRAINT "channel_settings_mode_valid" CHECK ("channel_settings"."mode" IN ('disabled', 'deterministic', 'ai'));
+--> statement-breakpoint
+ALTER TABLE "channel_settings" DROP CONSTRAINT IF EXISTS "channel_settings_version_valid";
+--> statement-breakpoint
+ALTER TABLE "channel_settings" ADD CONSTRAINT "channel_settings_version_valid" CHECK ("channel_settings"."version" >= 1);
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" DROP CONSTRAINT IF EXISTS "channel_settings_audit_channel_valid";
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" ADD CONSTRAINT "channel_settings_audit_channel_valid" CHECK ("channel_settings_audit"."channel" IN ('site', 'whatsapp'));
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" DROP CONSTRAINT IF EXISTS "channel_settings_audit_modes_valid";
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" ADD CONSTRAINT "channel_settings_audit_modes_valid" CHECK ("channel_settings_audit"."before_mode" IN ('disabled', 'deterministic', 'ai') AND "channel_settings_audit"."after_mode" IN ('disabled', 'deterministic', 'ai') AND "channel_settings_audit"."before_mode" <> "channel_settings_audit"."after_mode");
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" DROP CONSTRAINT IF EXISTS "channel_settings_audit_versions_valid";
+--> statement-breakpoint
+ALTER TABLE "channel_settings_audit" ADD CONSTRAINT "channel_settings_audit_versions_valid" CHECK ("channel_settings_audit"."before_version" >= 1 AND "channel_settings_audit"."after_version" = "channel_settings_audit"."before_version" + 1);
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" DROP CONSTRAINT IF EXISTS "conversation_messages_sender_valid";
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_sender_valid" CHECK ("conversation_messages"."sender" IN ('visitor', 'bot', 'ai', 'human', 'system'));
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" DROP CONSTRAINT IF EXISTS "conversation_messages_body_valid";
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_body_valid" CHECK (length("conversation_messages"."body") BETWEEN 1 AND 2000);
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" DROP CONSTRAINT IF EXISTS "conversation_messages_author_valid";
+--> statement-breakpoint
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_author_valid" CHECK (("conversation_messages"."sender" = 'human') = ("conversation_messages"."author_user_id" IS NOT NULL));
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_channel_valid";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_channel_valid" CHECK ("conversations"."channel" IN ('site', 'whatsapp'));
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_owner_valid";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_owner_valid" CHECK ("conversations"."owner" IN ('automation', 'human'));
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_status_valid";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_status_valid" CHECK ("conversations"."status" IN ('open', 'closed'));
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_closed_consistent";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_closed_consistent" CHECK (("conversations"."status" = 'closed') = ("conversations"."closed_at" IS NOT NULL));
+--> statement-breakpoint
+ALTER TABLE "conversations" DROP CONSTRAINT IF EXISTS "conversations_turns_valid";
+--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_turns_valid" CHECK ("conversations"."visitor_turns" >= 0);
+--> statement-breakpoint
+ALTER TABLE "handoffs" DROP CONSTRAINT IF EXISTS "handoffs_event_valid";
+--> statement-breakpoint
+ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_event_valid" CHECK ("handoffs"."event" IN ('requested', 'assumed', 'released', 'closed'));
+--> statement-breakpoint
+ALTER TABLE "handoffs" DROP CONSTRAINT IF EXISTS "handoffs_reason_valid";
+--> statement-breakpoint
+ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_reason_valid" CHECK ("handoffs"."reason" IN ('visitor_request', 'financing', 'trade_in', 'ai_suggested', 'operator'));
+--> statement-breakpoint
+ALTER TABLE "handoffs" DROP CONSTRAINT IF EXISTS "handoffs_actor_valid";
+--> statement-breakpoint
+ALTER TABLE "handoffs" ADD CONSTRAINT "handoffs_actor_valid" CHECK ("handoffs"."event" = 'requested' OR "handoffs"."actor_user_id" IS NOT NULL);
