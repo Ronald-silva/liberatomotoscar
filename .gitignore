@@ -70,3 +70,6 @@ __pycache__/
 
 # Respostas gravadas pelo runner da eval: reflete um modelo e um momento do estoque.
 evals/resultados/
+
+# estado operacional do agente (OMC), igual ao .codex/ e ao .superpowers/
+.omc/
