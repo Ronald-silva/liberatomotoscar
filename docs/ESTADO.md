@@ -1,50 +1,98 @@
 # Estado do projeto — Liberato Motos Car
-_Atualizado em 2026-11-16 · branch `fix/whatsapp-p0-confiabilidade-20261111` **enviada** ·
-PR #1 aberto e pronto para revisão_
+_Atualizado em 2026-11-16 · **as cinco fases estão em produção** · `main` = `8b2bb35`_
 
 ## Agora
-As cinco fases passaram por **revisão independente do diff** e estão no PR #1: fora de draft, base
-`main`, 38 commits, 109 arquivos, `mergeable_state: clean` (fast-forward). A revisão **não achou
-bloqueador** — os sete pontos de risco levantados foram conferidos e estavam certos (silêncio só
-nos três casos legítimos; `InboundPersistenceError` como único erro que sobe; cron de retenção
-403/503 e sem caminho por sessão; alerta sem dado de cliente; incidente `ON DELETE SET NULL`;
-exclusão de conversa exigindo `confirm === id` no servidor; estoque todo atrás de `requireAdmin()`).
-Ficaram dois pontos de robustez, registrados nas pendências. Detalhe completo na descrição do PR.
+**Publicado em produção em 16/11/2026, com autorização explícita.** Merge fast-forward da
+`fix/whatsapp-p0-confiabilidade-20261111` na `main` (`020a9a6` → `8b2bb35`, 39 commits) e deploy
+Railway `5492cbb5` em **SUCCESS**. Antes disso: revisão independente do diff, **sem bloqueador**
+(os sete pontos de risco foram conferidos e estavam certos), e verificação em `a848d95` —
+`typecheck` exit 0 · `lint` exit 0 · `test` **1102 passaram, 46 pulados** · `build` exit 0.
 
-Verificação em `a848d95`: `typecheck` exit 0 · `lint` exit 0 · `test` **1102 passaram, 46 pulados**
-· `build` exit 0. Os pulados são `describe.skipIf(!TEST_DATABASE_URL)`, não teste desligado.
+Conferência pós-deploy, sem tocar na Meta: vitrine **200** (88 KB, 0,77 s) · `/admin/login` **200**
+· `/admin/metricas` **307 → /admin/login** (rota nova no ar e protegida; antes do merge era 404) ·
+`/admin/atendimento` **307 → /admin/login** · `GET /api/webhooks/whatsapp` sem token **403** ·
+`/api/cron/retencao` **503 "Rotina de retenção não configurada"**, com `no-store` e
+`noindex, nofollow`.
 
-**Nada disto está em produção:** o Railway serve o commit `020a9a6` da `main`, de 10/11/2026.
-`AGENTS.md`, este arquivo e `docs/planos/2026-11-host-unico.md` seguem **sem commit**.
+**`CRON_SECRET` e `OPS_ALERT_WEBHOOK_URL` criados em 16/11, com autorização:** a rota de retenção
+saiu de 503 para **403**. Ainda faltam `WHATSAPP_WABA_ID`, `NEXT_PUBLIC_META_PIXEL_ID`,
+`NEXT_PUBLIC_GA_MEASUREMENT_ID` e `WHATSAPP_TOKEN_ENCRYPTION_KEY`; e sobram **as duas**
+`WHATSAPP_WEBHOOK_CALLBACK_UR` (lixo, sem o `L`) e `WHATSAPP_WEBHOOK_CALLBACK_URL`.
+`DATABASE_URL_DIRECT` corretamente ausente.
+
+**A retenção está ligada e comprovada em produção.** Serviço `retencao-agendador`
+(`alpine:3.21`, cron `17 6 * * *` = 03:17 de Brasília, `restartPolicy NEVER`) com `CRON_SECRET`
+por referência a `${{liberatomotoscar.CRON_SECRET}}` e `ALVO_RETENCAO`. Execução real em 16/11
+às 12:50:57 UTC: `conversations: 0`, `rateLimitWindows: 16`, arquivos `checked: 0`, **`falhas: 0`**
+— e, do lado do app, `200` em 53 ms vindo de `152.55.181.118` com `curl/8.14.1`, IP e versão
+distintos da máquina local, que é a prova de que quem chamou foi o agendador.
+
+O caminho até isso rendeu uma armadilha que vale lembrar: no Railway a configuração só chega ao
+container num **deploy novo**. `redeploy` reaproveita o snapshot antigo, mudança de variável não
+cria deploy em serviço com cron, e o disparo do cron re-executa o deploy corrente — então o
+serviço ficava **verde** sem rodar comando nenhum. O que destravou foi trocar a tag da imagem
+(`3.22` → `3.21`), que re-resolve a fonte. Só `cronSchedule` vale na hora.
+
+**O alerta de incidente tem destino.** `OPS_ALERT_WEBHOOK_URL` aponta para um webhook do Discord
+no servidor **do operador da plataforma** (`RonalDigital Ops`, canal `alertas-liberato`) — não é
+canal da loja. Mensagem de teste entregue no formato real (`HTTP 204`, visível no canal). Deploy
+`669b1aab` em SUCCESS, com vitrine 200, cron 403 e `/admin/metricas` 307 depois dele.
+A variável existe **nos dois hosts** desde 16/11 (ver pendências), e a forma canônica
+`discord.com/api/webhooks/...` foi confirmada entregando (`HTTP 204`).
+
+**Não verificado:** login Google de ponta a ponta (a tela serve 200 e as rotas protegidas
+redirecionam, mas nenhuma sessão foi concluída) e o ensaio real na Meta.
+
+Rollback disponível: deploy `62cafdca` (10/11, commit `020a9a6`), `canRollback: true`.
 
 ## Próximo passo
-**O merge do PR #1 é o deploy** — o Railway publica a `main` sozinho. Aguarda autorização
-explícita do dono. Ao autorizar: fast-forward na `main`, acompanhar o deploy até `SUCCESS`, e
-conferir sem tocar na Meta — vitrine, login Google, `/admin/metricas`, `/admin/atendimento`, e
-`curl -i .../api/cron/retencao` devolvendo **403** (403 em vez de 404 prova que a rota subiu).
-Rollback: `canRollback` no deploy anterior.
+**O ensaio real no número de teste da Meta**, que é o único elo que falta provar: ele exercita o
+alerta de ponta a ponta em produção (o destino já está confirmado, mas o caminho completo só fecha
+com um incidente real). Antes dele, criar `WHATSAPP_WABA_ID` — sem ela a conferência de WABA é
+vacuosa. Cada um exige a palavra do dono.
 
 ## Pendências
-- [ ] P0 — **Merge do PR #1** (= deploy). Só com a palavra do dono.
-- [ ] P0 — **Variáveis no Railway**: criar `CRON_SECRET`, `WHATSAPP_WABA_ID`,
-      `OPS_ALERT_WEBHOOK_URL`, `NEXT_PUBLIC_META_PIXEL_ID`, `NEXT_PUBLIC_GA_MEASUREMENT_ID`;
-      apagar o lixo `WHATSAPP_WEBHOOK_CALLBACK_UR` (sem o `L`). `DATABASE_URL_DIRECT` **não** vai
-      para lá: só migração e scripts o leem. Sem elas: retenção em 503, WABA sem conferência,
-      alerta sem destino, Pixel/GA sem destino.
-- [ ] P0 — **Agendador da retenção** (§6 do plano): segundo serviço Railway, `alpine/curl`,
-      `17 6 * * *`, com `curl -fsS` — sem o `-f` um 500 passa por sucesso. O cron de `vercel.json`
-      não dispara no Railway.
+- [x] P0 — ~~Merge do PR #1~~ **feito em 16/11/2026**: `main` = `8b2bb35`, deploy `5492cbb5` SUCCESS.
+- [x] P0 — ~~Agendador da retenção~~ **ligado e comprovado em 16/11** (execução real, `falhas: 0`).
+- [x] P0 — ~~`OPS_ALERT_WEBHOOK_URL`~~ **criado em 16/11**: Discord do operador, teste entregue.
+- [ ] P0 — **Variáveis no Railway**: criar `WHATSAPP_WABA_ID`, `NEXT_PUBLIC_META_PIXEL_ID`,
+      `NEXT_PUBLIC_GA_MEASUREMENT_ID`; apagar o lixo `WHATSAPP_WEBHOOK_CALLBACK_UR` (sem o `L`).
+      `DATABASE_URL_DIRECT` **não** vai para lá: só migração e scripts o leem. Sem elas: WABA sem
+      conferência e Pixel/GA sem destino.
 - [ ] P0 — **Conferir o webhook na Meta** (só leitura): `GET /<WABA_ID>/subscribed_apps`; o
-      `override_callback_uri` diz se a Meta já chama o Railway.
+      `override_callback_uri` diz se a Meta chama o Railway ou a Vercel. Comprovado em 16/11 que
+      **os dois hosts servem o código novo**: a Vercel republicou a `main` às 08:52 e
+      `/api/cron/retencao` — rota que não existe em `020a9a6` — responde **503** lá e **403** no
+      Railway. Então a confiabilidade vale nos dois — menos urgente do que parecia.
+      `OPS_ALERT_WEBHOOK_URL` **também foi criada na Vercel** em 16/11, com autorização, e a
+      produção foi republicada para a variável valer (`q2a6d4brh`, Ready em 56 s, aliased): o aviso
+      no Discord funciona nos dois hosts. `CRON_SECRET` segue **fora** da Vercel de propósito — a
+      retenção falha fechada lá (503), não apaga nada e não duplica o agendador do Railway.
+      Não verificado: que o alerta realmente saia da Vercel. Nenhuma rota expõe isso, e provar
+      exigiria causar uma falha real.
 - [ ] P0 — **`WHATSAPP_TOKEN_ENCRYPTION_KEY` ausente no Railway**
       (`docs/planos/2026-11-migracao-chave-whatsapp.md`): hoje a chave vem derivada do
       `META_APP_SECRET`. Aguarda aprovação.
+- [ ] P0 — **O WhatsApp da loja nunca foi conectado.** Conferido no banco de produção em 16/11:
+      `whatsapp_tenants` tem **uma linha só**, o número de teste da Meta (`+1 555-195-6955`,
+      criado em 28/10). Não é defeito — é o passo do botão "Conectar com WhatsApp"
+      (embedded signup) em `/admin/ajustes`, que nunca foi dado. Explica de uma vez a ausência de
+      chamadas da Meta e de mensagem real no código. **Depende do Liberato**: a autorização é pelo
+      Facebook da loja, não dá para fazer por ele.
+- [ ] P0 — **Token do número de teste expirou** (botão "Verificar token", 16/11: código Meta 190).
+      Renovar em WhatsApp → API Setup antes de qualquer ensaio; o temporário dura ~24 h, então
+      para a apresentação vale gerar o de usuário do sistema.
 - [ ] P0 — **Ensaio real** no número de teste: anúncio → mensagem → Dayse → handoff → vendedor.
       Critério: `falhasOperacionais = 0`, nenhum cenário sem resposta e sem vendedor, e um alerta
       de teste chegando ao destino.
 - [ ] P1 — Apagar a branch Neon `restauracao-pre-migracao-20261116` a partir de 23/11/2026.
 - [ ] P1 — Vercel e Railway seguem apontando para `production`, como deve ser. Só o `.env` local
       mudou — conferir antes de qualquer `db:migrate` futuro.
+- [ ] P1 — **O alerta não diz de qual loja é.** `OpsAlert` (`src/server/ops/alert.ts`) carrega
+      `evento`, `motivo` e `conversationId`, mas não `tenantId`. No piloto de uma loja um canal por
+      loja resolve; quando entrar a segunda, alarme sem identificar o tenant é inútil — não dá para
+      saber onde olhar. São poucas linhas no tipo e nos três pontos que o chamam em
+      `webhook-handler.ts`.
 - [ ] P1 — **Incidentes só no canal WhatsApp**: o canal site segue sem instrumentação de falha.
 - [ ] P1 — **Retenção não expurga `attendance_incidents`**: cresce para sempre, mas aceitável no
       piloto (uma linha por encaminhamento; nem 100/dia pesariam).
@@ -58,6 +106,19 @@ Rollback: `canRollback` no deploy anterior.
 - [ ] Loja confirmar dados, fotos e preços dos 5 anúncios publicados.
 
 ## Decisões
+- 2026-11-16 — O destino do alerta é um **webhook do Discord** no servidor do operador. _Aceita o
+  payload sem adaptação (`content`), é gratuito, não depende de aprovação e avisa no celular._
+- 2026-11-16 — O alerta de `notifyOps` é o **pager do operador da plataforma**, não um canal da
+  loja. _Os três eventos que o disparam são falhas técnicas (token recusado, turno estourado, banco
+  sem confirmar) que só o operador conserta; a loja age pelo painel._ Consequência: o destino do
+  webhook é do dono da plataforma, e a loja não participa dele.
+- 2026-11-16 — Agendador com **`alpine` + `sh -c`**, não `alpine/curl`. _O `alpine/curl` tem
+  `ENTRYPOINT ["curl"]`, então não há shell para expandir `$CRON_SECRET`._
+- 2026-11-16 — A imagem fica em **`alpine:3.21`**, e não volta para `3.22`. _`3.21` é a versão em
+  que a execução foi provada; trocar por simetria geraria deploy não verificado._
+- 2026-11-16 — **Publicado depois da revisão, não antes.** _A revisão não achou bloqueador, e
+  só então o merge foi autorizado._ Os dois achados P2 foram para a fila, não para o caminho
+  crítico: nenhum deles deixa cliente sem resposta e sem vendedor.
 - 2026-11-16 — **Revisão antes de publicar.** _No Railway o merge é o deploy: revisar depois seria
   revisar em produção._
 - 2026-11-16 — **Host único: Railway**, contra a recomendação (era Vercel). _Escolha do dono:
@@ -79,7 +140,11 @@ Rollback: `canRollback` no deploy anterior.
 - 2026-10-31 — `noindex` mantido até existir domínio próprio.
 
 ## Última sessão
-2026-11-16 — Fase 6: revisão independente das cinco fases, push e PR. Sem bloqueador; dois pontos
-de robustez viraram pendência P2. PR #1 fora de draft, descrição reescrita com o que muda para o
-cliente, as decisões arriscadas e o que **não** foi verificado. **Sem merge, sem deploy, sem
-segredo tocado, sem migração.**
+2026-11-16 — Fase 6: revisão independente das cinco fases, push, PR, **merge, deploy, retenção
+ligada e alerta com destino**. Revisão sem bloqueador; dois achados P2 na fila. Depois do deploy,
+autorizados e concluídos: `CRON_SECRET` (rota 503 → 403), o agendador da retenção **comprovado por
+execução real** (`falhas: 0`, chamada vinda do IP do container) e `OPS_ALERT_WEBHOOK_URL` apontando
+para o Discord do operador, com mensagem de teste entregue. Duas conclusões minhas foram corrigidas
+no caminho — o agendador não estava quebrado e não era quoting, era deploy que precisava ser novo —
+e o enquadramento do alerta foi corrigido por você: é pager do operador, não canal da loja.
+**Nenhuma migração, nada enviado à Meta, nenhuma conversa apagada.**

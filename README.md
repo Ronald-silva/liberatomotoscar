@@ -2,7 +2,9 @@
 
 Site e painel operacional para a Liberato Motos Car, em Fortaleza. O mesmo cadastro de veículos alimenta a vitrine pública, o estúdio de artes e as consultas de estoque da Dayse no WhatsApp. O painel também reúne conversas e visitas agendadas.
 
-**Estado em 06/11/2026:** o código compila e tem deployment de produção acessível, mas a liberação comercial completa ainda depende de validação dos dados, dos fluxos externos e da operação com a loja. O site mantém `noindex`. Este repositório atende uma loja; os identificadores de tenant do WhatsApp não tornam o estoque e o painel um SaaS multiloja.
+**Estado em 16/11/2026:** o deployment de produção é o **Railway** (`liberatomotoscar-production.up.railway.app`), que publica a `main` automaticamente — **o merge é o deploy**. A Vercel segue no ar durante a observação do corte, e **os dois hosts leem o mesmo Neon**, então nada no código pode presumir host único. As cinco fases de confiabilidade do atendimento estão publicadas; a retenção de dados roda diariamente e os incidentes têm tela e alerta. O que **não** foi provado é o canal real: nenhuma mensagem do WhatsApp passou por este código em produção. O site mantém `noindex`. Este repositório atende uma loja; os identificadores de tenant do WhatsApp não tornam o estoque e o painel um SaaS multiloja.
+
+Para entender o que as cinco fases entregaram, em linguagem direta, leia [o que foi entregue e quanto vale](docs/O-QUE-FOI-ENTREGUE.md).
 
 Leia o [diagnóstico de produto e roteiro de estudo de mercado](docs/DIAGNOSTICO_PRODUTO_E_MERCADO.md) para entender o que existe, o que foi verificado, as lacunas e a ordem recomendada de decisões.
 
@@ -15,6 +17,8 @@ Leia o [diagnóstico de produto e roteiro de estudo de mercado](docs/DIAGNOSTICO
 | Divulgação | Cria artes JPEG para Feed, Stories, Status do WhatsApp e TikTok; compartilha pelo aparelho quando disponível ou baixa o arquivo | `/admin/divulgar`, `/admin/veiculos/[id]/arte` |
 | Atendimento | Recebe mensagens pelo webhook oficial do WhatsApp, usa a Dayse com consulta restrita ao estoque publicado, persiste conversas e permite intervenção do vendedor | `/api/webhooks/whatsapp`, `/admin/atendimento` |
 | Agenda | Lista visitas registradas pela Dayse ou pela equipe; permite correção e cancelamento | `/admin/agenda` |
+| Métricas | Conversas, tempo até a primeira resposta, uso da IA e **incidentes do atendimento por motivo**, com as conversas que ninguém garantiu que chegaram ao vendedor | `/admin/metricas` |
+| Retenção | Expurgo diário de conversa vencida e de arquivo órfão no R2, acionado por um serviço de cron próprio no Railway | `/api/cron/retencao` |
 | Ajustes | Conexão de número via Meta Embedded Signup e seleção do modo de atendimento | `/admin/ajustes` |
 
 O painel usa login Google com lista de e-mails permitidos **e** concessão em `admin_grants`. O serviço de veículos protege as alterações no servidor; esconder uma rota não é a autorização.
@@ -25,7 +29,9 @@ O painel usa login Google com lista de e-mails permitidos **e** concessão em `a
 - A arte é preparada para o destino escolhido; o aplicativo de destino ainda precisa da confirmação da pessoa. Não há publicação automática nem calendário de postagens.
 - O chat público do site não existe. As variáveis `SITE_CHAT_ACCESS` e `DEMO_AI_ENABLED` são legado de planejamento e não ativam uma interface de chat.
 - Há código de WhatsApp, mas um deployment `Ready` não comprova recebimento, resposta e handoff no número real. Faça ensaio de ponta a ponta antes de declarar o canal pronto.
-- O modo “Atendimento por menu” está disponível na tela de ajustes, mas o runtime atual só responde automaticamente no modo `ai`; esse modo precisa ser implementado ou retirado da escolha.
+- O modo “Atendimento por menu” (`deterministic`) continua sem implementação própria, mas **não devolve mais silêncio**: a conversa recebe uma frase explícita e vai para o vendedor. Ainda assim, ele precisa ser implementado ou retirado da escolha.
+- A retenção depende do serviço `retencao-agendador` no Railway (`17 6 * * *`). O cron de `vercel.json` **não dispara no Railway** e é configuração morta até o corte terminar.
+- O alerta de incidente (`OPS_ALERT_WEBHOOK_URL`) é o pager do **operador da plataforma**, não um canal da loja: os eventos que o disparam são falhas técnicas que só o operador conserta. Ele ainda não carrega `tenantId`, então serve a uma loja por canal.
 - Eventos de visualização e clique no WhatsApp não são venda ou lead confirmado. Ainda falta um funil que ligue conversa, visita e venda.
 
 ## Tecnologia e arquitetura
@@ -41,7 +47,7 @@ Consulte [`src/server/db/schema.ts`](src/server/db/schema.ts), [`src/server/vehi
 
 ## Desenvolvimento local
 
-Use preferencialmente Node.js 24.x, versão configurada no projeto Vercel em 06/11/2026. O build local desta revisão também passou com Node 26.8.1.
+Use preferencialmente Node.js 24.x, versão configurada no serviço Railway. O build local desta revisão também passou com Node 26.8.1.
 
 ```bash
 npm ci
@@ -62,7 +68,10 @@ Testes de integração que gravam no banco exigem `TEST_DATABASE_URL` isolada; a
 
 ## Operação e documentação
 
-- [Diagnóstico atual de produto, prontidão e mercado](docs/DIAGNOSTICO_PRODUTO_E_MERCADO.md): comece aqui para decidir o próximo investimento.
+- [O que foi entregue e quanto vale](docs/O-QUE-FOI-ENTREGUE.md): as cinco fases de confiabilidade em linguagem direta, com o que falta antes de apresentar à loja.
+- [Estado do projeto](docs/ESTADO.md): onde paramos, próximo passo, pendências e decisões. **Leia antes de qualquer tarefa.**
+- [Plano do host único](docs/planos/2026-11-host-unico.md): a decisão pelo Railway, o corte e o agendador da retenção.
+- [Diagnóstico de produto, prontidão e mercado](docs/DIAGNOSTICO_PRODUTO_E_MERCADO.md): para decidir o próximo investimento.
 - [Conferência do estúdio de artes](docs/liberato-inteligente/05-CONFERENCIA-ESTUDIO-ARTES.md): roteiro de validação nos aplicativos e aparelhos reais.
 - [Validação dos anúncios](docs/VALIDACAO_CATALOGO.md): checklist de dados e autorização das fotos.
 - [Plano de avaliação do agente](docs/PLANO-AGENTE-IA-ATENDIMENTO.md): corpus, critérios e revisão humana; leia a data de cada resultado.
