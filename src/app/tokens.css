@@ -1,0 +1,108 @@
+/**
+ * Fonte única do visual: site público e painel leem daqui.
+ *
+ * Existia antes um conjunto por folha de estilo — `globals.css`, `admin.module.css` e
+ * `attendance.module.css` —, com os mesmos papéis e valores diferentes. O resultado aparecia na
+ * tela: fundo e superfície quase iguais mas não iguais, bordas mudando de tom conforme a tela, e
+ * duas escalas de espaço idênticas com nomes distintos. Cada tela nova inventava a sua.
+ *
+ * Os nomes antigos (`--admin-*`, `--attendance-*`) continuam existindo como apelidos destes, para
+ * que nenhuma regra precise ser reescrita e a migração não dependa de encontrar todos os usos.
+ *
+ * Valores de cor foram medidos contra a WCAG 2.2 antes de entrar (ver `contraste.test.ts`):
+ * texto em 4,5:1 e borda em 3:1, contra fundo, superfície e superfície elevada.
+ */
+
+:root {
+  /* ---- Cor ---------------------------------------------------------------
+     O painel adotou os valores do site, que é a superfície da marca. A mudança
+     é de dois pontos de luminância e não se enxerga; o que ela resolve é a
+     deriva. */
+  --bg: #08090c;
+  --surface: #11151c;
+  --surface-raised: #191e27;
+  --ink: #f7f7f4;
+  --ink-muted: #b3b7be;
+  --ink-soft: #808791;
+
+  /* Duas bordas, e a diferença entre elas é o que a norma cobra.
+
+     `--line` separa: régua entre seções, entre itens de uma lista, pé de
+     página. Não delimita controle, então não precisa dos 3:1 — é o que o site
+     público já usava, e continua.
+
+     `--line-strong` é contorno: botão, campo, ficha de filtro, cartão em que a
+     borda é a única pista de onde ele começa. Precisa de 3:1 e tem 3,89:1
+     contra a superfície. Era aqui que o atendimento falhava, com 2,21:1, sem
+     que o teste visse — ele só lia `admin.module.css`. */
+  --line: rgba(255, 255, 255, 0.14);
+  --line-strong: #6e747e;
+
+  --red: #e0252f;
+  --red-dark: #ac1420;
+  /* O vermelho da marca sobre o fundo dá 4,24:1 — abaixo dos 4,5:1 que a norma
+     pede para texto pequeno. Este é o mesmo vermelho clareado (4,78:1), usado
+     só nos rótulos miúdos; preenchimentos seguem com --red. */
+  --red-ink: #ea3340;
+  --white: #fff;
+
+  --ok: #8fe0a8;
+  --warn: #f2c46d;
+  --danger: #ff9aa2;
+  --info: #9cc7ff;
+  --whatsapp: #25d366;
+
+  /* ---- Espaço ------------------------------------------------------------
+     Uma escala só. A do painel era um subconjunto desta com outros nomes:
+     --admin-space-1..5 equivalem a --space-2, 4, 5, 6 e 7. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+  --space-9: 6.5rem;
+
+  /* ---- Raio --------------------------------------------------------------
+     Havia oito valores, metade escrita à mão. Estes são os papéis reais. */
+  --radius-tight: 4px;
+  --radius-control: 12px;
+  --radius-box: 18px;
+  --radius-panel: 16px;
+  --radius-card: 30px;
+  --radius-pill: 999px;
+
+  /* ---- Tipografia --------------------------------------------------------
+     Havia vinte tamanhos distintos em quatro folhas. Estes são os degraus. */
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+  --text-2xl: 1.25rem;
+  --text-3xl: 1.5rem;
+  --text-4xl: 1.75rem;
+
+  /* ---- Largura de tela ---------------------------------------------------
+     Duas, e cada tela declara qual é a sua. `leitura` para lista e formulário,
+     que se lê em coluna; `trabalho` para tela com colunas lado a lado, como a
+     caixa de entrada. Antes a diferença existia, mas vazava por importação:
+     Ajustes e Métricas ficaram largas sem ninguém ter decidido isso. */
+  --width-leitura: 640px;
+  --width-trabalho: 1280px;
+
+  /* ---- Quebras -----------------------------------------------------------
+     Variável de CSS não funciona dentro de `@media`, então estes nomes são
+     convenção escrita, não token que o navegador lê. Os números são os que
+     valem: 480px (celular estreito), 768px (celular deitado e tablet),
+     1100px (onde a caixa de entrada ganha duas colunas).
+     Antes eram quatro valores sem escala: 480, 600, 860 e 1100. */
+
+  --duration-fast: 160ms;
+  --duration: 280ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}

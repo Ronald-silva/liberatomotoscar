@@ -1,32 +1,10 @@
 :root {
   --font-body: var(--font-archivo);
   --font-display: var(--font-archivo);
-  --bg: #08090c;
-  --surface: #11151c;
-  --surface-raised: #191e27;
-  --ink: #f7f7f4;
-  --ink-muted: #b3b7be;
-  --ink-soft: #808791;
-  --line: rgba(255, 255, 255, 0.14);
-  --red: #e0252f;
-  --red-dark: #ac1420;
   /* O vermelho da marca sobre o fundo dá 4,24:1 — abaixo dos 4,5:1 que a norma
      pede para texto pequeno. Este é o mesmo vermelho clareado o suficiente
      (4,78:1), usado só nos rótulos miúdos; preenchimentos seguem com --red. */
-  --red-text: #ea3340;
-  --white: #fff;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
-  --space-7: 3rem;
-  --space-8: 4.5rem;
-  --space-9: 6.5rem;
-  --radius-pill: 999px;
-  --radius-card: 30px;
-  --radius-box: 18px;
+  --red-text: var(--red-ink);
   /* As três únicas superfícies do sistema: vidro para o que flutua, card para
      o que carrega conteúdo, sólido só nos botões. */
   --glass-bg: rgba(255, 255, 255, 0.055);
@@ -34,9 +12,6 @@
   --card-bg: linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018));
   --card-line: rgba(255, 255, 255, 0.09);
   --glow-red: 0 14px 38px -10px rgba(224, 37, 47, 0.75);
-  --duration-fast: 160ms;
-  --duration: 280ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 *,
@@ -126,7 +101,7 @@ img { max-width: 100%; }
 .button--outline { color: var(--white); border-color: var(--glass-line); background: var(--glass-bg); -webkit-backdrop-filter: blur(12px);
  backdrop-filter: blur(12px); }
 .button--outline:hover { border-color: rgba(255,255,255,.34); background: rgba(255,255,255,.1); }
-.button--small { min-height: 42px; padding-inline: var(--space-4); }
+.button--small { min-height: 44px; padding-inline: var(--space-4); }
 
 .site-header {
   position: absolute;

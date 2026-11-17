@@ -3,6 +3,7 @@ import { Archivo, Space_Mono } from 'next/font/google';
 import { CampaignSync } from '@/components/marketing/CampaignSync';
 import { AnalyticsConsent } from '@/components/marketing/AnalyticsConsent';
 import { SITE_URL, STORE, STORE_ADDRESS_LINE } from '@/data/store';
+import './tokens.css';
 import './globals.css';
 
 /**

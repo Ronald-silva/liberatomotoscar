@@ -1,20 +1,20 @@
 .screen {
-  --admin-bg: #0a0d12;
-  --admin-surface: #171c24;
-  --admin-ink: #f7f7f4;
-  --admin-muted: #c7cbd2;
-  --admin-line: #6e747e;
-  --admin-accent: #ba1d28;
-  --admin-ok: #8fe0a8;
-  --admin-warn: #f2c46d;
-  --admin-danger: #ff9aa2;
-  --admin-info: #9cc7ff;
-  --admin-space-1: 0.5rem;
-  --admin-space-2: 1rem;
-  --admin-space-3: 1.5rem;
-  --admin-space-4: 2rem;
-  --admin-space-5: 3rem;
-  --admin-radius: 16px;
+  --admin-bg: var(--bg);
+  --admin-surface: var(--surface);
+  --admin-ink: var(--ink);
+  --admin-muted: var(--ink-muted);
+  --admin-line: var(--line-strong);
+  --admin-accent: var(--red);
+  --admin-ok: var(--ok);
+  --admin-warn: var(--warn);
+  --admin-danger: var(--danger);
+  --admin-info: var(--info);
+  --admin-space-1: var(--space-2);
+  --admin-space-2: var(--space-4);
+  --admin-space-3: var(--space-5);
+  --admin-space-4: var(--space-6);
+  --admin-space-5: var(--space-7);
+  --admin-radius: var(--radius-panel);
   /* Altura real da barra fixa: botão de 52px + o padding de .stickyAction. Quem precisa
      reservar espaço embaixo usa este token, em vez de um número solto que envelhece sozinho. */
   --admin-sticky-action: calc(52px + var(--admin-space-2) * 2);
@@ -62,7 +62,7 @@
 
 .logo { display: block; width: 152px; height: auto; margin: 0 auto var(--admin-space-3); }
 /* Rótulo, não frase: caixa alta e espaçamento maior dizem isso sem precisar de outra cor. */
-.eyebrow { margin: 0 0 var(--admin-space-1); color: var(--admin-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.eyebrow { margin: 0 0 var(--admin-space-1); color: var(--admin-muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .heading { margin: 0; font-size: clamp(1.8rem, 7vw, 2.3rem); line-height: 1.12; }
 .description { margin: var(--admin-space-2) 0 0; color: var(--admin-muted); line-height: 1.5; }
 /* Medida de linha no cartão de entrada: centralizado e em largura cheia, o texto quebra torto e
@@ -88,10 +88,10 @@
   padding: var(--admin-space-2) var(--admin-space-3);
   border: 1px solid transparent;
   border-radius: var(--admin-radius);
-  color: #fff;
+  color: var(--white);
   background: var(--admin-accent);
   font: inherit;
-  font-size: 1.0625rem;
+  font-size: var(--text-xl);
   font-weight: 700;
   cursor: pointer;
 }
@@ -104,13 +104,13 @@
    arte") nem o contorno neutro do secundário (esse é "mais uma opção"). Contorno e texto na cor de
    perigo, que já passa no contraste de texto; o alvo de toque é o do .button e não muda. */
 .buttonDestructive { background: transparent; border-color: var(--admin-danger); color: var(--admin-danger); }
-.small { margin: var(--admin-space-3) 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.5; }
+.small { margin: var(--admin-space-3) 0 0; color: var(--admin-muted); font-size: var(--text-base); line-height: 1.5; }
 
 .listScreen { min-height: calc(100vh - var(--admin-tabbar, 0px)); min-height: calc(100dvh - var(--admin-tabbar, 0px)); align-items: flex-start; justify-content: center; padding: var(--admin-space-2); }
-.listPanel { width: min(100%, 640px); }
+.listPanel { width: min(100%, var(--width-leitura)); }
 .listHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--admin-space-2); margin-bottom: var(--admin-space-3); }
 .listLogo { display: block; width: 120px; height: auto; }
-.buttonCompact { width: auto; min-height: 44px; padding: var(--admin-space-1) var(--admin-space-2); font-size: 0.9375rem; }
+.buttonCompact { width: auto; min-height: 44px; padding: var(--admin-space-1) var(--admin-space-2); font-size: var(--text-md); }
 .empty { padding: var(--admin-space-3) 0; }
 .vehicleList { display: grid; gap: var(--admin-space-2); margin: var(--admin-space-3) 0 0; padding: 0; list-style: none; }
 .vehicleCard {
@@ -127,14 +127,14 @@
 }
 .vehicleCard:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
 .vehicleTitle { font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
-.vehicleMeta { color: var(--admin-muted); font-size: 0.875rem; }
+.vehicleMeta { color: var(--admin-muted); font-size: var(--text-base); }
 .vehiclePrice { font-weight: 700; text-align: right; }
 .artVehicleCard { grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; }
 .artVehicleCard > .cover, .artVehicleCard > .coverEmpty { grid-row: auto; }
 .artVehicleInfo { display: grid; gap: 0.25rem; min-width: 0; }
 .artVehicleInfo .vehiclePrice { text-align: left; }
 .artVehicleCard > .button { width: auto; }
-.badge { align-self: start; padding: 0.15rem 0.6rem; border: 1px solid var(--admin-line); border-radius: 999px; color: var(--admin-muted); font-size: 0.8125rem; white-space: nowrap; }
+.badge { align-self: start; padding: 0.15rem 0.6rem; border: 1px solid var(--admin-line); border-radius: var(--radius-pill); color: var(--admin-muted); font-size: var(--text-sm); white-space: nowrap; }
 .badge_draft { color: var(--admin-info); border-color: var(--admin-info); }
 .badge_published { color: var(--admin-ok); border-color: var(--admin-ok); }
 .badge_reserved { color: var(--admin-warn); border-color: var(--admin-warn); }
@@ -165,7 +165,7 @@
   color: var(--admin-ink);
   background: var(--admin-surface);
   font: inherit;
-  font-size: 1rem;
+  font-size: var(--text-lg);
   font-weight: 400;
 }
 .input:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
@@ -193,11 +193,11 @@
 .galleryImage { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--admin-radius); }
 .galleryEmpty { display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--admin-radius); border: 1px dashed var(--admin-line); color: var(--admin-muted); }
 .cover { width: 72px; height: 56px; object-fit: cover; border-radius: var(--admin-radius); grid-row: span 3; }
-.coverEmpty { display: grid; place-items: center; width: 72px; height: 56px; border-radius: var(--admin-radius); border: 1px dashed var(--admin-line); color: var(--admin-muted); font-size: 0.75rem; grid-row: span 3; }
-.subheading { margin: var(--admin-space-4) 0 0; font-size: 1.25rem; }
+.coverEmpty { display: grid; place-items: center; width: 72px; height: 56px; border-radius: var(--admin-radius); border: 1px dashed var(--admin-line); color: var(--admin-muted); font-size: var(--text-xs); grid-row: span 3; }
+.subheading { margin: var(--admin-space-4) 0 0; font-size: var(--text-2xl); }
 
 .typeChoice { display: grid; gap: var(--admin-space-2); margin-top: var(--admin-space-4); }
-.typeButton { min-height: 96px; font-size: 1.5rem; }
+.typeButton { min-height: 96px; font-size: var(--text-3xl); }
 
 /* Cadastro guiado: escolha por toque, sugestões e o que falta para publicar. */
 .step {
@@ -206,30 +206,30 @@
   width: 1.7em;
   height: 1.7em;
   margin-right: 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--admin-accent);
-  color: #fff;
+  color: var(--white);
   font-size: 0.8em;
 }
 
 .chipField { margin: var(--admin-space-3) 0 0; padding: 0; border: 0; }
 .chipLegend { padding: 0; font-weight: 600; }
-.chipHint { margin: 0.35rem 0 0; color: var(--admin-muted); font-size: 0.875rem; line-height: 1.4; }
+.chipHint { margin: 0.35rem 0 0; color: var(--admin-muted); font-size: var(--text-base); line-height: 1.4; }
 .chipRow { display: flex; flex-wrap: wrap; gap: var(--admin-space-1); margin: 0.6rem 0; }
 .chip {
   min-height: 44px;
   padding: var(--admin-space-1) var(--admin-space-2);
   border: 1px solid var(--admin-line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--admin-ink);
   background: transparent;
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   cursor: pointer;
 }
 .chip:hover { border-color: var(--admin-ink); }
 .chip:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
-.chipOn { border-color: transparent; background: var(--admin-accent); color: #fff; font-weight: 700; }
+.chipOn { border-color: transparent; background: var(--admin-accent); color: var(--white); font-weight: 700; }
 /* "Ver todas" não é uma opção da lista: é o que abre o resto dela. Borda tracejada para a diferença
    ser visível sem depender de cor — ao lado de uma ficha escolhida, só a cor confundiria. */
 .chipMore { border-style: dashed; color: var(--admin-muted); }
@@ -268,7 +268,7 @@
   cursor: pointer;
 }
 .comboButton:hover { background: rgb(255 255 255 / 10%); }
-.comboOptionOn .comboButton { background: var(--admin-accent); color: #fff; }
+.comboOptionOn .comboButton { background: var(--admin-accent); color: var(--white); }
 
 .optional { margin: var(--admin-space-3) 0 0; border-top: 1px solid var(--admin-line); }
 .optionalSummary {
@@ -307,14 +307,14 @@
 .searchForm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--admin-space-1); align-items: start; margin-top: var(--admin-space-2); }
 .searchInput { margin: 0; }
 /* O resumo ocupa a linha inteira abaixo dos dois controles. */
-.searchSummary { grid-column: 1 / -1; margin: 0; color: var(--admin-muted); font-size: 0.9375rem; line-height: 1.5; }
+.searchSummary { grid-column: 1 / -1; margin: 0; color: var(--admin-muted); font-size: var(--text-md); line-height: 1.5; }
 .searchSummary strong { color: var(--admin-ink); }
 /* Alvo de 44px sem virar botão: é um link de desfazer dentro de uma frase. */
 .searchClear { display: inline-flex; align-items: center; min-height: 44px; color: var(--admin-ink); text-decoration: underline; text-underline-offset: 3px; }
 .searchClear:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 2px; }
 .pager { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--admin-space-1); align-items: center; margin-top: var(--admin-space-3); }
 .pager > * { min-width: 0; }
-.pagerPosition { margin: 0; color: var(--admin-muted); font-size: 0.9375rem; text-align: center; }
+.pagerPosition { margin: 0; color: var(--admin-muted); font-size: var(--text-md); text-align: center; }
 .statusFilter { display: flex; gap: var(--admin-space-1); overflow-x: auto; padding: var(--admin-space-2) 2px; margin: var(--admin-space-1) -2px 0; scrollbar-width: thin; }
 .filterLink { display: inline-flex; align-items: center; min-height: 44px; flex: 0 0 auto; padding: var(--admin-space-1) var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); color: var(--admin-ink); text-decoration: none; }
 .filterLink:hover { border-color: var(--admin-ink); }
@@ -334,7 +334,7 @@
 /* Casco das telas protegidas: reserva o pé para a barra, que é fixa e não ocupa lugar no fluxo. */
 .shell { padding-bottom: var(--admin-tabbar); }
 .shell > main { min-height: calc(100dvh - var(--admin-tabbar)); }
-/* Fora de .screen, então a paleta vem escrita aqui (mesmos valores de --admin-*). */
+/* Fora de .screen, mas os tokens moram em :root — a paleta vem de lá, não escrita à mão. */
 .tabBar {
   position: fixed;
   inset: auto 0 0;
@@ -343,8 +343,8 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-top: 1px solid #6e747e;
-  background: #171c24;
+  border-top: 1px solid var(--line-strong);
+  background: var(--surface);
 }
 .tabLink {
   display: flex;
@@ -355,13 +355,13 @@
   min-height: 56px;
   min-width: 44px;
   padding: 4px;
-  color: #c7cbd2;
-  font-size: 0.75rem;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
   line-height: 1.1;
   text-decoration: none;
 }
-.tabLink[aria-current="page"] { color: #f7f7f4; font-weight: 700; box-shadow: inset 0 3px 0 #ba1d28; }
-.tabLink:focus-visible { outline: 3px solid #f7f7f4; outline-offset: -3px; }
+.tabLink[aria-current="page"] { color: var(--ink); font-weight: 700; box-shadow: inset 0 3px 0 var(--red); }
+.tabLink:focus-visible { outline: 3px solid var(--ink); outline-offset: -3px; }
 .tabIcon { position: relative; display: inline-flex; }
 .tabBadge {
   position: absolute;
@@ -369,10 +369,10 @@
   left: 60%;
   min-width: 18px;
   padding: 0 5px;
-  border-radius: 999px;
-  background: #ba1d28;
-  color: #fff;
-  font-size: 0.6875rem;
+  border-radius: var(--radius-pill);
+  background: var(--red);
+  color: var(--white);
+  font-size: var(--text-2xs);
   font-weight: 700;
   line-height: 18px;
   text-align: center;
@@ -385,15 +385,15 @@
 .agendaEmptyPanel .visitForm { display: flex; flex: 1; flex-direction: column; }
 .agendaEmptyPanel .visitForm > .button { margin-top: auto; }
 .visitGroup { margin-top: var(--admin-space-4); }
-.visitGroupTitle { margin: 0 0 var(--admin-space-2); font-size: 1.125rem; }
+.visitGroupTitle { margin: 0 0 var(--admin-space-2); font-size: var(--text-xl); }
 .visitList { display: grid; gap: var(--admin-space-2); margin: 0; padding: 0; list-style: none; }
 .visitCard { display: grid; gap: var(--admin-space-1); padding: var(--admin-space-2); border: 1px solid var(--admin-line); border-radius: var(--admin-radius); background: var(--admin-surface); }
 /* Passou, mas segue visível: apagada pela cor e pela borda tracejada, e dita no selo "Já passou". */
 .visitCardPassou { border-style: dashed; color: var(--admin-muted); }
 .visitCardPassou .visitTime, .visitCardPassou .visitName { color: var(--admin-muted); }
 .visitWhen { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--admin-space-1) var(--admin-space-2); }
-.visitTime { font-size: 1.75rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.visitDay { color: var(--admin-muted); font-size: 0.9375rem; }
+.visitTime { font-size: var(--text-4xl); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.visitDay { color: var(--admin-muted); font-size: var(--text-md); }
 .visitName { margin: 0; font-weight: 700; }
 .visitMeta { margin: 0; color: var(--admin-muted); }
 .visitQuote { margin: 0; padding-left: var(--admin-space-2); border-left: 3px solid var(--admin-line); }
@@ -403,7 +403,7 @@
 .visitConfirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--admin-space-1); width: 100%; }
 .visitConfirm .notice { margin: 0; flex-basis: 100%; }
 .visitDetails { margin-top: var(--admin-space-4); padding-top: var(--admin-space-3); border-top: 1px solid var(--admin-line); }
-.visitManualHeading { display: flex; align-items: center; min-height: 44px; margin: 0 0 var(--admin-space-2); font-size: 1rem; }
+.visitManualHeading { display: flex; align-items: center; min-height: 44px; margin: 0 0 var(--admin-space-2); font-size: var(--text-lg); }
 .visitDetails > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; }
 .visitDetails > summary:focus-visible { outline: 3px solid var(--admin-ink); outline-offset: 3px; }
 .visitDetails[open] > summary { margin-bottom: var(--admin-space-2); }

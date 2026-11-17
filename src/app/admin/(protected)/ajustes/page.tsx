@@ -54,7 +54,7 @@ export default async function SettingsPage() {
   const testTenant = connected.find((tenant) => tenant.tenantId === TEST_TENANT_ID && tenant.isActive);
 
   return <main id="conteudo" className={attendanceStyles.screen}>
-    <div className={attendanceStyles.panel}>
+    <div className={`${attendanceStyles.panel} ${attendanceStyles.panelLeitura}`}>
       <header className={attendanceStyles.topBar}>
         <div className={attendanceStyles.topBarTitle}>
           <h1>Configurações do WhatsApp · Dayse</h1>
