@@ -84,7 +84,7 @@ export default async function AttendancePage({
             </Link>
             <Link href="/admin/ajustes" className={attendanceStyles.settingsBtn}>
               <span className={attendanceStyles.settingsDot} aria-hidden="true" />
-              Configurar WhatsApp (Meta)
+              Configurar WhatsApp
             </Link>
           </div>
         </header>

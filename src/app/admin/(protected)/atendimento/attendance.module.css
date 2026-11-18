@@ -36,31 +36,35 @@
 .settingsBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 0.55rem;
   min-height: 44px;
   padding: 0.55rem 1rem;
   border: 1px solid rgba(37, 211, 102, 0.45);
   border-radius: var(--radius-control);
   background: rgba(37, 211, 102, 0.1);
-  color: var(--ink);
+  color: var(--whatsapp);
   font: inherit;
   font-size: var(--text-md);
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 150ms ease, border-color 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 .settingsBtn:hover {
-  background: rgba(37, 211, 102, 0.18);
+  background: rgba(37, 211, 102, 0.2);
   border-color: var(--whatsapp);
+  color: var(--white);
 }
 .settingsBtn:focus-visible { outline: 3px solid var(--attendance-ink); outline-offset: 3px; }
 .settingsDot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: var(--radius-pill);
   background: var(--whatsapp);
-  box-shadow: 0 0 8px rgba(37, 211, 102, 0.8);
+  box-shadow: 0 0 6px rgba(37, 211, 102, 0.6);
+  flex-shrink: 0;
 }
 .back { display: inline-flex; min-height: 44px; align-items: center; color: var(--attendance-muted); text-underline-offset: 0.25em; }
 .back:hover { color: var(--attendance-ink); }
@@ -236,6 +240,34 @@
   .messageBubble { padding: var(--attendance-space-1); }
   .operatorButtons > .submit, .operatorButtons > .secondaryButton, .operatorButtons > .destructiveButton { width: 100%; }
   .ficha { grid-template-columns: 1fr; }
+  .headerActions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: var(--attendance-space-1);
+    margin-top: var(--attendance-space-1);
+  }
+  .headerActions > a,
+  .headerActions > button {
+    width: 100%;
+    min-width: 0;
+  }
 }
-/* Dois atalhos no cabeçalho de Conversas (métricas e ajustes): empilham no celular. */
-.headerActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--attendance-space-1); }
+/* Dois atalhos no cabeçalho de Conversas (métricas e ajustes): mesma dimensão e alinhamento centralizado */
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--attendance-space-2);
+}
+.headerActions > a,
+.headerActions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-width: 190px;
+  min-height: 44px;
+}

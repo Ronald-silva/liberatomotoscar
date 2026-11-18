@@ -45,13 +45,27 @@ export default async function AdminPage({ searchParams }: {
   const create = <Link className={styles.button} href="/admin/veiculos/novo">Cadastrar veículo</Link>;
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="admin-title">
-      <header className={styles.listHeader}>
-        <Image className={styles.listLogo} src="/logo-liberato-negativo.png" alt="Liberato Motos Car" width={120} height={56} priority />
-        <form action={logoutAdmin}>
-          <button className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} type="submit">Sair do painel</button>
-        </form>
+      <header className={styles.topBar}>
+        <div className={styles.topBarTitle}>
+          <div className={styles.topBarBrand}>
+            <Image className={styles.listLogo} src="/logo-liberato-negativo.png" alt="Liberato Motos Car" width={112} height={52} priority />
+            <h1 id="admin-title" className={styles.heading}>Estoque</h1>
+          </div>
+          <p className={styles.intro}>
+            Gerencie os veículos anunciados, acompanhe a situação de cada ficha e publique novos anúncios.
+          </p>
+        </div>
+        <div className={styles.topBarActions}>
+          <Link className={`${styles.button} ${styles.buttonCompact}`} href="/admin/veiculos/novo">
+            Cadastrar veículo
+          </Link>
+          <form action={logoutAdmin}>
+            <button className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} type="submit">
+              Sair
+            </button>
+          </form>
+        </div>
       </header>
-      <h1 id="admin-title" className={styles.heading}>Estoque</h1>
       <InventorySearch search={search} status={status} total={total} />
       <StatusFilter counts={counts} active={status} search={search} />
       {vehicles.length === 0 ? <div className={styles.empty}>

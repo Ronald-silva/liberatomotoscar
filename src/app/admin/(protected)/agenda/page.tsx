@@ -33,7 +33,14 @@ export default async function AgendaPage() {
   if (agenda === null) {
     return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
       <section className={styles.listPanel} aria-labelledby="agenda-title">
-        <h1 id="agenda-title" className={styles.heading}>Visitas agendadas</h1>
+        <header className={styles.topBar}>
+          <div className={styles.topBarTitle}>
+            <h1 id="agenda-title" className={styles.heading}>Visitas agendadas</h1>
+            <p className={styles.intro}>
+              Acompanhe as visitas combinadas com clientes para ver os veículos na loja.
+            </p>
+          </div>
+        </header>
         <p className={styles.description} role="alert">
           Não foi possível carregar a agenda agora. Isso não quer dizer que não há visitas.
           Atualize a página para tentar de novo.</p>
@@ -65,7 +72,14 @@ export default async function AgendaPage() {
 
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen} ${empty ? styles.agendaEmptyScreen : ''}`}>
     <section className={`${styles.listPanel} ${empty ? styles.agendaEmptyPanel : ''}`} aria-labelledby="agenda-title">
-      <h1 id="agenda-title" className={styles.heading}>Visitas agendadas</h1>
+      <header className={styles.topBar}>
+        <div className={styles.topBarTitle}>
+          <h1 id="agenda-title" className={styles.heading}>Visitas agendadas</h1>
+          <p className={styles.intro}>
+            Acompanhe as visitas combinadas com clientes para ver os veículos na loja.
+          </p>
+        </div>
+      </header>
       <AgendaView
         vehicles={options} vehiclesAvailable={vehiclesAvailable} minDate={today}
         groups={groups}

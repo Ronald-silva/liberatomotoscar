@@ -14,9 +14,23 @@ Conferência pós-deploy, sem tocar na Meta: vitrine **200** (88 KB, 0,77 s) · 
 `/api/cron/retencao` **503 "Rotina de retenção não configurada"**, com `no-store` e
 `noindex, nofollow`.
 
+**`WHATSAPP_TOKEN_ENCRYPTION_KEY` definida em 18/11, com autorização, ANTES de conectar o
+WhatsApp da loja** — se fosse depois, o token que o Liberato gravar no sábado ficaria ilegível e ele
+teria de refazer a conexão pelo Facebook. Definida pelo CLI com `--set-from-stdin`, então o valor
+nunca passou por log nem por transcrição: **copie do painel do Railway para um gerenciador de
+senhas**. Conferido: 64 hex minúsculo (usada direta, não como semente), deploy **novo** `cff9d238`
+(snapshot `fd0162c4`, não redeploy) em SUCCESS, container às 04:30, vitrine 200.
+Backup do estado anterior: tabela `whatsapp_tenants_backup_20261118` (1 linha, a do número de
+teste, 664 caracteres cifrados).
+**Estado intermediário esperado:** o token salvo está agora **ilegível** — foi cifrado com a chave
+derivada e é lido com a explícita. Não há risco: esse token já estava expirado, nenhum número real
+está conectado, e falha de envio não deixa cliente mudo. Fecha quando o token for renovado e
+regravado em `/admin/ajustes`. **Não provado:** que o processo lê a chave — só um caminho de
+decifragem prova, e nenhuma rota pública expõe isso.
+
 **`CRON_SECRET` e `OPS_ALERT_WEBHOOK_URL` criados em 16/11, com autorização:** a rota de retenção
-saiu de 503 para **403**. Ainda faltam `WHATSAPP_WABA_ID`, `NEXT_PUBLIC_META_PIXEL_ID`,
-`NEXT_PUBLIC_GA_MEASUREMENT_ID` e `WHATSAPP_TOKEN_ENCRYPTION_KEY`; e sobram **as duas**
+saiu de 503 para **403**. Ainda faltam `WHATSAPP_WABA_ID`, `NEXT_PUBLIC_META_PIXEL_ID` e
+`NEXT_PUBLIC_GA_MEASUREMENT_ID`; e sobram **as duas**
 `WHATSAPP_WEBHOOK_CALLBACK_UR` (lixo, sem o `L`) e `WHATSAPP_WEBHOOK_CALLBACK_URL`.
 `DATABASE_URL_DIRECT` corretamente ausente.
 
@@ -46,10 +60,13 @@ redirecionam, mas nenhuma sessão foi concluída) e o ensaio real na Meta.
 Rollback disponível: deploy `62cafdca` (10/11, commit `020a9a6`), `canRollback: true`.
 
 ## Próximo passo
-**O ensaio real no número de teste da Meta**, que é o único elo que falta provar: ele exercita o
-alerta de ponta a ponta em produção (o destino já está confirmado, mas o caminho completo só fecha
-com um incidente real). Antes dele, criar `WHATSAPP_WABA_ID` — sem ela a conferência de WABA é
-vacuosa. Cada um exige a palavra do dono.
+**Apresentação e entrega marcadas para sábado, 21/11, no endereço do Railway** (sem domínio próprio:
+decisão de 18/11). Nesta ordem, até sexta: (1) renovar o token do número de teste em WhatsApp → API
+Setup, de preferência o de **usuário do sistema**, que não expira, e criar `WHATSAPP_WABA_ID` da
+mesma página; (2) regravar o token em `/admin/ajustes` → "Ativar número de teste neste serviço",
+que também aponta o `override_callback_uri` da WABA para o Railway e fecha a dúvida de qual host a
+Meta chama; (3) o **ensaio real**, único elo nunca provado; (4) conferir o estúdio de artes num
+celular de verdade. No sábado, com o Liberato presente: "Conectar com WhatsApp".
 
 ## Pendências
 - [x] P0 — ~~Merge do PR #1~~ **feito em 16/11/2026**: `main` = `8b2bb35`, deploy `5492cbb5` SUCCESS.
@@ -70,9 +87,9 @@ vacuosa. Cada um exige a palavra do dono.
       retenção falha fechada lá (503), não apaga nada e não duplica o agendador do Railway.
       Não verificado: que o alerta realmente saia da Vercel. Nenhuma rota expõe isso, e provar
       exigiria causar uma falha real.
-- [ ] P0 — **`WHATSAPP_TOKEN_ENCRYPTION_KEY` ausente no Railway**
-      (`docs/planos/2026-11-migracao-chave-whatsapp.md`): hoje a chave vem derivada do
-      `META_APP_SECRET`. Aguarda aprovação.
+- [x] P0 — ~~`WHATSAPP_TOKEN_ENCRYPTION_KEY` ausente~~ **definida em 18/11**, antes de conectar a
+      loja. Falta só regravar o token depois de renovado (abaixo), e guardar a chave num
+      gerenciador de senhas a partir do painel do Railway.
 - [ ] P0 — **O WhatsApp da loja nunca foi conectado.** Conferido no banco de produção em 16/11:
       `whatsapp_tenants` tem **uma linha só**, o número de teste da Meta (`+1 555-195-6955`,
       criado em 28/10). Não é defeito — é o passo do botão "Conectar com WhatsApp"
@@ -106,6 +123,14 @@ vacuosa. Cada um exige a palavra do dono.
 - [ ] Loja confirmar dados, fotos e preços dos 5 anúncios publicados.
 
 ## Decisões
+- 2026-11-18 — A chave de criptografia é definida **antes** de a loja conectar, não depois. _Token
+  gravado com chave derivada vira ilegível quando a explícita entra, e quem refaz a conexão pelo
+  Facebook é o dono da loja._
+- 2026-11-18 — Apresentar e entregar **no endereço do Railway**, sem domínio próprio. _Escolha do
+  dono: zero risco novo a três dias da entrega._ O `noindex` continua, por consequência.
+- 2026-11-18 — Segredo novo entra por `railway variables --set-from-stdin`, nunca por argumento.
+  _O valor não aparece em log, histórico de shell nem transcrição; o único lugar onde ele existe é
+  o painel._
 - 2026-11-16 — O destino do alerta é um **webhook do Discord** no servidor do operador. _Aceita o
   payload sem adaptação (`content`), é gratuito, não depende de aprovação e avisa no celular._
 - 2026-11-16 — O alerta de `notifyOps` é o **pager do operador da plataforma**, não um canal da
@@ -140,11 +165,9 @@ vacuosa. Cada um exige a palavra do dono.
 - 2026-10-31 — `noindex` mantido até existir domínio próprio.
 
 ## Última sessão
-2026-11-16 — Fase 6: revisão independente das cinco fases, push, PR, **merge, deploy, retenção
-ligada e alerta com destino**. Revisão sem bloqueador; dois achados P2 na fila. Depois do deploy,
-autorizados e concluídos: `CRON_SECRET` (rota 503 → 403), o agendador da retenção **comprovado por
-execução real** (`falhas: 0`, chamada vinda do IP do container) e `OPS_ALERT_WEBHOOK_URL` apontando
-para o Discord do operador, com mensagem de teste entregue. Duas conclusões minhas foram corrigidas
-no caminho — o agendador não estava quebrado e não era quoting, era deploy que precisava ser novo —
-e o enquadramento do alerta foi corrigido por você: é pager do operador, não canal da loja.
-**Nenhuma migração, nada enviado à Meta, nenhuma conversa apagada.**
+2026-11-18 — Auditoria e padronização visual completa de UX/UI do painel administrativo:
+- Unificação do cabeçalho de todas as páginas (`topBar` com título, subtítulo e ações alinhadas com divisor suave em Estoque, Agenda, Divulgar e Cadastro/Edição de Veículos).
+- Unificação dos filtros de situação do estoque (`StatusFilter`) com o padrão de pílulas (`filterTab`, `radius-pill`, contadores `(n)`, transições sutis e contraste WCAG 2.2).
+- Ajustes finos no formulário e galeria de fotos de veículos (grid de 2 colunas para campos relacionados, botões de câmera/galeria 50/50 com ícones e remoção do espaço fantasma no rodapé).
+- Padronização dos botões do cabeçalho de atendimento ("Ver métricas" e "Configurar WhatsApp"): centralizados, com a mesma dimensão e formato retangular, com "Configurar WhatsApp" recebendo coloração oficial da marca (verde WhatsApp `var(--whatsapp)` com fundo e borda translúcidos e alto contraste).
+- 1107 testes unitários passando, 0 erros no typecheck e lint, build de produção Next.js validado com sucesso.

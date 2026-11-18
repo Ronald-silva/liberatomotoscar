@@ -18,8 +18,17 @@ export default async function DivulgarPage() {
   });
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="divulgar-title">
-      <h1 id="divulgar-title" className={styles.heading}>Divulgar</h1>
-      <p className={styles.description}>Escolha o veículo, monte a arte e envie direto pelo WhatsApp ou pelo aplicativo que preferir.</p>
+      <header className={styles.topBar}>
+        <div className={styles.topBarTitle}>
+          <h1 id="divulgar-title" className={styles.heading}>Divulgar</h1>
+          <p className={styles.intro}>Escolha o veículo, monte a arte e envie direto pelo WhatsApp ou pelo aplicativo que preferir.</p>
+        </div>
+        <div className={styles.topBarActions}>
+          <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">
+            Ver estoque
+          </Link>
+        </div>
+      </header>
       {published === null ? <p className={styles.description} role="alert">
         Não foi possível carregar os veículos agora. Atualize a página para tentar de novo.</p>
       : published.length === 0 ? <div className={styles.empty}>

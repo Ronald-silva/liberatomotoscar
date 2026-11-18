@@ -8,9 +8,15 @@ export const metadata: Metadata = { title: 'Cadastrar veículo', robots: { index
 export default function NewVehiclePage() {
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <section className={styles.listPanel} aria-labelledby="novo-title">
-      <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">Voltar ao estoque</Link>
-      <h1 id="novo-title" className={styles.heading}>O que você vai cadastrar?</h1>
-      <p className={styles.description}>Depois é só completar marca, modelo, preço e fotos.</p>
+      <header className={styles.topBar}>
+        <div className={styles.topBarTitle}>
+          <h1 id="novo-title" className={styles.heading}>Cadastrar veículo</h1>
+          <p className={styles.intro}>Escolha o tipo para começar. Depois é só completar marca, modelo, preço e fotos.</p>
+        </div>
+        <div className={styles.topBarActions}>
+          <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">Voltar ao estoque</Link>
+        </div>
+      </header>
       <VehicleTypeForm />
     </section>
   </main>;

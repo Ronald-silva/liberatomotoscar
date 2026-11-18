@@ -50,11 +50,11 @@ function PhotoActions({ vehicleId, draft, photo }: { vehicleId: string; draft: V
 }
 
 export function PhotoGallery({ vehicleId, draft, photos }: { vehicleId: string; draft: VehicleDraft; photos: GalleryPhoto[] }) {
-  if (photos.length === 0) return <p className={styles.description}>Nenhuma foto ainda.</p>;
+  if (photos.length === 0) return <p className={styles.emptyGalleryText}>Nenhuma foto adicionada ainda.</p>;
   return <ul className={styles.gallery}>
     {photos.map((photo, index) => <li key={photo.id} className={styles.galleryItem}>
       {photo.url
-        ? <Image className={styles.galleryImage} src={photo.url} alt={`Foto ${index + 1} do veículo`} width={640} height={480} sizes="(max-width: 640px) 100vw, 640px" unoptimized />
+        ? <Image className={styles.galleryImage} src={photo.url} alt={`Foto ${index + 1} do veículo`} width={640} height={480} sizes="(max-width: 640px) 50vw, 320px" unoptimized />
         : <span className={styles.galleryEmpty} role="img" aria-label={`Foto ${index + 1} indisponível no momento`}>Foto indisponível</span>}
       <PhotoActions vehicleId={vehicleId} draft={draft} photo={photo} />
     </li>)}

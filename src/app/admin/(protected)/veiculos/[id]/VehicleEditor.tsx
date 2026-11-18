@@ -90,9 +90,21 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
 
   return <main id="conteudo" className={`${styles.screen} ${styles.listScreen}`}>
     <div className={`${styles.listPanel} ${styles.editorWithFooter}`}>
-      <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">Voltar ao estoque</Link>
-      <h1 id="editar-title" className={styles.heading}>{title}</h1>
-      {isNew ? <p className={styles.description}>Siga de cima para baixo. O que você preencher é salvo automaticamente.</p> : null}
+      <header className={styles.topBar}>
+        <div className={styles.topBarTitle}>
+          <h1 id="editar-title" className={styles.heading}>{title}</h1>
+          <p className={styles.intro}>
+            {isNew
+              ? 'Siga de cima para baixo. O que você preencher é salvo automaticamente.'
+              : 'Edite os dados, gerencie as fotos e acompanhe a publicação do anúncio.'}
+          </p>
+        </div>
+        <div className={styles.topBarActions}>
+          <Link className={`${styles.button} ${styles.buttonSecondary} ${styles.buttonCompact}`} href="/admin">
+            Voltar ao estoque
+          </Link>
+        </div>
+      </header>
       {(status === 'published' || status === 'reserved' || status === 'sold' || publishedNow) ?
         <div className={styles.publishedNotice} role="status">
           <strong>{publishedNow ? 'Anúncio publicado.' : `Situação: ${status === 'reserved' ? 'Reservado' : status === 'sold' ? 'Vendido' : 'Publicado'}.`}</strong>
@@ -108,15 +120,12 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
         <h2 id="fotos-title" className={styles.subheading}>{isNew ? <span className={styles.step}>2</span> : null}Fotos</h2>
         <PhotoGallery vehicleId={vehicleId} draft={draft} photos={photos} />
         <PhotoUpload vehicleId={vehicleId} draft={draft} />
-        <button className={canPublish && !publishedNow ? `${styles.button} ${styles.buttonSecondary}` : styles.button} type="button" disabled={openingArt}
-          onClick={() => void openArt()}>{openingArt ? 'Salvando anúncio…' : 'Criar arte'}</button>
-        <FormNotice message={artMessage} vehicleId={vehicleId} role="alert" />
       </section>
 
       {canPublish && !publishedNow ? <section aria-labelledby="conferir-title">
         <h2 id="conferir-title" className={styles.subheading}>{isNew ? <span className={styles.step}>3</span> : null}Conferir e publicar</h2>
         <p className={styles.description}>{draft.missing.length === 0
-          ? 'Tudo pronto. Pode publicar.' : 'Falta isto para o anúncio poder ser publicado:'}</p>
+          ? 'Tudo pronto para publicação.' : 'Falta preencher para poder publicar:'}</p>
         <ul className={styles.checklist}>
           {checks.map((label) => {
             const done = !draft.missing.includes(label);
@@ -126,6 +135,18 @@ export function VehicleEditor({ vehicleId, slug, type, status, isNew, canDiscard
             </li>;
           })}
         </ul>
+
+        <div className={styles.artSection}>
+          <button className={`${styles.button} ${styles.buttonSecondary}`} type="button" disabled={openingArt}
+            onClick={() => void openArt()}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '8px' }}>
+              <path d="m3 11 18-5v12L3 14v-3z"/>
+              <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>
+            </svg>
+            {openingArt ? 'Salvando anúncio…' : 'Criar arte'}
+          </button>
+          <FormNotice message={artMessage} vehicleId={vehicleId} role="alert" />
+        </div>
         <div className={`${styles.editorFooter} ${editingField ? styles.editorFooterKeyboard : ''}`}>
           <div className={styles.editorFooterInner}>
             {confirming ? <div className={styles.confirmPublish}>

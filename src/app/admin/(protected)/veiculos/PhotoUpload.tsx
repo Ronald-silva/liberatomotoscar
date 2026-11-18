@@ -121,11 +121,20 @@ export function PhotoUpload({ vehicleId, draft }: { vehicleId: string; draft: Ve
   return <div className={styles.form}>
     <div className={styles.uploadChoices}>
       <label className={`${styles.button} ${styles.buttonSecondary} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy !== null}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '6px' }}>
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+          <circle cx="12" cy="13" r="3"/>
+        </svg>
         Tirar foto
         <input ref={cameraInput} className={styles.visuallyHidden} type="file" accept="image/*" capture="environment"
           disabled={busy !== null} onChange={onChange} />
       </label>
       <label className={`${styles.button} ${styles.buttonSecondary} ${styles.uploadLabel} ${busy ? styles.buttonDisabled : ''}`} aria-disabled={busy !== null}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '6px' }}>
+          <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+          <circle cx="9" cy="9" r="2"/>
+          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+        </svg>
         Escolher da galeria
         <input ref={galleryInput} className={styles.visuallyHidden} type="file" accept="image/*" multiple
           disabled={busy !== null} onChange={onChange} />
