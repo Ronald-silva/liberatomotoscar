@@ -149,6 +149,8 @@ export type Scrim = { y: number; height: number; stops: readonly ScrimStop[] };
 export type ArtLayout = {
   spec: DestinationSpec;
   column: { x: number; width: number };
+  /** Escudo semitransparente que isola a logo de fundos e banners poluídos. */
+  logoPlate: Frame;
   logo: Frame;
   fit: PhotoFit;
   scrim: Scrim;
@@ -168,6 +170,8 @@ export type ArtLayout = {
   pricePlate: Frame;
   priceLabel: Placed;
   price: Placed;
+  /** Cápsula de destaque do contato comercial (WhatsApp). */
+  phonePlate: Frame;
   phone: Placed;
   /** A observação é a linha mais dispensável da peça: sem texto, o bloco não existe. */
   note: Placed | null;
@@ -201,17 +205,19 @@ export type ArtLayout = {
  *
  * `price` é o único que não separa blocos: ele mora dentro da placa, entre o rótulo e o valor.
  */
-const GAP = { title: 16, meta: 14, plate: 30, phone: 28, note: 6, price: 4 } as const;
+const GAP = { title: 10, meta: 8, plate: 16, phone: 16, note: 12, price: 2 } as const;
 
-const LOGO_HEIGHT = 108;
+const LOGO_HEIGHT = 122;
 /**
  * A proporção dos arquivos em `public/` (800×376), para quando a imagem ainda não carregou. Sem
  * isto a logo seria medida com largura zero, que é como ela passava por qualquer área segura.
  */
 const LOGO_ASPECT_FALLBACK = 800 / 376;
 
-const BADGE_PAD = { x: 20, y: 11 } as const;
-const PLATE_PAD = { x: 26, y: 22 } as const;
+const BADGE_PAD = { x: 22, y: 8 } as const;
+const PLATE_PAD = { x: 24, y: 14 } as const;
+const LOGO_PAD = { x: 62, y: 18 } as const;
+const PHONE_PAD = { x: 36, y: 8 } as const;
 
 /** O Konva soma o espaçamento depois de cada caractere; o cálculo da pílula tem de somar também. */
 export const BADGE_TRACKING = 2.2;
@@ -276,8 +282,8 @@ const BAND_GAP = 24;
 /** O que o estoque real tem quando o banco não registrou dimensão: 1600×1200. */
 const FALLBACK_PHOTO_ASPECT = 4 / 3;
 
-/** Quanto o véu sobe acima do bloco de texto, em frações da altura dele (§4.2 do spec: ~1,35×). */
-const SCRIM_RISE = 0.35;
+/** Quanto o véu sobe acima do bloco de texto, em frações da altura dele. */
+const SCRIM_RISE = 0.15;
 /** §4.4 do spec: o piso que mantém 4,5:1 de texto branco sobre a foto mais clara do estoque. */
 const SCRIM_FLOOR = 0.82;
 /** O piso é alcançado estes pixels **antes** da primeira linha, não em cima dela. */
@@ -291,7 +297,7 @@ const SCRIM_LEAD = 12;
  * vale a Global Constraint do véu composto ≥ 0,82. Por isso são dois valores, escolhidos pelo mesmo
  * dado que diz se há imagem (`logoAspect`).
  */
-const LOGO_SCRIM_SOFT = 0.55;
+const LOGO_SCRIM_SOFT = 0.72;
 /** O quanto o véu do topo continua desbotando abaixo da logo, para não terminar numa linha reta. */
 const LOGO_SCRIM_TAIL = 0.8;
 
@@ -336,23 +342,27 @@ export function scrimAlphaAt(scrim: Scrim, y: number): number {
 
 export function layoutArt(destination: ArtDestination, content: ArtContent, measure: Measure): ArtLayout {
   const spec = destinationSpec(destination);
+  const isFeed = spec.height <= spec.width * 1.5;
+  const gap = GAP;
+  const badgePad = BADGE_PAD;
+  const platePad = PLATE_PAD;
   const safeWidth = spec.width - spec.safe.left - spec.safe.right;
   const width = safeWidth - COLUMN_INSET * 2;
   const x = spec.safe.left + (safeWidth - width) / 2;
   const bottom = spec.height - spec.safe.bottom;
-  const plateWidth = width - PLATE_PAD.x * 2;
+  const plateWidth = width - platePad.x * 2;
 
-  const badge = fitLines({ text: content.badge, maxLines: 1, sizes: [26, 24, 22], weight: WEIGHT.black, measure,
-    maxWidth: width - BADGE_PAD.x * 2 - BADGE_TRACKING * content.badge.length });
-  const meta = fitLines({ text: content.meta, maxWidth: width, maxLines: 1, sizes: [27, 25, 23], weight: WEIGHT.regular, measure });
-  const priceLabel = fitLines({ text: content.priceLabel, maxLines: 1, sizes: [23, 21], weight: WEIGHT.black, measure,
+  const badge = fitLines({ text: content.badge, maxLines: 1, sizes: [23, 21], weight: WEIGHT.black, measure,
+    maxWidth: width - badgePad.x * 2 - BADGE_TRACKING * content.badge.length });
+  const meta = fitLines({ text: content.meta, maxWidth: width, maxLines: 1, sizes: [25, 23, 21], weight: WEIGHT.regular, measure });
+  const priceLabel = fitLines({ text: content.priceLabel, maxLines: 1, sizes: [20, 18], weight: WEIGHT.black, measure,
     maxWidth: plateWidth - PRICE_LABEL_TRACKING * content.priceLabel.length });
-  const price = fitLines({ text: content.price, maxWidth: plateWidth, maxLines: 1, sizes: [92, 84, 76, 68, 60], weight: WEIGHT.black, measure });
-  // O telefone recuou de 46 para 38: na placa o preço já domina, e dois blocos no mesmo corpo
+  const price = fitLines({ text: content.price, maxWidth: plateWidth, maxLines: 1, sizes: [76, 68, 60], weight: WEIGHT.black, measure });
+  // O telefone recuou para 34: na placa o preço já domina, e dois blocos no mesmo corpo
   // competiam em vez de se completarem.
-  const phone = fitLines({ text: content.phone, maxWidth: width, maxLines: 1, sizes: [38, 34, 30], weight: WEIGHT.black, measure });
+  const phone = fitLines({ text: content.phone, maxWidth: width, maxLines: 1, sizes: [34, 30, 28], weight: WEIGHT.black, measure });
   const note = content.note.trim()
-    ? fitLines({ text: content.note, maxWidth: width, maxLines: 2, sizes: [27, 25, 23, 21], weight: WEIGHT.regular, measure })
+    ? fitLines({ text: content.note, maxWidth: width, maxLines: 2, sizes: [23, 21, 19], weight: WEIGHT.regular, measure })
     : null;
 
   const lineBox = (fit: { size: number; lines: readonly string[] }, leading = 1.06) =>
@@ -366,11 +376,11 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
     phone: lineBox(phone),
     note: note ? lineBox(note, 1.3) : 0,
   };
-  const pillHeight = h.badge + BADGE_PAD.y * 2;
-  const plateHeight = h.priceLabel + GAP.price + h.price + PLATE_PAD.y * 2;
+  const pillHeight = h.badge + badgePad.y * 2;
+  const plateHeight = h.priceLabel + gap.price + h.price + platePad.y * 2;
 
   type Fit = { size: number; lines: readonly string[] };
-  type Pilha = Omit<ArtLayout, 'spec' | 'column' | 'logo' | 'fit' | 'scrim' | 'logoScrim'
+  type Pilha = Omit<ArtLayout, 'spec' | 'column' | 'logoPlate' | 'logo' | 'fit' | 'scrim' | 'logoScrim'
     | 'statusBand' | 'watermark'> & { textTop: number };
 
   /**
@@ -387,28 +397,38 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
     if (note && comNote) {
       y -= h.note;
       noteAt = { x, y, width, height: h.note, size: note.size, lines: note.lines };
-      y -= GAP.note;
+      y -= gap.note;
     } else if (note) {
       dropped.push('note');
     }
 
     y -= h.phone;
     const phoneAt: Placed = { x, y, width, height: h.phone, size: phone.size, lines: phone.lines };
-    y -= GAP.phone;
+    const phoneTextWidth = Math.ceil(tracked(phone.lines, phone.size, WEIGHT.black, 0, measure));
+    const phonePlateWidth = Math.min(width, Math.max(Math.round(width * 0.68), phoneTextWidth + PHONE_PAD.x * 2));
+    const phonePlateX = Math.round(x + (width - phonePlateWidth) / 2);
+    const phonePadBottom = noteAt ? PHONE_PAD.y : 0;
+    const phonePlate: Frame = {
+      x: phonePlateX,
+      y: phoneAt.y - PHONE_PAD.y,
+      width: phonePlateWidth,
+      height: phoneAt.height + PHONE_PAD.y + phonePadBottom,
+    };
+    y -= gap.phone;
 
     y -= plateHeight;
     const pricePlate: Frame = { x, y, width, height: plateHeight };
-    const priceLabelAt: Placed = { x: x + PLATE_PAD.x, y: y + PLATE_PAD.y, width: plateWidth,
+    const priceLabelAt: Placed = { x: x + platePad.x, y: y + platePad.y, width: plateWidth,
       height: h.priceLabel, size: priceLabel.size, lines: priceLabel.lines };
-    const priceAt: Placed = { x: x + PLATE_PAD.x, y: priceLabelAt.y + h.priceLabel + GAP.price,
+    const priceAt: Placed = { x: x + platePad.x, y: priceLabelAt.y + h.priceLabel + gap.price,
       width: plateWidth, height: h.price, size: price.size, lines: price.lines };
-    y -= GAP.plate;
+    y -= gap.plate;
 
     let metaAt: Placed | null = null;
     if (comMeta) {
       y -= h.meta;
       metaAt = { x, y, width, height: h.meta, size: meta.size, lines: meta.lines };
-      y -= GAP.meta;
+      y -= gap.meta;
     } else {
       dropped.push('meta');
     }
@@ -416,16 +436,17 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
     const titleHeight = lineBox(title, 1.04);
     y -= titleHeight;
     const titleAt: Placed = { x, y, width, height: titleHeight, size: title.size, lines: title.lines };
-    y -= GAP.title;
+    y -= gap.title;
 
     y -= pillHeight;
-    const badgePill: Frame = { x, y, height: pillHeight,
-      width: Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, BADGE_TRACKING, measure)) + BADGE_PAD.x * 2 };
-    const badgeAt: Placed = { x: x + BADGE_PAD.x, y: y + BADGE_PAD.y,
-      width: badgePill.width - BADGE_PAD.x * 2, height: h.badge, size: badge.size, lines: badge.lines };
+    const badgePillWidth = Math.min(width, Math.ceil(tracked(badge.lines, badge.size, WEIGHT.black, BADGE_TRACKING, measure)) + badgePad.x * 2);
+    const badgePillX = Math.round(x + (width - badgePillWidth) / 2);
+    const badgePill: Frame = { x: badgePillX, y, height: pillHeight, width: badgePillWidth };
+    const badgeAt: Placed = { x: badgePillX + badgePad.x, y: y + badgePad.y,
+      width: badgePill.width - badgePad.x * 2, height: h.badge, size: badge.size, lines: badge.lines };
 
     return { badgePill, badge: badgeAt, title: titleAt, meta: metaAt, pricePlate,
-      priceLabel: priceLabelAt, price: priceAt, phone: phoneAt, note: noteAt, dropped,
+      priceLabel: priceLabelAt, price: priceAt, phonePlate, phone: phoneAt, note: noteAt, dropped,
       textTop: badgePill.y };
   };
 
@@ -434,13 +455,19 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
   const limite = TEXT_BLOCK_MAX * (spec.height - spec.safe.top - spec.safe.bottom);
   const cabe = (p: Pilha) => bottom - p.textTop <= limite;
 
-  const tituloNormal = fitLines({ text: content.title, maxWidth: width, maxLines: 2,
-    sizes: TITLE_SIZES, weight: WEIGHT.black, measure });
+  const tituloUmaLinha = fitLines({ text: content.title, maxWidth: width, maxLines: 1,
+    sizes: [64, 58, 52], weight: WEIGHT.black, measure });
+  const tituloNormal = tituloUmaLinha.lines.length === 1
+    ? tituloUmaLinha
+    : fitLines({ text: content.title, maxWidth: width, maxLines: 2,
+      sizes: isFeed ? TITLE_SIZES : [64, 58, 52, 48], weight: WEIGHT.black, measure });
 
   let pilha = montar(tituloNormal, { comMeta: true, comNote: true });
   if (!cabe(pilha)) pilha = montar(tituloNormal, { comMeta: true, comNote: false });
   if (!cabe(pilha)) pilha = montar(tituloNormal, { comMeta: false, comNote: false });
-  if (!cabe(pilha)) pilha = montar(tituloApertado(), { comMeta: false, comNote: false });
+  if (!cabe(pilha) || pilha.title.lines.length > TITLE_LINES_TIGHT) {
+    pilha = montar(tituloApertado(), { comMeta: false, comNote: false });
+  }
 
   /**
    * O terceiro degrau. Desce a lista de corpos e devolve o primeiro em que o título ocupa no
@@ -463,14 +490,34 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
 
   const { textTop, ...blocos } = pilha;
 
-  // A logo é ancorada no topo da área segura e agora tem largura de verdade, derivada da proporção
-  // da imagem. Presa à largura da coluna para que uma logo muito deitada não vaze de lado.
-  const logoWidth = Math.min(width, LOGO_HEIGHT * usableAspect(content.logoAspect, LOGO_ASPECT_FALLBACK));
-  const logo: Frame = { x, y: spec.safe.top, width: logoWidth, height: LOGO_HEIGHT };
+  // A logo é ancorada no topo da área segura dentro de seu escudo isolador (`logoPlate`), com
+  // proporção justa à imagem original (sem tarja larga vazia nas laterais) e presa à coluna.
+  const logoHeight = isFeed ? 104 : LOGO_HEIGHT;
+  const logoPadX = isFeed ? 54 : LOGO_PAD.x;
+  const logoPadY = isFeed ? 14 : LOGO_PAD.y;
+  const logoMaxInnerWidth = Math.max(1, width - logoPadX * 2);
+  const logoLoaded = usableAspect(content.logoAspect, 0) > 0;
+  const logoWidth = Math.min(logoMaxInnerWidth, logoHeight * usableAspect(content.logoAspect, LOGO_ASPECT_FALLBACK));
+  const logoPlateWidth = logoLoaded
+    ? Math.min(width, Math.ceil(logoWidth + logoPadX * 2))
+    : Math.min(width, Math.round(width * 0.68));
+  const logoPlateHeight = logoHeight + logoPadY * 2;
+  const logoPlate: Frame = {
+    x: Math.round(x + (width - logoPlateWidth) / 2),
+    y: spec.safe.top,
+    width: logoPlateWidth,
+    height: logoPlateHeight,
+  };
+  const logo: Frame = {
+    x: Math.round(logoPlate.x + (logoPlate.width - logoWidth) / 2),
+    y: logoPlate.y + logoPadY,
+    width: logoWidth,
+    height: logoHeight,
+  };
 
   // O véu do topo: da borda de cima até a base da logo em opacidade cheia, desbotando depois. A
   // opacidade é escolhida pelo que será desenhado ali — imagem da logo ou a marca escrita.
-  const logoScrimHeight = logo.y + logo.height + Math.round(LOGO_SCRIM_TAIL * LOGO_HEIGHT);
+  const logoScrimHeight = logo.y + logo.height + Math.round(LOGO_SCRIM_TAIL * logoHeight);
   const logoScrimAlpha = usableAspect(content.logoAspect, 0) > 0 ? LOGO_SCRIM_SOFT : SCRIM_FLOOR;
   const logoScrim: Scrim = {
     y: 0,
@@ -526,7 +573,7 @@ export function layoutArt(destination: ArtDestination, content: ArtContent, meas
     ? faixa(WATERMARK_TEXT, WATERMARK_SIZES)
     : null;
 
-  return { spec, column: { x, width }, logo, fit: fitPhoto(spec, content.photoAspect, logo, scrim),
+  return { spec, column: { x, width }, logoPlate, logo, fit: fitPhoto(spec, content.photoAspect, logo, scrim),
     scrim, logoScrim, ...blocos, statusBand, watermark };
 }
 
@@ -540,11 +587,15 @@ function fitPhoto(spec: DestinationSpec, photoAspect: number | null, logo: Frame
   const canvasAspect = spec.width / spec.height;
 
   if (Math.abs(aspect / canvasAspect - 1) <= COVER_TOLERANCE) {
-    // Proporção parecida com a da peça: preenche tudo, sem fundo e sem perder quase nada.
+    // Proporção parecida com a da peça: preenche tudo e desloca suavemente o centro vertical da
+    // foto em direção à região livre (acima do bloco de texto), sem cortar o topo do veículo.
+    const livre = { top: logo.y + logo.height, bottom: scrim.y };
+    const livreCenter = (livre.top + livre.bottom) / 2;
+    const shiftY = Math.max(-64, Math.min(0, Math.round((livreCenter - spec.height / 2) * 0.35)));
     const width = Math.max(spec.width, spec.height * aspect);
     const height = width / aspect;
     return { mode: 'cover', backdrop: null,
-      photo: { x: (spec.width - width) / 2, y: (spec.height - height) / 2, width, height } };
+      photo: { x: (spec.width - width) / 2, y: (spec.height - height) / 2 + shiftY, width, height } };
   }
 
   // A foto inteira, na maior escala que caiba na peça — para a 4:3 do estoque isso é a largura

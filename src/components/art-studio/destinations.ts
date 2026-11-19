@@ -141,17 +141,17 @@ export const ART_DESTINATIONS: Record<ArtDestination, DestinationSpec> = {
     actionLabel: 'Publicar no TikTok',
     width: 1080,
     height: 1920,
-    safe: { top: 150, right: 180, bottom: 500, left: 120 },
+    safe: { top: 150, right: 140, bottom: 360, left: 84 },
     fileSuffix: 'tiktok',
     chrome: [
       // Abas "Seguindo / Para você" no topo.
       { kind: 'bar', x: 340, y: 56, width: 400, height: 48 },
       // A trilha de ícones da direita.
-      { kind: 'rail', x: 912, y: 760, width: 96, height: 620 },
+      { kind: 'rail', x: 948, y: 760, width: 88, height: 620 },
       // Legenda, nome do autor e faixa da música.
-      { kind: 'bar', x: 120, y: 1440, width: 700, height: 240 },
+      { kind: 'bar', x: 84, y: 1580, width: 700, height: 160 },
       // Barra de navegação do aplicativo.
-      { kind: 'actions', x: 120, y: 1760, width: 840, height: 96 },
+      { kind: 'actions', x: 84, y: 1768, width: 840, height: 96 },
     ],
   },
 };

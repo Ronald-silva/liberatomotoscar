@@ -76,9 +76,9 @@ function larguraDesenhada({ bloco, weight, tracking }: ReturnType<typeof blocosM
   return Math.max(...bloco.lines.map((linha) => measure(linha, bloco.size, weight) + tracking * linha.length));
 }
 
-/** Os blocos sólidos desenhados atrás do texto: pílula do selo e placa do preço. */
+/** Os blocos sólidos desenhados atrás do texto: escudo da logo, pílula do selo, placa do preço e cápsula do telefone. */
 function fundos(l: ArtLayout) {
-  return [l.badgePill, l.pricePlate];
+  return [l.logoPlate, l.badgePill, l.pricePlate, l.phonePlate];
 }
 
 /** `a` cabe inteiro dentro de `b`. */
@@ -390,9 +390,12 @@ describe('os blocos sólidos contêm o texto que anunciam', () => {
   it.each(DESTINATION_ORDER)('%s: pílula e placa envolvem o próprio conteúdo', (id) => {
     const l = layoutArt(id, conteudo(), measure);
     // Texto estourando a pílula é pior que selo sem pílula: lê como erro, não como etiqueta.
+    expect(dentro(l.logo, l.logoPlate)).toBe(true);
     expect(dentro(l.badge, l.badgePill)).toBe(true);
     expect(dentro(l.priceLabel, l.pricePlate)).toBe(true);
     expect(dentro(l.price, l.pricePlate)).toBe(true);
+    expect(l.phone.y).toBeGreaterThanOrEqual(l.phonePlate.y);
+    expect(l.phone.y + l.phone.height).toBeLessThanOrEqual(l.phonePlate.y + l.phonePlate.height);
   });
 
   it('a pílula acompanha o texto do selo em vez de ocupar a coluna inteira', () => {
@@ -453,12 +456,12 @@ describe('degradação sob aperto', () => {
   const TITULO_LONGO = 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica';
   const TITULO_MAX = `${TITULO_LONGO} Couro Multimidia Teto Solar`;
   const META_LONGA = '2016 · 189.000 km · Branca com banco vermelho e teto preto';
-  const NOTA_LONGA = 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora';
+  const NOTA_LONGA = 'Entrada facilitada, parcelas que cabem no bolso, avaliação do seu usado na hora, financiamento próprio na loja com aprovação rápida, entrega imediata em toda a região metropolitana, garantia estendida de motor e câmbio, revisão completa antes da entrega, documentação em dia, transferência facilitada, atendimento personalizado pelo WhatsApp, aceitamos sua moto ou carro na troca com a melhor avaliação da cidade, condições especiais para pagamento à vista, parcelamento no cartão em até vinte e quatro vezes e atendimento em horário estendido de segunda a sábado';
   /** Acima de qualquer título real (o maior do estoque tem 50 caracteres). Existe só para alcançar
    * o terceiro degrau do §4.3, que com dado plausível nunca é alcançado em nenhum destino. */
   const TITULO_ABSURDO = `${TITULO_MAX} Unico Dono Revisado Garantia de Fabrica Pneus Novos`;
   /** Longo até além do terceiro degrau: nem o menor corpo da lista o põe em 3 linhas. */
-  const TITULO_IMPOSSIVEL = `${TITULO_ABSURDO} Ipva Pago Aceita Troca Financiamento Proprio`;
+  const TITULO_IMPOSSIVEL = `${TITULO_ABSURDO} Ipva Pago Licenciado Aceita Troca Financiamento Proprio`;
 
   /** 57,3% da altura segura no Feed antes da degradação: o teto dispara de verdade. */
   const APERTO = { title: TITULO_MAX, meta: META_LONGA, note: NOTA_LONGA };

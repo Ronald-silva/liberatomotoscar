@@ -14,7 +14,7 @@ describe('os quatro destinos', () => {
     expect(ART_DESTINATIONS.feed.safe).toEqual({ top: 150, right: 72, bottom: 150, left: 72 });
     expect(ART_DESTINATIONS.story.safe).toEqual({ top: 250, right: 72, bottom: 340, left: 72 });
     expect(ART_DESTINATIONS.whatsapp.safe).toEqual({ top: 220, right: 72, bottom: 260, left: 72 });
-    expect(ART_DESTINATIONS.tiktok.safe).toEqual({ top: 150, right: 180, bottom: 500, left: 120 });
+    expect(ART_DESTINATIONS.tiktok.safe).toEqual({ top: 150, right: 140, bottom: 360, left: 84 });
   });
 
   it('o TikTok reserva a coluna de ícones e o rodapé da legenda', () => {

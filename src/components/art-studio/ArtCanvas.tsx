@@ -108,13 +108,127 @@ function reduzir(rascunho: BackdropScratch, image: CanvasImageSource, frame: Fra
   return { width, height };
 }
 
+/** Extrai canais RGB de `#rrggbb`. */
+function parseHex(hex: string): [number, number, number] {
+  const limpo = hex.replace('#', '');
+  return [
+    parseInt(limpo.slice(0, 2), 16),
+    parseInt(limpo.slice(2, 4), 16),
+    parseInt(limpo.slice(4, 6), 16),
+  ];
+}
+
 /** `#rrggbb` mais opacidade. A paleta da marca guarda cor; o véu precisa de cor **com** opacidade. */
 function rgba(hex: string, alpha: number): string {
-  const limpo = hex.replace('#', '');
-  const r = parseInt(limpo.slice(0, 2), 16);
-  const g = parseInt(limpo.slice(2, 4), 16);
-  const b = parseInt(limpo.slice(4, 6), 16);
+  const [r, g, b] = parseHex(hex);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Mistura linear entre duas cores da paleta da marca (sem cravar hexadecimais no desenho). */
+function mixHex(hexA: string, hexB: string, ratio: number): string {
+  const [r1, g1, b1] = parseHex(hexA);
+  const [r2, g2, b2] = parseHex(hexB);
+  const r = Math.round(r1 + (r2 - r1) * ratio);
+  const g = Math.round(g1 + (g2 - g1) * ratio);
+  const b = Math.round(b1 + (b2 - b1) * ratio);
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Escudo automotivo chanfrado para a logo: trapézio invertido suave com acabamento grafite
+ * acetinado, brilho institucional discreto na base e filete luminoso central — elimina o aspecto
+ * de "tarja preta chapada" mantendo isolamento total sobre banners ou fundos claros.
+ */
+function drawLogoShield(
+  context: Konva.Context,
+  width: number,
+  height: number,
+  ink: BrandKit['palette'],
+): void {
+  const inset = Math.min(18, Math.round(height * 0.12));
+  const r = Math.min(20, Math.round(height * 0.16));
+
+  const traceShield = () => {
+    context.beginPath();
+    context.moveTo(r, 0);
+    context.lineTo(width - r, 0);
+    context.quadraticCurveTo(width, 0, width - inset * 0.18, r);
+    context.lineTo(width - inset, height - r);
+    context.quadraticCurveTo(width - inset - 2, height, width - inset - r, height);
+    context.lineTo(inset + r, height);
+    context.quadraticCurveTo(inset + 2, height, inset, height - r);
+    context.lineTo(inset * 0.18, r);
+    context.quadraticCurveTo(0, 0, r, 0);
+    context.closePath();
+  };
+
+  // 1. Corpo grafite acetinado → preto profundo com sombra projetada suave
+  context.save();
+  context.shadowColor = rgba(ink.scrim, 0.56);
+  context.shadowBlur = 28;
+  context.shadowOffsetX = 0;
+  context.shadowOffsetY = 10;
+  traceShield();
+  const bodyGrad = context.createLinearGradient(0, 0, 0, height);
+  bodyGrad.addColorStop(0, rgba(mixHex(ink.scrim, ink.ink, 0.14), 0.88));
+  bodyGrad.addColorStop(0.42, rgba(mixHex(ink.scrim, ink.ink, 0.05), 0.92));
+  bodyGrad.addColorStop(1, rgba(ink.scrim, 0.96));
+  context.fillStyle = bodyGrad;
+  context.fill();
+  context.restore();
+
+  // 2. Brilho radial institucional super discreto na base central (recortado ao escudo)
+  context.save();
+  traceShield();
+  context.clip();
+  const glow = context.createRadialGradient(
+    width / 2, height * 1.08, 4,
+    width / 2, height * 0.96, width * 0.48,
+  );
+  glow.addColorStop(0, rgba(ink.accent, 0.22));
+  glow.addColorStop(0.6, rgba(ink.accent, 0.05));
+  glow.addColorStop(1, rgba(ink.accent, 0));
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+
+  // Reflexo superior sutil de vidro fumê (1px interno no topo)
+  const topHighlight = context.createLinearGradient(0, 0, width, 0);
+  topHighlight.addColorStop(0, rgba(ink.ink, 0));
+  topHighlight.addColorStop(0.25, rgba(ink.ink, 0.18));
+  topHighlight.addColorStop(0.5, rgba(ink.ink, 0.28));
+  topHighlight.addColorStop(0.75, rgba(ink.ink, 0.18));
+  topHighlight.addColorStop(1, rgba(ink.ink, 0));
+  context.fillStyle = topHighlight;
+  context.fillRect(r, 1, width - r * 2, 1.5);
+  context.restore();
+
+  // 3. Contorno metálico sutil em gradiente vertical (branco translúcido no topo → vermelho suave na base)
+  context.save();
+  traceShield();
+  const borderGrad = context.createLinearGradient(0, 0, 0, height);
+  borderGrad.addColorStop(0, rgba(ink.ink, 0.24));
+  borderGrad.addColorStop(0.5, rgba(ink.ink, 0.07));
+  borderGrad.addColorStop(1, rgba(ink.accent, 0.55));
+  context.strokeStyle = borderGrad;
+  context.lineWidth = 1.5;
+  context.stroke();
+
+  // 4. Assinatura institucional: filete vermelho luminoso centralizado na borda inferior
+  const barWidth = Math.round((width - inset * 2) * 0.44);
+  const barX = Math.round((width - barWidth) / 2);
+  const accentBar = context.createLinearGradient(barX, 0, barX + barWidth, 0);
+  accentBar.addColorStop(0, rgba(ink.accent, 0));
+  accentBar.addColorStop(0.22, rgba(ink.accent, 0.92));
+  accentBar.addColorStop(0.5, rgba(mixHex(ink.accent, ink.ink, 0.28), 1));
+  accentBar.addColorStop(0.78, rgba(ink.accent, 0.92));
+  accentBar.addColorStop(1, rgba(ink.accent, 0));
+  context.beginPath();
+  context.moveTo(barX, height - 0.75);
+  context.lineTo(barX + barWidth, height - 0.75);
+  context.strokeStyle = accentBar;
+  context.lineWidth = 2.5;
+  context.stroke();
+  context.restore();
 }
 
 /**
@@ -219,29 +333,60 @@ export function ArtScene({ layout, brand, photo, logo }: {
       fillLinearGradientEndPoint={{ x: 0, y: layout.logoScrim.height }}
       fillLinearGradientColorStops={scrimColorStops(layout.logoScrim, ink.scrim)} listening={false} />
 
+    {/* Escudo automotivo chanfrado: grafite acetinado com contorno em gradiente e filete
+        institucional na base, isolando a marca sem parecer uma tarja preta chapada. */}
+    <Shape name="logo-placa" x={layout.logoPlate.x} y={layout.logoPlate.y} width={layout.logoPlate.width}
+      height={layout.logoPlate.height} listening={false}
+      sceneFunc={(context) => drawLogoShield(context, layout.logoPlate.width, layout.logoPlate.height, ink)} />
+
     {logo
       ? <KonvaImage name="logo" image={logo} x={layout.logo.x} y={layout.logo.y}
         width={layout.logo.width} height={layout.logo.height} listening={false} />
-      : <Text name="logo-reserva" x={column.x} y={layout.logo.y + 30} width={column.width}
+      : <Text name="logo-reserva" x={column.x} y={layout.logo.y + 30} width={column.width} align="center"
         text={brand.name.toUpperCase()} fill={ink.ink} fontFamily={ART_FONT_FAMILY} fontSize={38}
         fontStyle={String(WEIGHT.black)} listening={false} />}
 
     <Rect name="selo-pilula" x={layout.badgePill.x} y={layout.badgePill.y} width={layout.badgePill.width}
-      height={layout.badgePill.height} fill={ink.chip} cornerRadius={layout.badgePill.height / 2}
+      height={layout.badgePill.height} cornerRadius={layout.badgePill.height / 2}
+      fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+      fillLinearGradientEndPoint={{ x: 0, y: layout.badgePill.height }}
+      fillLinearGradientColorStops={[0, mixHex(ink.chip, ink.ink, 0.08), 1, mixHex(ink.chip, ink.scrim, 0.24)]}
+      shadowColor={rgba(ink.scrim, 0.4)} shadowBlur={14} shadowOffsetY={4}
       listening={false} />
-    <Block name="selo" at={layout.badge} fill={ink.chipInk} weight={WEIGHT.black} letterSpacing={BADGE_TRACKING} />
-    <Block name="titulo" at={layout.title} fill={ink.ink} weight={WEIGHT.black} leading={1.04} />
-    {layout.meta ? <Block name="dados" at={layout.meta} fill={ink.dim} /> : null}
+    <Block name="selo" at={layout.badge} fill={ink.chipInk} weight={WEIGHT.black} letterSpacing={BADGE_TRACKING} align="center" />
+    <Block name="titulo" at={layout.title} fill={ink.ink} weight={WEIGHT.black} leading={1.04} align="center" />
+    {layout.meta ? <Block name="dados" at={layout.meta} fill={ink.dim} align="center" /> : null}
 
     <Rect name="placa" x={layout.pricePlate.x} y={layout.pricePlate.y} width={layout.pricePlate.width}
-      height={layout.pricePlate.height} fill={ink.chip} cornerRadius={14} listening={false} />
-    <Block name="preco-rotulo" at={layout.priceLabel} fill={rgba(ink.chipInk, 0.84)}
-      weight={WEIGHT.black} letterSpacing={PRICE_LABEL_TRACKING} />
-    <Block name="preco" at={layout.price} fill={ink.chipInk} weight={WEIGHT.black} leading={1.02} />
+      height={layout.pricePlate.height}
+      fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+      fillLinearGradientEndPoint={{ x: 0, y: layout.pricePlate.height }}
+      fillLinearGradientColorStops={[
+        0, mixHex(ink.chip, ink.ink, 0.08),
+        0.48, ink.chip,
+        1, mixHex(ink.chip, ink.scrim, 0.34),
+      ]}
+      stroke={rgba(ink.chipInk, 0.28)} strokeWidth={1.5}
+      shadowColor={rgba(ink.scrim, 0.48)} shadowBlur={24} shadowOffsetY={8}
+      cornerRadius={20} listening={false} />
+    <Block name="preco-rotulo" at={layout.priceLabel} fill={rgba(ink.chipInk, 0.88)}
+      weight={WEIGHT.black} letterSpacing={PRICE_LABEL_TRACKING} align="center" />
+    <Block name="preco" at={layout.price} fill={ink.chipInk} weight={WEIGHT.black} leading={1.02} align="center" />
 
-    {/* Telefone e observação são um rodapé só: o preço já ganhou na placa. */}
-    <Block name="telefone" at={layout.phone} fill={ink.ink} weight={WEIGHT.black} />
-    {layout.note ? <Block name="observacao" at={layout.note} fill={ink.dim} leading={1.3} /> : null}
+    {/* Contato comercial em cápsula grafite com leve acento institucional e contorno fino. */}
+    <Rect name="telefone-placa" x={layout.phonePlate.x} y={layout.phonePlate.y} width={layout.phonePlate.width}
+      height={layout.phonePlate.height}
+      fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+      fillLinearGradientEndPoint={{ x: layout.phonePlate.width, y: 0 }}
+      fillLinearGradientColorStops={[
+        0, rgba(mixHex(ink.scrim, ink.accent, 0.28), 0.9),
+        0.35, rgba(mixHex(ink.scrim, ink.ink, 0.06), 0.9),
+        1, rgba(ink.scrim, 0.92),
+      ]}
+      stroke={rgba(ink.ink, 0.26)} strokeWidth={1.5}
+      cornerRadius={layout.phonePlate.height / 2} listening={false} />
+    <Block name="telefone" at={layout.phone} fill={ink.ink} weight={WEIGHT.black} align="center" />
+    {layout.note ? <Block name="observacao" at={layout.note} fill={ink.dim} leading={1.3} align="center" /> : null}
 
     {/* Rascunho e arquivado não geram peça comercial (§7): a marca d'água é a última coisa a entrar. */}
     {layout.watermark ? <>

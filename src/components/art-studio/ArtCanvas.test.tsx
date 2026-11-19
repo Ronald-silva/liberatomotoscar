@@ -117,9 +117,9 @@ describe('a ordem do palco', () => {
     // A ordem inteira, não um par solto: é ela que faz a foto aparecer sobre o fundo desfocado e
     // o texto sobre o véu. Qualquer troca de dois elementos quebra este teste.
     expect(nomes(palco(deitar()))).toEqual([
-      'fundo', 'fundo-desfocado', 'foto', 'veu', 'veu-logo', 'logo',
+      'fundo', 'fundo-desfocado', 'foto', 'veu', 'veu-logo', 'logo-placa', 'logo',
       'selo-pilula', 'selo', 'titulo', 'dados',
-      'placa', 'preco-rotulo', 'preco', 'telefone', 'observacao',
+      'placa', 'preco-rotulo', 'preco', 'telefone-placa', 'telefone', 'observacao',
     ]);
   });
 
@@ -190,12 +190,18 @@ describe('o desenho usa o que o layout mediu', () => {
 
   it('a pílula e a placa saem com a caixa que o layout calculou', () => {
     const layout = deitar();
+    const logoPlaca = acharNo(palco(layout), 'logo-placa')!;
+    expect([logoPlaca.props.x, logoPlaca.props.y, logoPlaca.props.width, logoPlaca.props.height])
+      .toEqual([layout.logoPlate.x, layout.logoPlate.y, layout.logoPlate.width, layout.logoPlate.height]);
     const pilula = acharNo(palco(layout), 'selo-pilula')!;
     expect([pilula.props.x, pilula.props.y, pilula.props.width, pilula.props.height])
       .toEqual([layout.badgePill.x, layout.badgePill.y, layout.badgePill.width, layout.badgePill.height]);
     const placa = acharNo(palco(layout), 'placa')!;
     expect([placa.props.x, placa.props.y, placa.props.width, placa.props.height])
       .toEqual([layout.pricePlate.x, layout.pricePlate.y, layout.pricePlate.width, layout.pricePlate.height]);
+    const telPlaca = acharNo(palco(layout), 'telefone-placa')!;
+    expect([telPlaca.props.x, telPlaca.props.y, telPlaca.props.width, telPlaca.props.height])
+      .toEqual([layout.phonePlate.x, layout.phonePlate.y, layout.phonePlate.width, layout.phonePlate.height]);
   });
 
   it('o que o teto de altura descartou não é desenhado', () => {
@@ -204,9 +210,9 @@ describe('o desenho usa o que o layout mediu', () => {
     // derruba a observação, o segundo derruba também a linha de dados. O Feed é o único destino em
     // que o teto morde, e o segundo título está acima de qualquer dado real de propósito.
     const META_LONGA = '2016 · 189.000 km · Branca com banco vermelho e teto preto';
-    const NOTA_LONGA = 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora';
-    const TITULO_MAX = 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica Couro Multimidia Teto Solar';
-    const TITULO_ABSURDO = `${TITULO_MAX} Unico Dono Revisado Garantia de Fabrica Pneus Novos`;
+    const NOTA_LONGA = 'Entrada facilitada, parcelas que cabem no bolso e avaliação do seu usado na hora com financiamento proprio na loja';
+    const TITULO_MAX = 'Chevrolet S10 High Country Cabine Dupla Turbo Diesel Automatica Couro Multimidia Teto Solar Unico Dono Revisado Garantia de Fabrica Pneus Novos';
+    const TITULO_ABSURDO = `${TITULO_MAX} Ipva Pago Licenciado`;
     const exercitados = new Set<string>();
     for (const title of [TITULO_MAX, TITULO_ABSURDO]) {
       const apertado = layoutArt('feed', conteudo({ title, meta: META_LONGA, note: NOTA_LONGA }), measure);
